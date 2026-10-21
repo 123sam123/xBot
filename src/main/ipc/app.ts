@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { appChannels } from '../../shared/contracts/app.channels';
 import type { AppInfo } from '../../shared/contracts/app';
 import { isPreviewMode } from '../paths';
+import { currentStatuses } from '../status';
 import { handle } from './register';
 
 export function registerAppIpc(): void {
@@ -12,5 +13,7 @@ export function registerAppIpc(): void {
     platform: process.platform,
     isPackaged: app.isPackaged,
     isPreview: isPreviewMode(process.argv, process.env),
+    emojiPanel: app.isEmojiPanelSupported(),
   }));
+  handle(appChannels.getStatus, z.undefined(), () => currentStatuses());
 }

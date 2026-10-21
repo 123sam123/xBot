@@ -39,6 +39,9 @@ export async function withHold<T>(win: BrowserWindow, fn: () => Promise<T>): Pro
   } finally {
     if (!win.isDestroyed()) {
       if (wasOnTop) win.setAlwaysOnTop(true, 'pop-up-menu');
+      // The dialog can leave the window unfocused; without focus it never
+      // blurs again, and an outside click would stop hiding it.
+      if (win.isVisible() && !win.isFocused()) win.focus();
       release(win.webContents);
     }
   }

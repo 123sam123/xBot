@@ -26,6 +26,30 @@
   font-weight: var(--fw-medium);
 }
 
+/* The mark and name are the app menu's trigger; padding is cancelled by the margin, so nothing moves. */
+.app-menu-trigger {
+  display: flex;
+  align-items: center;
+  margin: -4px -6px;
+  padding: 4px 6px;
+  border: 0;
+  border-radius: 12px;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-shadow: inherit;
+}
+
+.app-menu-trigger:hover,
+.app-menu-trigger[aria-expanded='true'] {
+  background: rgb(255 255 255 / 0.08);
+}
+
+.app-menu-trigger:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
 .account-trigger {
   display: flex;
   align-items: center;
@@ -107,6 +131,18 @@
   color: var(--text-tertiary);
 }
 
+.post-editor-emoji {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  opacity: 0.7;
+}
+
+.post-editor-emoji:hover,
+.post-editor-emoji:focus-visible {
+  opacity: 1;
+}
+
 /* ---------- Attachments ---------- */
 
 .attachment-list {
@@ -151,14 +187,116 @@
   height: 100%;
 }
 
+/* With reorder controls the card needs room for ↑/↓: they stack, and the thumbnail narrows a little. */
+.attachment-list-reorderable .attachment-card {
+  padding-right: 12px;
+}
+
+.attachment-list-reorderable .attachment-thumb {
+  width: 128px;
+}
+
+.attachment-list-reorderable .attachment-edit {
+  margin-left: 12px;
+}
+
+.attachment-move {
+  display: flex;
+  flex-direction: column;
+}
+
+/* More than two cards scroll inside the panel, so the window never outgrows the screen.
+   The scrollbar sits in the panel's side inset, so the cards keep their width. */
+.attachment-list-scroll {
+  max-height: 270px;
+  margin-right: -10px;
+  padding-right: 10px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.attachment-list-scroll::-webkit-scrollbar {
+  width: 6px;
+}
+
+.attachment-list-scroll::-webkit-scrollbar-thumb {
+  border-radius: 3px;
+  background: rgb(255 255 255 / 0.28);
+}
+
+.attachment-drop-target > .attachment-card {
+  border-color: rgb(255 255 255 / 0.6);
+}
+
+.media-thumb {
+  position: relative;
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.media-thumb-image {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.media-thumb-tile {
+  display: block;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(135deg, rgb(255 255 255 / 0.16), rgb(255 255 255 / 0.04));
+}
+
+.media-thumb-video {
+  position: absolute;
+  left: 8px;
+  bottom: 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 7px;
+  border-radius: var(--radius-pill);
+  background: rgb(0 0 0 / 0.5);
+  font-size: var(--fs-xs);
+  font-variant-numeric: tabular-nums;
+}
+
+.composer-warning {
+  display: flex;
+  margin-top: 10px;
+}
+
+.composer-errors {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 10px;
+  color: var(--warning);
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.composer-errors p {
+  margin: 0;
+}
+
 .attachment-edit {
+  min-width: 0;
   margin-left: 16px;
   font-size: 14.5px;
   gap: 8px;
 }
 
+.attachment-edit .btn-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .attachment-actions {
   display: flex;
+  flex: none;
   align-items: center;
   gap: 4px;
   margin-left: auto;
@@ -196,6 +334,11 @@
   background: var(--dashes), rgb(255 255 255 / 0.07);
 }
 
+.upload-zone-active,
+.upload-zone-active:not([aria-disabled='true']):hover {
+  background: var(--dashes), rgb(255 255 255 / 0.14);
+}
+
 :root[data-contrast='more'] .upload-zone {
   --dashes: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'%3E%3Crect x='.75' y='.75' rx='15.25' style='width:calc(100%25 - 1.5px);height:calc(100%25 - 1.5px)' fill='none' stroke='%23fff' stroke-opacity='.65' stroke-width='1.5' stroke-dasharray='6 5'/%3E%3C/svg%3E");
 }
@@ -211,7 +354,7 @@
   box-shadow: var(--focus-ring);
 }
 
-/* Inert until media import exists: a touch quieter, and its tooltip says why. */
+/* Inert (preview mode, or the draft is still loading): a touch quieter, and its tooltip says why. */
 .upload-zone[aria-disabled='true'] > * {
   opacity: 0.85;
 }
@@ -296,4 +439,253 @@
 
 .reminder-row-muted {
   color: var(--text-tertiary);
+}
+
+/* ---------- Sheets: publish options, history, onboarding, settings ---------- */
+
+.sheet-lede {
+  margin: 0;
+  font-size: var(--fs-md);
+  color: var(--text-secondary);
+}
+
+.sheet-note,
+.sheet-empty {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--text-tertiary);
+}
+
+.publish-options {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.publish-option {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 14px;
+  border: 1px solid var(--glass-card-border);
+  border-radius: var(--radius-control);
+  background: var(--glass-card-fill);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  text-decoration: none;
+  text-shadow: inherit;
+  cursor: default;
+}
+
+.publish-option:not([aria-disabled='true']):hover {
+  background: var(--glass-control-hover);
+}
+
+.publish-option:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.publish-option[aria-disabled='true'] {
+  opacity: 0.55;
+}
+
+.publish-option-icon {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--glass-control-fill);
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-semibold);
+}
+
+.publish-option-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.publish-option-label {
+  font-size: var(--fs-md);
+  font-weight: var(--fw-semibold);
+}
+
+.publish-option-detail {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.publish-outcome {
+  align-self: flex-start;
+  white-space: normal;
+}
+
+.history-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.history-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.history-item {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  padding: 8px;
+  border: 1px solid var(--glass-card-border);
+  border-radius: var(--radius-control);
+  background: var(--glass-card-fill);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  text-shadow: inherit;
+}
+
+.history-item:hover {
+  background: var(--glass-control-hover);
+}
+
+.history-item:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.history-thumb {
+  flex: none;
+  width: 56px;
+  height: 40px;
+  overflow: hidden;
+  border-radius: 8px;
+  background: rgb(255 255 255 / 0.06);
+}
+
+.history-thumb img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.history-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.history-preview {
+  overflow: hidden;
+  font-size: 15px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.history-meta {
+  font-size: var(--fs-xs);
+  color: var(--text-tertiary);
+}
+
+.onboarding-lede {
+  margin: 0;
+  font-size: 22px;
+  font-weight: var(--fw-semibold);
+  letter-spacing: -0.01em;
+}
+
+.onboarding-text {
+  margin: 10px 0 0;
+  font-size: 15px;
+  line-height: 1.45;
+  color: var(--text-secondary);
+}
+
+.onboarding-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.onboarding-progress {
+  font-size: 13px;
+  color: var(--text-tertiary);
+}
+
+.onboarding-skip {
+  margin-left: auto;
+}
+
+.settings-section,
+.settings-section-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* A section whose component renders nothing (e.g. Status with no providers) is hidden. */
+.settings-section:has(> .settings-section-body:empty) {
+  display: none;
+}
+
+.status-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.status-chips-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.status-chips-detail {
+  font-size: var(--fs-xs);
+  color: var(--text-tertiary);
+}
+
+.status-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+}
+
+.status-dot-ok {
+  background: #8ee6b0;
+}
+
+.status-dot-busy {
+  background: #fff;
+  animation: status-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes status-pulse {
+  50% {
+    opacity: 0.35;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .status-dot-busy {
+    animation: none;
+  }
 }

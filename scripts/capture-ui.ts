@@ -514,17 +514,20 @@ async function captureNormalMode(): Promise<void> {
   try {
     await showComposer(run);
     const { composer, studio } = run;
+    // A fresh userData shows the one-time Welcome sheet over the composer; skip it.
+    await composer.getByTestId('onboarding-sheet').getByRole('button', { name: 'Skip' }).click();
     check((await composer.getByTestId('account-trigger').innerText()).includes('Connect X'), 'normal mode: the header says "Connect X"');
     for (const [name, page] of [['composer', composer], ['studio', studio]] as const) {
       check(!(await page.locator('body').innerText()).includes('@samuelbuilds'), `normal mode: no sample handle in the ${name}`);
       check((await page.locator('img[src*="my-tiny-tool"]').count()) === 0, `normal mode: no sample media in the ${name}`);
       check((await page.locator('.badge', { hasText: 'Preview' }).count()) === 0, `normal mode: no "Preview" label in the ${name}`);
     }
+    // Without X, Post opens the publish-options sheet (T3); with an empty draft it is disabled and says why.
     const post = composer.getByTestId('post-button');
-    check((await post.getAttribute('aria-disabled')) === 'true', 'normal mode: Post is disabled');
+    check((await post.getAttribute('aria-disabled')) === 'true', 'normal mode: Post is disabled for an empty draft');
     const describedBy = await post.getAttribute('aria-describedby');
     const reason = describedBy ? await composer.locator(`[id="${describedBy}"]`).innerText() : '';
-    check(reason === 'Connect X to post', `normal mode: Post explains "Connect X to post" (got "${reason}")`);
+    check(reason === 'Write something or add media first', `normal mode: Post explains "Write something or add media first" (got "${reason}")`);
     await shoot(composer, 'composer-normal.png');
     await showStudio(run);
     check((await studio.getByTestId('studio-add').getAttribute('aria-disabled')) === 'true', 'normal mode: Add to post is disabled');

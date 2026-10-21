@@ -3,6 +3,8 @@ allowBuilds:
   # Windows-installer helper pulled in by electron-builder; xBot ships for macOS
   # (and Linux zip for CI), so its install script is not needed.
   electron-winstaller: false
+  # Pulled in by twitter-text; its postinstall only prints a funding banner.
+  core-js: false
 minimumReleaseAgeExclude:
   # Electron 45.0.0 was published on 2026-10-21, inside pnpm's release-age window.
   - electron@45.0.0

@@ -9,4 +9,5 @@ export const windows: WindowsApi = {
   resizeComposer: (height) => invoke(windowsChannels.resizeComposer, { height }),
   showComposer: () => invoke(windowsChannels.showComposer),
   openStudio: () => invoke(windowsChannels.openStudio),
+  showEmojiPanel: () => invoke(windowsChannels.showEmojiPanel),
 };
