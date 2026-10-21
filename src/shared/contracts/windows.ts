@@ -9,7 +9,16 @@ export type ResizeComposerPayload = z.infer<typeof resizeComposerSchema>;
 
 export const windowsSettings = {
   'ui.reduceTransparency': defineSetting(z.boolean(), false),
+  /** Stronger scrim and borders behind text, on top of the OS "Increase contrast" preference. */
+  'ui.increaseContrast': defineSetting(z.boolean(), false),
 } satisfies SettingsShape;
+
+/**
+ * What the renderer draws over, passed to each page as `?material=`:
+ * `vibrancy` is the native macOS material (the page adds only translucent
+ * layers); `css` is the CSS-only glass over its own neutral base.
+ */
+export type RendererMaterial = 'vibrancy' | 'css';
 
 export interface WindowsEvents {
   /** Tray "Settings…" was chosen; the composer opens its settings sheet. */
