@@ -289,10 +289,11 @@ export interface CropControls {
   overlay: RefObject<HTMLDivElement | null>;
 }
 
+/** One compact row, so it never covers the crop rect's handles (the overlay keeps clear of it). */
 function CropTool({ crop }: { crop: CropControls }) {
   return (
     <>
-      <h2 className="tool-popover-title">Crop</h2>
+      <h2 className="visually-hidden">Crop</h2>
       <Segmented<CropAspect>
         label="Aspect ratio"
         options={[
@@ -306,19 +307,15 @@ function CropTool({ crop }: { crop: CropControls }) {
         onChange={crop.onAspect}
         testId="crop-aspect"
       />
-      <div className="tool-popover-actions">
-        <GhostButton className="tool-popover-action" onClick={crop.onReset} data-testid="crop-reset">
-          Reset
-        </GhostButton>
-        <span className="tool-popover-actions-end">
-          <GhostButton className="tool-popover-action" onClick={crop.onCancel} data-testid="crop-cancel">
-            Cancel
-          </GhostButton>
-          <FrostedButton className="tool-popover-apply" onClick={crop.onApply} data-testid="crop-apply">
-            Apply
-          </FrostedButton>
-        </span>
-      </div>
+      <GhostButton className="tool-popover-action" onClick={crop.onReset} data-testid="crop-reset">
+        Reset
+      </GhostButton>
+      <GhostButton className="tool-popover-action" onClick={crop.onCancel} data-testid="crop-cancel">
+        Cancel
+      </GhostButton>
+      <FrostedButton className="tool-popover-apply" onClick={crop.onApply} data-testid="crop-apply">
+        Apply
+      </FrostedButton>
     </>
   );
 }
@@ -372,7 +369,7 @@ export function ToolPopovers({
         id={toolPopoverId('crop')}
         anchor={anchors.crop}
         label="Crop"
-        className="tool-popover tool-popover-wide"
+        className="tool-popover tool-popover-crop"
         testId="popover-crop"
         keepOpenWithin={keepCropOpen}
         {...common}

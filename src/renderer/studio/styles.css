@@ -158,6 +158,7 @@ body,
   display: flex;
   align-items: center;
   justify-content: center;
+  padding-bottom: 64px; /* CONTROLS_CLEARANCE: the Crop popover's row */
   overflow: hidden;
   touch-action: none;
 }
@@ -324,6 +325,17 @@ body,
 /* Every tool except the compact Background view has room for labelled rows. */
 .tool-popover-wide {
   width: 268px;
+}
+
+.tool-popover-crop {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+}
+
+.tool-popover-crop .segmented {
+  flex: none;
 }
 
 .tool-popover-background:has(.tool-popover-more-section) {
