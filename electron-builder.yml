@@ -12,6 +12,8 @@ files:
   # patterns for node_modules, hence one negated extglob.)
   - "!node_modules/better-sqlite3/{deps,src,benchmark,docs}/**"
   - "!node_modules/better-sqlite3/prebuilds/!(${platform}-${arch}.node)"
+  # Build-time headers only.
+  - "!node_modules/node-addon-api/**"
 asarUnpack:
   - "**/*.node"
 extraResources:
