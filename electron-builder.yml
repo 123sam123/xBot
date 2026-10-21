@@ -1,0 +1,46 @@
+# Unsigned (ad-hoc) builds for local use; signing and notarization are out of scope.
+appId: app.xbot.desktop
+productName: xBot
+directories:
+  output: dist
+  buildResources: build
+files:
+  - out/**
+  - package.json
+  # better-sqlite3 ships every platform's N-API prebuild plus SQLite's sources;
+  # keep only this platform's prebuild. (app-builder-lib only honours negated
+  # patterns for node_modules, hence one negated extglob.)
+  - "!node_modules/better-sqlite3/{deps,src,benchmark,docs}/**"
+  - "!node_modules/better-sqlite3/prebuilds/!(${platform}-${arch}.node)"
+asarUnpack:
+  - "**/*.node"
+extraResources:
+  - from: resources
+    to: .
+    filter:
+      - trayTemplate*.png
+# N-API prebuilds are ABI-stable across Electron versions: nothing to rebuild.
+npmRebuild: false
+electronFuses:
+  runAsNode: false
+  enableNodeOptionsEnvironmentVariable: false
+  enableNodeCliInspectArguments: false
+  onlyLoadAppFromAsar: true
+mac:
+  target:
+    - dmg
+    - zip
+  category: public.app-category.productivity
+  # Ad-hoc signature: Apple Silicon refuses to launch fully unsigned binaries.
+  identity: "-"
+  hardenedRuntime: false
+  extendInfo:
+    # Menu-bar app: no Dock icon, no app switcher entry.
+    LSUIElement: true
+dmg:
+  sign: false
+linux:
+  # Only so `pnpm package` also runs on Linux CI; xBot targets macOS.
+  target:
+    - zip
+  category: Utility
