@@ -25,7 +25,7 @@ export const PREVIEW_CLIP = {
   duration: 12,
   current: 4,
   trim: [0.13, 0.71] as [number, number],
-  frames: Array.from({ length: 9 }, () => myTinyToolPng),
+  frames: Array.from({ length: 7 }, () => myTinyToolPng),
 };
 
 export const PREVIEW_ZOOM = 75;

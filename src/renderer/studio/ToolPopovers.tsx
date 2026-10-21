@@ -26,7 +26,8 @@ export function ToolPopovers({
   composition: PreviewComposition;
   onChange: Change;
 }) {
-  const common = { placement: 'top' as const, offset: 18 };
+  // Measured from the reference: 12 px above the toolbar item, the Background one shifted left.
+  const common = { placement: 'top' as const, offset: 12 };
   return (
     <>
       <Popover
@@ -35,7 +36,7 @@ export function ToolPopovers({
         label="Background"
         className="tool-popover tool-popover-background"
         testId="popover-background"
-        crossOffset={-27}
+        crossOffset={-34}
         {...common}
       >
         <h2 className="tool-popover-title">Background</h2>
