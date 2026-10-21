@@ -51,7 +51,7 @@ resources/                   tray.svg → trayTemplate.png / @2x (pnpm icons)
 scripts/                     capture-ui.ts (pnpm capture), render-fixtures.ts, capture-stage.cjs,
                              fixtures/*.html (the fixtures' sources), render-icons.mjs
 tests/unit/  tests/e2e/
-docs/                        SPEC.md, ARCHITECTURE.md, reference/ (+ captures/)
+docs/                        SPEC.md, ARCHITECTURE.md, OLLAMA.md, reference/ (+ captures/)
 ```
 
 ## Process boundaries
@@ -91,7 +91,7 @@ imported by every aggregator, so **a sibling ticket edits only its own files**:
 | renderer design system, both surfaces | T2 (XBOT-6AU4BQ) |
 | `drafts`, `media` | T3 (XBOT-6F4GAC). T3 also added, additively and for the reasons in "Drafts and media": `emojiPanel` and the status calls to `app`, `showEmojiPanel` and `ui.onboardingSeen` to `windows`, the quit flush to `app.ts`, the menu-bar drop to `tray.ts`, the refocus to `hold.ts`, and the Studio hand-off view to `studio/` |
 | `studio` | T4 (XBOT-1N58PP) images; T5 (XBOT-G66JJK) video |
-| `ai` | T6 (XBOT-4BCGOR) |
+| `ai` | T6 (XBOT-4BCGOR). T6 also added, additively: the `aiMenu` slot to `ComposerHeader`, `focusSection` to `SettingsSheet`, the ✦ menu, AI status row and suggestions sheet to `composer/App.tsx`, `src/shared/aiEndpoint.ts` and `src/shared/aiCopy.ts`, and the tighter dev CSP in `electron.vite.config.ts` (see "Local AI") |
 | `projects` | T7 (XBOT-5UVE6R) |
 | `reminders` (+ launch at login, global shortcut) | T8 (XBOT-8V5WV5) |
 | `x` | T9 (XBOT-OE2XV9) |
@@ -153,7 +153,8 @@ if (!result.ok) showError(result.error);
 Its event map is merged from every domain's `<Domain>Events` interface:
 `draft:changed`, `draft:studio-target`, `drafts:flush-requested`,
 `media:imported`, `status:changed`, `post:published`, `export:progress`,
-`settings:changed` and `ui:open-settings` exist today. An event listed in a
+`settings:changed`, `ui:open-settings`, `ai:state`, `ai:progress` and
+`ai:pull-progress` exist today. An event listed in a
 domain's `<domain>ForwardedEvents` is forwarded to every window automatically.
 
 ## Settings
@@ -443,8 +444,9 @@ Prop changes are additive only; siblings build against these.
 ### Surfaces and their props
 
 - **Composer** (`composer/`):
-  - `ComposerHeader({ account, onConnect?, menuItems? })`: the xBot mark and
+  - `ComposerHeader({ account, onConnect?, menuItems?, aiMenu? })`: the xBot mark and
     name are the app menu's trigger (New draft, Draft history…, Settings…);
+    `aiMenu` (a node, T6's ✦ button) sits just left of the account control;
     `AccountMenu({ account: { kind: 'disconnected' } | { kind: 'connected' | 'preview', handle } })`;
   - `PostEditor({ value, onChange, readOnly?, maxLength?, saveState?, onEmoji?, editorRef? })`.
     `maxLength` is only the 25 000-character storage bound; the counter shows
@@ -455,8 +457,9 @@ Prop changes are additive only; siblings build against these.
   - `UploadZone({ onAdd?, disabledReason?, dragActive?, busy? })`;
   - `ActionRow({ count, limit, canPost, postDisabledReason?, onPost, notice? })`;
   - `ReminderRow({ label, muted?, onClick? })`;
-  - sheets, one open at a time: `OnboardingSheet`, `SettingsSheet`
-    (`settings/`), `HistorySheet`, `PublishSheet`.
+  - sheets, one open at a time: `OnboardingSheet`, `SettingsSheet({ open, onClose, focusSection? })`
+    (`settings/`; `focusSection` scrolls that section into view), `HistorySheet`,
+    `PublishSheet`, `SuggestionsSheet` (`composer/ai/`, see "Local AI").
 
   In normal mode the draft is persisted (`composer/useDraft.ts`, see "Drafts
   and media"); preview mode keeps its fixed sample in local state.
@@ -536,6 +539,64 @@ T3 (XBOT-6F4GAC). Migration `202610212200_drafts_media.sql`.
   `.partial` file, then a link to the first free name), and reports "Export
   running" through the status registry while it copies.
 
+## Local AI
+
+T6 (XBOT-4BCGOR). Native Ollama on this Mac, called only from main. The
+verified Ollama API, setup, troubleshooting and known limits are in
+[`OLLAMA.md`](OLLAMA.md).
+
+- **Endpoint.** `ai.endpoint` accepts only `http://127.0.0.1:<port>`,
+  `http://localhost:<port>` or `http://[::1]:<port>` (`src/shared/aiEndpoint.ts`,
+  shared by the setting's schema, main and the settings UI). Requests to
+  `localhost` go to `127.0.0.1`. Every request is re-checked, sent with
+  `redirect:'manual'` (any 3xx is refused) and bounded by a typed timeout; a
+  proxy configured for the process makes xBot refuse instead of sending.
+- **Files.** `services/ai/`: `ollamaClient.ts` (the only transport; Node's
+  `fetch`, never `net.fetch`), `locality.ts`, `catalog.ts`, `schemas.ts`,
+  `partial.ts`, `prompts.ts`, `generate.ts`, `runtime.ts`, `queue.ts`,
+  `voice.ts`, `errors.ts`, `status.ts`, `service.ts` (electron-free) and
+  `index.ts`. Migration `202610220000_ai_voice.sql` adds `voice_profile` (one
+  seeded row) and `voice_examples`.
+- **Locality.** Only models whose verdict is `local` generate: no
+  `remote_host`/`remote_model` on `/api/tags` or `/api/show`, not a
+  cloud-sourced name (Ollama's own `:cloud` / `-cloud` rule), `capabilities`
+  present and including `completion`, and at least 50 MB of weights. Anything
+  else is `remote`, `unverifiable` or `unsuitable`, and is refused before
+  `/api/chat`. A stream chunk carrying remote fields aborts the request.
+- **Generation.** `/api/chat` streams with a JSON-schema `format` derived from
+  zod, `truncate:false`, `think:false` only for thinking models, a per-action
+  `num_predict`, and a byte-budgeted prompt (the user's text sits in
+  delimited DATA blocks that are never instructions). Complete fields are
+  forwarded as `ai:progress` while streaming; the result is validated with
+  zod and repaired at most twice. Only invalid output is retried.
+- **Memory.** `/api/ps` is read once per action. A model xBot loads gets
+  `keep_alive:"5m"` and `num_ctx` 4096 (low-resource mode: `0` and 2048). A
+  model other work had loaded keeps its remaining keep-alive and its
+  `context_length`, and `shift` is never sent, so xBot doesn't unload, shorten
+  or reload it; a load that could evict other models is refused.
+- **Queue.** One generation at a time (`queue.ts`). Interactive requests go
+  ahead of background ones and pre-empt a running background job; every
+  request can be cancelled by `requestId`, queued or running. Cancel aborts
+  the fetch, which stops generation in Ollama.
+- **For T7.** Call `ai().generate({ requestId, action: 'story', sources:
+  [{ name, kind: 'project', text }, …], priority: 'background' })` from main.
+  It resolves `{ status: 'done', options }` or `{ status: 'cancelled' }`
+  (pre-empted by the user), and throws an `IpcError` whose code and text come
+  from `src/shared/aiCopy.ts`: `ollama_unavailable`, `model_needed`,
+  `model_unverifiable`, `remote_refused`, `endpoint_*`, `ai_timeout`,
+  `ai_stopped`, `ai_input_too_long`, `ai_would_evict`, `ai_malformed`,
+  `ai_failed`, `ai_busy`. Every option carries `flags` (numbers absent from
+  the sources, generic or banned phrases, stripped hashtags).
+- **Renderer.** `composer/ai/`: the ✦ `AiMenu` in the header, the
+  `AiStatusRow` above the action row ("Running locally · Cancel", "Suggestions
+  ready · View", "Undo AI change", errors), and `SuggestionsSheet`. An applied
+  suggestion goes through the editor (`execCommand('insertText')`), so it
+  autosaves and Cmd+Z reverts it; "Undo AI change" shows until the user edits.
+  Onboarding steps `ollama` (10) and `model` (20); settings sections `ai`
+  (10, "Local AI") and `voice` (20). The `ai` status chip reads "Local AI
+  ready", "Ollama not running" or "Model needed". Preview mode never probes
+  and has no AI.
+
 ## Registries
 
 Later tickets add onboarding steps, settings sections and status chips by
@@ -574,8 +635,10 @@ adding their own files; nobody edits a shared list.
   base-uri 'none'; form-action 'none'
   ```
 
-  Dev adds only what Vite needs: inline scripts and styles, and the localhost
-  websocket. No `eval`, and no remote origins. If you need a new source, change
+  Dev adds only what Vite needs: inline scripts and styles, and the dev
+  server's own HMR websocket (`ws://localhost:<its port>`, read from the
+  running server). No other localhost port is reachable, so the renderer can
+  never call Ollama directly, and no `eval` or remote origins. If you need a new source, change
   the plugin and say why in the PR.
 - **Navigation:**
   - `will-navigate` is always blocked;

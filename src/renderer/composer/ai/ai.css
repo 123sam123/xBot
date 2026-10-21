@@ -1,0 +1,445 @@
+/* Local AI (T6): the ✦ menu trigger, the status row, the suggestions sheet,
+   and the setup pieces used by onboarding and settings. Built from the
+   design-system tokens; nothing here restyles a shared component. */
+
+/* ---------- Header trigger ---------- */
+
+/* ✦ sits just left of the account control; the account stays right-aligned. */
+.ai-menu-trigger {
+  margin-left: auto;
+  color: var(--text-secondary);
+}
+
+.ai-menu-trigger + .account-trigger {
+  margin-left: 4px;
+}
+
+.ai-menu-trigger:not([aria-disabled='true']):hover,
+.ai-menu-trigger[aria-expanded='true'] {
+  color: var(--text-primary);
+  background: rgb(255 255 255 / 0.08);
+}
+
+/* ---------- Status row (between the upload zone and the action row) ---------- */
+
+.ai-status-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 32px;
+  margin-top: 12px;
+  font-size: var(--fs-sm);
+  color: var(--text-secondary);
+}
+
+.ai-status-icon {
+  flex: none;
+}
+
+.ai-status-busy {
+  animation: status-pulse 1.2s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ai-status-busy {
+    animation: none;
+  }
+}
+
+.ai-status-text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ai-status-row[data-kind='error'] .ai-status-text {
+  white-space: normal;
+}
+
+.ai-status-model {
+  color: var(--text-tertiary);
+}
+
+.ai-status-error {
+  color: var(--warning);
+}
+
+.ai-status-action {
+  flex: none;
+  height: 28px;
+  padding: 0 10px;
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-medium);
+}
+
+/* ---------- Fields ---------- */
+
+.ai-label {
+  font-size: var(--fs-sm);
+  color: var(--text-secondary);
+}
+
+.ai-input,
+.ai-textarea {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid var(--glass-card-border);
+  border-radius: var(--radius-control);
+  background: var(--glass-card-fill);
+  color: var(--text-primary);
+  caret-color: #fff;
+  font: inherit;
+  font-size: var(--fs-sm);
+  line-height: 1.4;
+  text-shadow: inherit;
+  outline: none;
+  user-select: text;
+}
+
+.ai-textarea {
+  resize: none;
+}
+
+.ai-input::placeholder,
+.ai-textarea::placeholder {
+  color: var(--text-tertiary);
+}
+
+.ai-input:focus-visible,
+.ai-textarea:focus-visible {
+  border-color: rgb(255 255 255 / 0.5);
+}
+
+.ai-input[aria-invalid='true'] {
+  border-color: var(--warning);
+}
+
+.ai-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.ai-field-error {
+  margin: 0;
+  font-size: var(--fs-xs);
+  color: var(--warning);
+}
+
+.ai-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+/* ---------- Suggestions sheet ---------- */
+
+.ai-note {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ai-note-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.ai-suggest {
+  height: 36px;
+  padding: 0 20px;
+  font-size: var(--fs-sm);
+}
+
+.ai-running,
+.ai-error {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: var(--fs-sm);
+  color: var(--text-secondary);
+}
+
+.ai-error > span {
+  flex: 1;
+  color: var(--warning);
+}
+
+.ai-running > span {
+  flex: 1;
+}
+
+.ai-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.ai-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 14px;
+  border: 1px solid var(--glass-card-border);
+  border-radius: var(--radius-control);
+  background: var(--glass-card-fill);
+}
+
+.ai-card-title {
+  margin: 0;
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-semibold);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+}
+
+.ai-card-text {
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.4;
+  white-space: pre-wrap;
+  user-select: text;
+}
+
+.ai-card-placeholder {
+  margin: 0;
+  font-size: var(--fs-sm);
+  color: var(--text-tertiary);
+}
+
+.ai-card-flags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.ai-card-flags:empty {
+  display: none;
+}
+
+.ai-card-flags .status-chip {
+  white-space: normal;
+}
+
+.ai-card-note {
+  font-size: var(--fs-xs);
+  color: var(--text-tertiary);
+}
+
+.ai-card-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.ai-use {
+  height: 32px;
+  padding: 0 16px;
+  font-size: var(--fs-sm);
+}
+
+.ai-apply-error {
+  align-self: flex-start;
+  white-space: normal;
+}
+
+/* ---------- Setup: Ollama check, models, downloads ---------- */
+
+.ai-step,
+.ai-check,
+.ai-models,
+.ai-downloads {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.ai-check-status {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.ai-guidance {
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.45;
+  color: var(--text-secondary);
+}
+
+.ai-link {
+  align-self: flex-start;
+  color: var(--text-primary);
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-medium);
+}
+
+.ai-link:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+  border-radius: 4px;
+}
+
+.ai-details {
+  font-size: var(--fs-sm);
+  color: var(--text-secondary);
+}
+
+.ai-details summary {
+  cursor: default;
+}
+
+.ai-details[open] {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.ai-code {
+  display: block;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: rgb(0 0 0 / 0.22);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: var(--fs-xs);
+  color: var(--text-primary);
+  user-select: text;
+}
+
+.ai-model-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.ai-model,
+.ai-download {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 12px;
+  border: 1px solid var(--glass-card-border);
+  border-radius: var(--radius-control);
+  background: var(--glass-card-fill);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  text-shadow: inherit;
+}
+
+.ai-model {
+  cursor: default;
+}
+
+.ai-model:not([aria-disabled='true']):hover {
+  background: var(--glass-control-hover);
+}
+
+.ai-model:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.ai-model[aria-disabled='true'] {
+  opacity: 0.6;
+}
+
+.ai-model-selected {
+  border-color: rgb(255 255 255 / 0.5);
+  background: var(--glass-active-fill);
+}
+
+.ai-model-text {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.ai-model-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-semibold);
+}
+
+.ai-model-detail {
+  font-size: var(--fs-xs);
+  color: var(--text-secondary);
+}
+
+.ai-badge {
+  font-size: 11px;
+}
+
+.ai-auto {
+  align-self: flex-start;
+}
+
+.ai-progress {
+  display: block;
+  height: 4px;
+  margin-top: 4px;
+  border-radius: 2px;
+  background: rgb(255 255 255 / 0.2);
+  overflow: hidden;
+}
+
+.ai-progress-fill {
+  display: block;
+  width: var(--progress);
+  height: 100%;
+  background: rgb(255 255 255 / 0.9);
+  transition: width 200ms ease;
+}
+
+/* ---------- Voice ---------- */
+
+.voice-scale {
+  display: grid;
+  grid-template-columns: 84px 1fr 84px;
+  align-items: center;
+  gap: 10px;
+  font-size: var(--fs-xs);
+  color: var(--text-secondary);
+}
+
+.voice-scale-end:last-child {
+  text-align: right;
+}
+
+.voice-examples {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.voice-example {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--glass-card-border);
+  border-radius: var(--radius-control);
+  background: var(--glass-card-fill);
+}
+
+.voice-example-text {
+  flex: 1;
+  margin: 0;
+  font-size: var(--fs-sm);
+  line-height: 1.4;
+  white-space: pre-wrap;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
