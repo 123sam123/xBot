@@ -45,6 +45,14 @@ body,
   transform: translateY(-50%);
 }
 
+/* Near the minimum width the undo/redo/more buttons need the room on the right. */
+@media (max-width: 760px) {
+  .studio-badge {
+    left: auto;
+    right: calc(100% + 10px);
+  }
+}
+
 .studio-bar-end {
   justify-self: end;
   display: flex;
@@ -386,6 +394,11 @@ body,
 .tool-field-pair {
   display: flex;
   gap: 12px;
+}
+
+/* Up to five options share a popover row. */
+.tool-popover .segment {
+  padding: 0 6px;
 }
 
 .tool-popover .toggle-row {

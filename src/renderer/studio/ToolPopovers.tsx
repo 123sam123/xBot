@@ -224,7 +224,7 @@ function PaddingTool({ composition, onChange, onCommit }: ToolProps) {
           </Field>
         </>
       )}
-      <Toggle label="Separate horizontal and vertical" checked={!padding.linked} onChange={(separate) => setPadding({ linked: !separate, y: padding.x })} />
+      <Toggle label="Separate H and V" checked={!padding.linked} onChange={(separate) => setPadding({ linked: !separate, y: padding.x })} />
       <Segmented<CanvasRatio>
         label="Output ratio"
         options={[
