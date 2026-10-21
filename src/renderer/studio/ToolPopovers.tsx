@@ -53,12 +53,6 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
   );
 }
 
-const BACKGROUND_TYPES: { value: Background['type']; label: string }[] = [
-  { value: 'gradient', label: 'Gradient' },
-  { value: 'solid', label: 'Solid' },
-  { value: 'image', label: 'Image' },
-  { value: 'transparent', label: 'None' },
-];
 
 function brightnessOf(background: Background): number {
   return background.type === 'transparent' ? 0.5 : background.brightness;
@@ -81,7 +75,7 @@ function BackgroundTool({
     if (type === 'gradient') set(gradientBackground('blue', brightness));
     else if (type === 'solid') set({ type: 'solid', color: bg.type === 'gradient' ? bg.from : '#5867ec', brightness });
     else if (type === 'transparent') set({ type: 'transparent' });
-    else onPickImage();
+    else if (!pickDisabledReason) onPickImage();
   };
 
   return (
@@ -117,7 +111,18 @@ function BackgroundTool({
       />
       {more && (
         <div className="tool-popover-more-section">
-          <Segmented<Background['type']> label="Background type" options={BACKGROUND_TYPES} value={bg.type} onChange={setType} testId="background-type" />
+          <Segmented<Background['type']>
+            label="Background type"
+            options={[
+              { value: 'gradient', label: 'Gradient' },
+              { value: 'solid', label: 'Solid' },
+              { value: 'image', label: 'Image', disabled: pickDisabledReason !== undefined, reason: pickDisabledReason },
+              { value: 'transparent', label: 'None' },
+            ]}
+            value={bg.type}
+            onChange={setType}
+            testId="background-type"
+          />
           {bg.type === 'gradient' && (
             <>
               <Field label="Angle">
