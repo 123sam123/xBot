@@ -5,7 +5,7 @@ The scale is ≈1.483 image px per CSS px, derived from the 420-CSS-px composer 
 - the composer spans image px (44,54)–(667,1003);
 - the Media Studio spans (684,54)–(1852,1003).
 
-Every value is **approximate**: always check it against the PNG. T2 (XBOT-6AU4BQ) re-measured the values marked "measured" below.
+Every value is **approximate**: always check it against the PNG. T2 (XBOT-6AU4BQ) re-measured the PNG; where its numbers differ from the notes below, the table at the end wins.
 ## Material (both panels)
 - A clear, neutral glass. The blue comes from the wallpaper, so never paint the panels blue.
 - Outer corner radius is about 40 CSS px, with soft continuous corners.
@@ -39,3 +39,30 @@ Every value is **approximate**: always check it against the PNG. T2 (XBOT-6AU4BQ
 ## Anti-reference
 - An earlier rejected attempt ("Buildlog") used an opaque navy panel, a muted teal Post button, and left a large empty opaque region below the composer. Do not reproduce any of these.
 - The milky silver look was also rejected.
+
+## Re-measured by T2 (XBOT-6AU4BQ)
+
+T2 measured the committed PNG at 1.483 image px per CSS px, using text widths and cap heights. The type is smaller than the estimates above. `src/renderer/design-system/tokens.css` and the page styles use these values.
+
+| Element | CSS px |
+|---|---|
+| Composer | 420 × 640, content inset 36, header icon 30 at y≈40 |
+| "xBot" / handle | 18 medium / 17.5 |
+| "Write Post" | 25.5 bold |
+| Editor card | 348 × 128 at y≈148, text 20/26 |
+| Attachment card / thumbnail | 100 tall / 154 × 100 |
+| "Edit in Studio ↗", "Add screenshots or video" | 14.5, 15 |
+| Dashed zone | 95 tall, dashes ≈ 6 on 5 |
+| Counter / reminder text | 14.5 / 14 |
+| Post pill | 137 × 42, "Post" 17 semibold |
+| Divider / reminder row | y≈573 / y≈603 |
+| Studio | 788 × 640 (the window is 790 × 635) |
+| "‹ Back to post" / "Media Studio" / "Add to post" | 16.5 / 23 semibold / 116 × 42, label 16 |
+| Canvas | 712 × 346 at y≈88 (inset 38–39 per side) |
+| Toolbar | 583 × 72, overlaps the canvas by ≈9; labels 12 |
+| Background popover | 196 × 118, 12 above the toolbar; title 14; swatches 27 with 6 gaps |
+| Timeline | 740 × 65 (inset 24); time 13.5; filmstrip ≈7 frames, trim ≈0.13–0.71 |
+| Footer | centred at y≈603; "1920 × 1080", "Fit", "75%" at 14 |
+
+The reference's toolbar sits ≈6 px left of the canvas centre. xBot keeps it centred.
+
