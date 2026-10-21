@@ -1,0 +1,148 @@
+/* CompositionPreview. `cqh`/`cqw` units make one layout serve every size. */
+
+.composition {
+  position: relative;
+  container-type: size;
+  overflow: hidden;
+  background: var(--composition-bg);
+}
+
+.composition-light {
+  position: absolute;
+  inset: 0;
+  background: var(--composition-light);
+  pointer-events: none;
+}
+
+.composition-frame {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  container-type: inline-size;
+  width: min(
+    calc(100cqw - 2 * var(--pad) * 100cqh),
+    calc((100cqh - 2 * var(--pad) * 100cqh) * var(--frame-aspect))
+  );
+  transform: translate(-50%, -50%) scale(var(--zoom));
+}
+
+.frame-body {
+  overflow: hidden;
+  border-radius: 1.9cqw;
+  background: #fff;
+}
+
+.frame-body-none {
+  border-radius: 1.4cqw;
+}
+
+.composition-shadow-soft .frame-body {
+  box-shadow:
+    0 2.4cqw 6cqw rgb(16 18 40 / 0.3),
+    0 0.4cqw 1cqw rgb(16 18 40 / 0.18);
+}
+
+.composition-shadow-elevated .frame-body {
+  box-shadow:
+    0 5cqw 11cqw rgb(16 18 40 / 0.42),
+    0 1cqw 2.4cqw rgb(16 18 40 / 0.24);
+}
+
+.frame-media {
+  aspect-ratio: var(--media-aspect);
+  overflow: hidden;
+}
+
+.frame-media img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* ---------- Chrome ---------- */
+
+.frame-chrome {
+  position: relative;
+  display: flex;
+  align-items: center;
+  height: calc(var(--chrome) * 100cqw);
+  padding: 0 3cqw;
+  text-shadow: none;
+}
+
+.frame-chrome-dark {
+  background: linear-gradient(#2b2c31, #222327);
+  color: rgb(255 255 255 / 0.82);
+}
+
+.frame-chrome-light {
+  background: linear-gradient(#f4f5f7, #e9eaee);
+  color: rgb(20 22 30 / 0.7);
+  box-shadow: inset 0 -1px 0 rgb(0 0 0 / 0.08);
+}
+
+.frame-lights {
+  display: flex;
+  gap: 1.5cqw;
+}
+
+.frame-light {
+  width: 2.25cqw;
+  height: 2.25cqw;
+  border-radius: 50%;
+}
+
+.frame-light-close {
+  background: #ff5f57;
+}
+
+.frame-light-min {
+  background: #febc2e;
+}
+
+.frame-light-max {
+  background: #28c840;
+}
+
+.frame-address {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.9cqw;
+  width: 58cqw;
+  height: 4.6cqw;
+  border-radius: 1.2cqw;
+  transform: translate(-50%, -50%);
+  font-size: 2.5cqw;
+  font-weight: var(--fw-medium);
+  letter-spacing: 0.01em;
+}
+
+.frame-chrome-dark .frame-address {
+  background: rgb(255 255 255 / 0.07);
+  color: rgb(255 255 255 / 0.88);
+}
+
+.frame-chrome-light .frame-address {
+  background: rgb(0 0 0 / 0.05);
+}
+
+.frame-address-lock {
+  width: 2.1cqw;
+  height: 2.1cqw;
+}
+
+.frame-tools {
+  display: flex;
+  gap: 2.6cqw;
+  margin-left: auto;
+}
+
+.frame-tools svg {
+  width: 3.2cqw;
+  height: 3.2cqw;
+}
