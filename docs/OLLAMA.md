@@ -120,10 +120,21 @@ and logs `aborting chat request due to client closing the connection`. So
 download. Partial blobs are kept as `-partial` files, and the next pull
 resumes them, which is how Retry works.
 
-The build box where this was written had no Ollama installed. The abort
-behaviour above comes from Ollama's source; xBot's side of it (the socket
-closes within 1 s of Cancel) is tested against a mock server in
+Checked live on 2026-10-21 against Ollama 0.40.8 with `gemma3:4b`, run from a
+throwaway directory on the build box. A streaming request with
+`num_predict: 2000` was aborted after 20 chunks (0.81 s); Ollama's request log
+shows it ended at 0.80 s instead of generating on. xBot's side (the socket
+closes within 1 s of Cancel) is also tested against a mock server in
 `tests/unit/ai-service.test.ts`.
+
+The same live run confirmed the following:
+- `/api/tags` and `/api/show` report `capabilities: ["completion", "vision"]`
+  for `gemma3:4b` on 0.40.8 (0.31.1 reported `["completion"]`).
+- A missing model answers 404 `model '…' not found`.
+- With `OLLAMA_NO_CLOUD=1`, a cloud model answers 403
+  `ollama cloud is disabled: remote model is unavailable`, the log shows
+  `Ollama cloud disabled: true`, and `/api/status` reports
+  `{"cloud":{"disabled":true,"source":"env"}}`.
 
 ### Concurrency and memory
 
