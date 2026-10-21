@@ -1,8 +1,11 @@
 # xBot final UI reference — measured notes
 
-The orchestrator measured these from the human's reference image on 2026-10-21. That image is a ~1936×1100 px screenshot with two glass panels side by side on a blue macOS wallpaper.
-The scale is ≈1.49 image px per CSS px, derived from the 420-CSS-px composer width. Every value is **approximate**: always check it against the real reference PNG (`docs/reference/xbot-final-ui.png` once committed, or the ticket artifact).
+The orchestrator measured these from the human's reference image on 2026-10-21. The committed image, `docs/reference/xbot-final-ui.png`, is 1900×1046 px, with two glass panels side by side on a blue macOS wallpaper.
+The scale is ≈1.483 image px per CSS px, derived from the 420-CSS-px composer width:
+- the composer spans image px (44,54)–(667,1003);
+- the Media Studio spans (684,54)–(1852,1003).
 
+Every value is **approximate**: always check it against the PNG. T2 (XBOT-6AU4BQ) re-measured the values marked "measured" below.
 ## Material (both panels)
 - A clear, neutral glass. The blue comes from the wallpaper, so never paint the panels blue.
 - Outer corner radius is about 40 CSS px, with soft continuous corners.
