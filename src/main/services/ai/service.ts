@@ -426,6 +426,9 @@ export function createAiService(deps: AiServiceDeps) {
         .then(
           async () => {
             pull = { model, percent: 100, status: 'success', error: null, active: false };
+            // A probe already in flight may have listed the models before this one landed: start a fresh one.
+            probeGen += 1;
+            inflight = null;
             await probe('force');
           },
           (err: unknown) => {
