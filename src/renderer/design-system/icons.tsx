@@ -122,6 +122,19 @@ export const TabsIcon = icon(
   </>,
 );
 
+export const UndoIcon = icon('UndoIcon', <path d="M9 14L4 9l5-5M4 9h10.5a5.5 5.5 0 0 1 0 11H11" />);
+
+export const RedoIcon = icon('RedoIcon', <path d="M15 14l5-5-5-5M20 9H9.5a5.5 5.5 0 0 0 0 11H13" />);
+
+export const MoreIcon = icon(
+  'MoreIcon',
+  <>
+    <circle cx="5.5" cy="12" r="1.6" fill="currentColor" stroke="none" />
+    <circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none" />
+    <circle cx="18.5" cy="12" r="1.6" fill="currentColor" stroke="none" />
+  </>,
+);
+
 export const SparkleIcon = icon('SparkleIcon', <path d="M12 3.5l1.9 5.4 5.6 1.6-5.6 1.6L12 17.5l-1.9-5.4-5.6-1.6 5.6-1.6z" />);
 
 export const GridIcon = icon(

@@ -57,6 +57,17 @@ body,
   padding: 0 18px;
 }
 
+.studio-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  -webkit-app-region: no-drag;
+}
+
+.studio-actions .btn-icon-bare[aria-disabled='true'] {
+  opacity: 0.4;
+}
+
 /* ---------- Canvas ---------- */
 
 .studio-canvas {
@@ -80,12 +91,31 @@ body,
   pointer-events: none;
 }
 
-.studio-composition {
-  position: absolute;
-  inset: 0;
+.studio-canvas-drop::after {
+  box-shadow:
+    inset 0 0 0 2px rgb(255 255 255 / 0.8),
+    inset 0 1px 8px rgb(255 255 255 / 0.18);
 }
 
-/* The media "Edit in Studio ↗" opened, shown as-is until T4's editing. */
+/* The composition at the chosen zoom, centred; it scrolls when larger than the area. */
+.studio-viewport {
+  position: absolute;
+  inset: 0;
+  overflow: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgb(255 255 255 / 0.35) transparent;
+}
+
+.studio-viewport-inner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 100%;
+  min-height: 100%;
+  width: max-content;
+}
+
+/* A video opened from the composer: read-only until T5 (XBOT-G66JJK). */
 .studio-target {
   position: absolute;
   inset: 0;
@@ -97,11 +127,88 @@ body,
 .studio-empty {
   position: absolute;
   inset: 0;
-  display: grid;
-  place-items: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
   color: var(--text-tertiary);
   font-size: var(--fs-md);
 }
+
+.studio-empty-action {
+  padding: 0 18px;
+}
+
+.studio-toast {
+  position: absolute;
+  top: 10px;
+  left: 50%;
+  z-index: 1;
+  max-width: calc(100% - 40px);
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
+/* ---------- Crop mode ---------- */
+
+.crop-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  touch-action: none;
+}
+
+.crop-stage {
+  position: relative;
+  flex: none;
+}
+
+.crop-image {
+  display: block;
+  width: 100%;
+  height: 100%;
+  user-select: none;
+}
+
+.crop-rect {
+  position: absolute;
+  box-shadow:
+    0 0 0 1.5px #fff,
+    0 0 0 9999px rgb(0 0 0 / 0.55);
+  cursor: move;
+}
+
+.crop-grid {
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(to right, transparent calc(100% / 3 - 0.5px), rgb(255 255 255 / 0.45) calc(100% / 3 - 0.5px), rgb(255 255 255 / 0.45) calc(100% / 3 + 0.5px), transparent calc(100% / 3 + 0.5px), transparent calc(200% / 3 - 0.5px), rgb(255 255 255 / 0.45) calc(200% / 3 - 0.5px), rgb(255 255 255 / 0.45) calc(200% / 3 + 0.5px), transparent calc(200% / 3 + 0.5px)),
+    linear-gradient(to bottom, transparent calc(100% / 3 - 0.5px), rgb(255 255 255 / 0.45) calc(100% / 3 - 0.5px), rgb(255 255 255 / 0.45) calc(100% / 3 + 0.5px), transparent calc(100% / 3 + 0.5px), transparent calc(200% / 3 - 0.5px), rgb(255 255 255 / 0.45) calc(200% / 3 - 0.5px), rgb(255 255 255 / 0.45) calc(200% / 3 + 0.5px), transparent calc(200% / 3 + 0.5px));
+  pointer-events: none;
+}
+
+.crop-handle {
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  margin: -7px 0 0 -7px;
+  border-radius: 3px;
+  background: #fff;
+  box-shadow: 0 1px 3px rgb(0 0 0 / 0.35);
+}
+
+.crop-handle-nw { left: 0; top: 0; cursor: nwse-resize; }
+.crop-handle-n { left: 50%; top: 0; cursor: ns-resize; }
+.crop-handle-ne { left: 100%; top: 0; cursor: nesw-resize; }
+.crop-handle-e { left: 100%; top: 50%; cursor: ew-resize; }
+.crop-handle-se { left: 100%; top: 100%; cursor: nwse-resize; }
+.crop-handle-s { left: 50%; top: 100%; cursor: ns-resize; }
+.crop-handle-sw { left: 0; top: 100%; cursor: nesw-resize; }
+.crop-handle-w { left: 0; top: 50%; cursor: ew-resize; }
 
 /* ---------- Floating toolbar: overlaps the canvas bottom by 9 px ---------- */
 
@@ -212,6 +319,150 @@ body,
 .tool-popover-adornment {
   flex: none;
   color: rgb(255 255 255 / 0.9);
+}
+
+/* Every tool except the compact Background view has room for labelled rows. */
+.tool-popover-wide {
+  width: 268px;
+}
+
+.tool-popover-background:has(.tool-popover-more-section) {
+  width: 268px;
+}
+
+.tool-popover-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+/* The "More" toggle sits inside the title's 20 px line, so the compact view keeps the reference's size. */
+.tool-popover-more {
+  margin: -2px -6px -2px 0;
+  padding: 1px 3px;
+  color: var(--text-secondary);
+}
+
+.tool-popover-more-open {
+  background: rgb(255 255 255 / 0.14);
+}
+
+.tool-popover-more-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-top: 2px;
+}
+
+.tool-field {
+  display: grid;
+  grid-template-columns: 58px 1fr;
+  align-items: center;
+  gap: 10px;
+}
+
+.tool-field-label {
+  font-size: var(--fs-xs);
+  color: var(--text-secondary);
+}
+
+.tool-field-colors {
+  display: flex;
+  gap: 8px;
+}
+
+.tool-field-pair {
+  display: flex;
+  gap: 12px;
+}
+
+.tool-popover .toggle-row {
+  gap: 12px;
+}
+
+.tool-popover .toggle-label {
+  font-size: var(--fs-xs);
+}
+
+.tool-popover .toggle {
+  transform: scale(0.85);
+  transform-origin: right center;
+}
+
+.tool-popover-note {
+  font-size: var(--fs-xs);
+  color: var(--text-tertiary);
+}
+
+.tool-popover-warning {
+  color: var(--text-primary);
+}
+
+.tool-popover-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.tool-popover-actions-end {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.tool-popover-action {
+  height: 30px;
+  padding: 0 8px;
+  font-size: var(--fs-xs);
+}
+
+.tool-popover-apply {
+  height: 30px;
+  min-width: 0;
+  padding: 0 14px;
+  font-size: var(--fs-xs);
+}
+
+.preset-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 180px;
+  margin: 0;
+  padding: 0;
+  overflow: auto;
+  list-style: none;
+}
+
+.preset-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.preset-apply {
+  flex: 1;
+  min-width: 0;
+  height: 30px;
+  padding: 0 8px;
+  overflow: hidden;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-size: var(--fs-sm);
+  text-align: left;
+  text-overflow: ellipsis;
+  text-shadow: inherit;
+  white-space: nowrap;
+}
+
+.preset-apply:hover,
+.preset-apply:focus-visible {
+  outline: none;
+  background: rgb(255 255 255 / 0.12);
 }
 
 /* ---------- Timeline ---------- */
@@ -345,6 +596,11 @@ body,
   gap: 10px;
   font-size: var(--fs-sm);
   font-variant-numeric: tabular-nums;
+}
+
+.studio-dims-button {
+  margin-left: -6px;
+  padding: 0 6px;
 }
 
 .studio-view {

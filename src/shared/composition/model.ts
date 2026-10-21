@@ -112,6 +112,10 @@ export const MAX_OUTPUT_SIDE = 8192;
 export const MIN_CROP_PX = 16;
 /** Sources larger than this are not decoded for editing. */
 export const MAX_EDIT_PIXELS = 50_000_000;
+/** A custom canvas, px at 1×. */
+export const CANVAS_LIMITS = { min: 64, max: MAX_OUTPUT_SIDE } as const;
+/** An export is imported as media, whose image limit is 20 MB. */
+export const MAX_EXPORT_BYTES = 20 * 1024 * 1024;
 
 export const RATIOS: Record<Exclude<CanvasRatio, 'original' | 'custom'>, number> = {
   '16:9': 16 / 9,

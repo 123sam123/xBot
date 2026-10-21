@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { MAX_OUTPUT_SIDE, MIN_CROP_PX, type Composition, type Style } from './model';
+import { CANVAS_LIMITS, MIN_CROP_PX, type Composition, type Style } from './model';
 
 // The composition as main validates it: every stored document, every save and
 // every export. Main and the studio contract import this; the renderer never
@@ -24,8 +24,8 @@ const frameSchema = z.strictObject({
 
 const canvasSchema = z.strictObject({
   ratio: z.enum(['original', '16:9', '1:1', '4:5', 'custom']),
-  width: z.number().int().min(64).max(MAX_OUTPUT_SIDE),
-  height: z.number().int().min(64).max(MAX_OUTPUT_SIDE),
+  width: z.number().int().min(CANVAS_LIMITS.min).max(CANVAS_LIMITS.max),
+  height: z.number().int().min(CANVAS_LIMITS.min).max(CANVAS_LIMITS.max),
 });
 
 const paddingSchema = z.strictObject({
