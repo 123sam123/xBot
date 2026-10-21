@@ -111,6 +111,8 @@ export interface PopoverProps {
   crossOffset?: number;
   /** Accessible name. */
   label: string;
+  /** Pointer-downs inside these elements do not close it (e.g. the crop overlay it controls). */
+  keepOpenWithin?: readonly RefObject<HTMLElement | null>[];
   role?: 'dialog' | 'menu';
   className?: string;
   testId?: string;
@@ -136,6 +138,7 @@ function PopoverSurface({
   offset = 10,
   crossOffset = 0,
   label,
+  keepOpenWithin,
   role = 'dialog',
   className,
   testId,
@@ -153,11 +156,12 @@ function PopoverSurface({
     const onPointerDown = (event: PointerEvent) => {
       const target = event.target as Node;
       if (surface.current?.contains(target) || anchor.current?.contains(target)) return;
+      if (keepOpenWithin?.some((ref) => ref.current?.contains(target))) return;
       popovers.close(id);
     };
     document.addEventListener('pointerdown', onPointerDown, true);
     return () => document.removeEventListener('pointerdown', onPointerDown, true);
-  }, [id, anchor, surface]);
+  }, [id, anchor, surface, keepOpenWithin]);
 
   useEffect(() => {
     if (role === 'dialog') surface.current?.focus({ preventScroll: true });

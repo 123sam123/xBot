@@ -7,9 +7,15 @@ import { builtinModules } from 'node:module';
 
 // Process boundaries are enforced here (see docs/ARCHITECTURE.md):
 // - renderer and shared code never import electron or Node built-ins;
+// - the renderer takes only types from zod, contract files and the composition
+//   schema, so zod stays out of its bundles;
 // - the preload never imports zod, and takes only types (plus the zod-free
 //   `*.channels` files) from the shared contracts.
 const nodeBuiltins = [...builtinModules, ...builtinModules.map((m) => `node:${m}`)];
+const boundaryPaths = [
+  { name: 'electron', message: 'Renderer and shared code reach the main process only through window.xbot.' },
+  ...nodeBuiltins.map((name) => ({ name, message: 'Renderer and shared code must not use Node built-ins.' })),
+];
 
 export default defineConfig(
   // .fredrin/, .claude/ and .agents/ hold the ticket tooling, not xBot code.
@@ -31,14 +37,36 @@ export default defineConfig(
     rules: reactHooks.configs.recommended.rules,
   },
   {
-    files: ['src/renderer/**/*.{ts,tsx}', 'src/shared/**/*.ts'],
+    files: ['src/shared/**/*.ts'],
+    rules: { '@typescript-eslint/no-restricted-imports': ['error', { paths: boundaryPaths }] },
+  },
+  {
+    // The composition model and layout are imported by the renderer as values, so zod must never reach them.
+    files: ['src/shared/composition/model.ts', 'src/shared/composition/layout.ts'],
     rules: {
       '@typescript-eslint/no-restricted-imports': [
         'error',
         {
-          paths: [
-            { name: 'electron', message: 'Renderer and shared code reach the main process only through window.xbot.' },
-            ...nodeBuiltins.map((name) => ({ name, message: 'Renderer and shared code must not use Node built-ins.' })),
+          paths: [...boundaryPaths, { name: 'zod', message: 'The renderer imports this file; validation lives in ./schema.' }],
+          patterns: [{ group: ['./schema'], message: 'The renderer imports this file; ./schema pulls in zod.' }],
+        },
+      ],
+    },
+  },
+  {
+    // zod stays out of the renderer bundles: types only from zod and from contract or schema files.
+    files: ['src/renderer/**/*.{ts,tsx}'],
+    rules: {
+      '@typescript-eslint/no-restricted-imports': [
+        'error',
+        {
+          paths: [...boundaryPaths, { name: 'zod', allowTypeImports: true, message: 'zod stays out of the renderer; validation runs in main.' }],
+          patterns: [
+            {
+              regex: 'shared/(contracts/(?!.*\\.channels$)|composition/schema)',
+              allowTypeImports: true,
+              message: 'Import only types from contract and schema files; they pull in zod.',
+            },
           ],
         },
       ],

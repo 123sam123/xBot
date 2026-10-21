@@ -4,14 +4,13 @@ import type { IpcResult } from '../../shared/contracts/ipc';
 import type { ImportResult, MediaItem } from '../../shared/contracts/media';
 import { postLength } from '../../shared/postLength';
 import { CompositionPreview } from '../common/CompositionPreview';
-import { DEFAULT_COMPOSITION, type PreviewComposition } from '../common/previewComposition';
 import { useAppInfo, useReadyMarker } from '../common/useAppInfo';
 import { useEscapeToHide } from '../common/useEscapeToHide';
 import { setSetting, useSettings } from '../common/useSettings';
 import { Divider, GlassPanel, popovers, StatusChip, useAnyPopoverOpen, useAppearance, type MenuItem } from '../design-system';
 import { OnboardingSheet } from '../onboarding/OnboardingSheet';
 import { unseenSteps } from '../onboarding/registry';
-import { PREVIEW_DRAFT_TEXT, PREVIEW_HANDLE, PREVIEW_REMINDER_LABEL, PREVIEW_SOURCE } from '../preview/fixtures';
+import { PREVIEW_DRAFT_TEXT, PREVIEW_HANDLE, PREVIEW_REMINDER_LABEL, PREVIEW_SOURCE, PREVIEW_THUMBNAIL_COMPOSITION } from '../preview/fixtures';
 import { SettingsSheet } from '../settings/SettingsSheet';
 import type { AccountState } from './AccountMenu';
 import { ActionRow } from './ActionRow';
@@ -24,7 +23,7 @@ import { PublishSheet } from './PublishSheet';
 import { ReminderRow } from './ReminderRow';
 import { UploadZone } from './UploadZone';
 import { useDraft } from './useDraft';
-import { useFileDrop } from './useFileDrop';
+import { useFileDrop } from '../common/useFileDrop';
 
 // The Write Post composer. In normal mode the draft and its media are
 // persisted (useDraft, window.xbot.drafts / .media); preview mode keeps T2's
@@ -36,9 +35,6 @@ const NOTICE_MS = 3200;
 const TEXT_MAX = 25_000;
 
 type SheetId = 'onboarding' | 'history' | 'settings' | 'publish';
-
-/** The attachment thumbnail is the same composition, with more room around the frame. */
-const THUMBNAIL_COMPOSITION: PreviewComposition = { ...DEFAULT_COMPOSITION, padding: 0.13 };
 
 /** Keeps the window exactly as tall as its content, so no empty region shows below it. */
 function useFitWindowToContent(ref: React.RefObject<HTMLElement | null>): void {
@@ -156,7 +152,9 @@ function Composer({ preview, emojiPanel, seenSteps }: { preview: boolean; emojiP
           {
             id: 'preview-sample',
             label: 'sample screenshot',
-            thumbnail: <CompositionPreview composition={THUMBNAIL_COMPOSITION} source={PREVIEW_SOURCE} className="attachment-composition" />,
+            thumbnail: (
+              <CompositionPreview composition={PREVIEW_THUMBNAIL_COMPOSITION} source={PREVIEW_SOURCE} fit="cover" className="attachment-composition" />
+            ),
           },
         ]
       : [],
