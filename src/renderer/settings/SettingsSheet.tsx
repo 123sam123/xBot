@@ -25,10 +25,15 @@ function Section({ section }: { section: SettingsSection }) {
 export function SettingsSheet({ open, onClose, focusSection }: { open: boolean; onClose(): void; focusSection?: string }) {
   useEffect(() => {
     if (!open || !focusSection) return;
-    const frame = requestAnimationFrame(() =>
-      document.querySelector(`.settings-section[data-section="${CSS.escape(focusSection)}"]`)?.scrollIntoView({ block: 'start' }),
-    );
-    return () => cancelAnimationFrame(frame);
+    const scroll = () =>
+      document.querySelector(`.settings-section[data-section="${CSS.escape(focusSection)}"]`)?.scrollIntoView({ block: 'start' });
+    // Sections read their own state, so the target may only fill in after a moment: try again then.
+    const frame = requestAnimationFrame(scroll);
+    const later = window.setTimeout(scroll, 250);
+    return () => {
+      cancelAnimationFrame(frame);
+      window.clearTimeout(later);
+    };
   }, [open, focusSection]);
   return (
     <Sheet open={open} title="Settings" onClose={onClose} testId="settings-sheet">

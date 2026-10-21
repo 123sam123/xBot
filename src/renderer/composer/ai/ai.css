@@ -76,6 +76,18 @@
 
 /* ---------- Fields ---------- */
 
+/* Containing blocks for the absolutely positioned visually-hidden text that
+   labels and Tooltips add, so it scrolls with the sheet instead of
+   stretching the page below it. */
+.ai-field,
+.ai-row,
+.ai-step,
+.ai-note-actions,
+.ai-download,
+.ai-card-actions {
+  position: relative;
+}
+
 .ai-label {
   font-size: var(--fs-sm);
   color: var(--text-secondary);
