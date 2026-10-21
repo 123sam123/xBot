@@ -11,6 +11,8 @@ export const windowsSettings = {
   'ui.reduceTransparency': defineSetting(z.boolean(), false),
   /** Stronger scrim and borders behind text, on top of the OS "Increase contrast" preference. */
   'ui.increaseContrast': defineSetting(z.boolean(), false),
+  /** Onboarding steps the user has moved past or skipped (src/renderer/onboarding/). */
+  'ui.onboardingSeen': defineSetting(z.array(z.string().max(64)).max(200), []),
 } satisfies SettingsShape;
 
 /**
@@ -34,4 +36,6 @@ export interface WindowsApi {
   resizeComposer(height: number): Promise<IpcResult<null>>;
   showComposer(): Promise<IpcResult<null>>;
   openStudio(): Promise<IpcResult<null>>;
+  /** Opens the OS emoji picker for the focused text field. */
+  showEmojiPanel(): Promise<IpcResult<null>>;
 }

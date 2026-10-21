@@ -4,4 +4,5 @@ import { invoke } from '../invoke';
 
 export const app: AppApi = {
   getInfo: () => invoke(appChannels.getInfo),
+  getStatus: () => invoke(appChannels.getStatus),
 };

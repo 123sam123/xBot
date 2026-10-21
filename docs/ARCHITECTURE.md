@@ -29,6 +29,7 @@ src/
     index.ts                 entry: userData, single-instance lock, schemes, sandbox
     app.ts                   everything after app.whenReady(), in order
     paths.ts  log.ts  events.ts  menu.ts  tray.ts  security.ts
+    status.ts                integration status registry (see "Registries")
     windows/                 common.ts (secure prefs, loader, registry), position.ts,
                              composer.ts, studio.ts, hold.ts
     ipc/                     core.ts (pure), register.ts (handle()), index.ts, <domain>.ts
@@ -43,6 +44,8 @@ src/
     common/                  base.css, CompositionPreview, hooks shared by both pages
     preview/                 preview mode's fixed sample content
     composer/, studio/       one Vite page each
+    onboarding/, settings/,  the sheet registries and the status chips (see "Registries")
+    status/
 resources/                   tray.svg → trayTemplate.png / @2x (pnpm icons)
   fixtures/                  preview mode's sample media (pnpm fixtures)
 scripts/                     capture-ui.ts (pnpm capture), render-fixtures.ts, capture-stage.cjs,
@@ -86,7 +89,7 @@ imported by every aggregator, so **a sibling ticket edits only its own files**:
 |---|---|
 | `app`, `windows`, `settings`, `events` | T1 (XBOT-O61LM8), the scaffold |
 | renderer design system, both surfaces | T2 (XBOT-6AU4BQ) |
-| `drafts`, `media` | T3 (XBOT-6F4GAC) |
+| `drafts`, `media` | T3 (XBOT-6F4GAC). T3 also added, additively and for the reasons in "Drafts and media": `emojiPanel` and the status calls to `app`, `showEmojiPanel` and `ui.onboardingSeen` to `windows`, the quit flush to `app.ts`, the menu-bar drop to `tray.ts`, the refocus to `hold.ts`, and the Studio hand-off view to `studio/` |
 | `studio` | T4 (XBOT-1N58PP) images; T5 (XBOT-G66JJK) video |
 | `ai` | T6 (XBOT-4BCGOR) |
 | `projects` | T7 (XBOT-5UVE6R) |
@@ -148,9 +151,10 @@ if (!result.ok) showError(result.error);
 
 `appEvents` (`src/main/events.ts`) is a typed `EventEmitter` from `node:events`.
 Its event map is merged from every domain's `<Domain>Events` interface:
-`draft:changed`, `post:published`, `export:progress`, `settings:changed` and
-`ui:open-settings` exist today. An event listed in a domain's
-`<domain>ForwardedEvents` is forwarded to every window automatically.
+`draft:changed`, `draft:studio-target`, `drafts:flush-requested`,
+`media:imported`, `status:changed`, `post:published`, `export:progress`,
+`settings:changed` and `ui:open-settings` exist today. An event listed in a
+domain's `<domain>ForwardedEvents` is forwarded to every window automatically.
 
 ## Settings
 
@@ -164,6 +168,8 @@ Its event map is merged from every domain's `<Domain>Events` interface:
   own schema.
 - A stored value that no longer matches its schema reads as the default, and a
   warning is logged.
+- `ui.onboardingSeen` (in `windows.ts`) lists the onboarding steps the user has
+  moved past or skipped; see "Registries".
 
 ## Database
 
@@ -201,7 +207,8 @@ Its event map is merged from every domain's `<Domain>Events` interface:
 | `--preview` or `XBOT_PREVIEW=1` | `~/Library/Application Support/xBot Preview` |
 | `XBOT_USER_DATA_DIR=<dir>` | `<dir>`, honoured only when unpackaged (tests) |
 
-Inside it: `xbot.db`, `media/` (served by `xbot-media://`), `exports/`,
+Inside it: `xbot.db`, `media/` (served by `xbot-media://`; thumbnails in
+`media/thumbs/`, see "Drafts and media"), `exports/`,
 `logs/main.log` (plain append-only log, no telemetry) and `tmp/`. `tmp/` is
 emptied at startup when the folder is provably xBot's, meaning it holds
 `xbot.db` or this run created it. Never write into the repository or next to
@@ -223,15 +230,18 @@ Defined by `src/main/index.ts` and `src/main/app.ts`:
    4. install the security handlers;
    5. `protocol.handle`;
    6. `registerIpc()`;
-   7. forward events to the renderers;
+   7. forward events to the renderers (and status changes as `status:changed`);
    8. `applyAppearance()` (`XBOT_APPEARANCE`), then create both windows, hidden;
    9. create the tray and the app menu;
    10. attach the lifecycle handlers;
    11. log `xBot ready`.
 
 `second-instance` (another launch) and macOS `activate` (reopened from Finder)
-both toggle the composer. `before-quit` marks the app as quitting, and only then
-do windows really close. `will-quit` disposes services and closes the DB.
+both toggle the composer. The first `before-quit` is prevented: main asks the
+composer to save text still inside its autosave debounce and waits for its ack
+(at most 1 s, skipped in preview or when the composer is not loaded), then
+quits again. That second `before-quit` marks the app as quitting, and only then
+do windows really close. `will-quit` disposes services, then closes the DB.
 `window-all-closed` is ignored, since a menu-bar app runs without windows.
 
 ## Windows, tray and menu
@@ -251,15 +261,22 @@ do windows really close. `will-quit` disposes services and closes the DB.
     below the panel. Keep the root element's height equal to the visible content.
   - Show is position, then `show()`, then `focus()`. T8's automatic open must use
     `showInactive()` instead, so the composer never steals focus.
+  - The panel does not activate xBot. Anything that needs xBot to be the
+    active app (a parentless `dialog.showOpenDialog`, `app.showEmojiPanel()`)
+    calls `app.focus({ steal: true })` first.
   - **Hide on Escape:** a window-level `keydown` listener (`useEscapeToHide`)
     calls `windows.hide()`. Popovers and sheets that handle Escape themselves
-    call `event.preventDefault()` first.
+    call `event.preventDefault()` first. An Escape that ends IME composition
+    (`event.isComposing`, e.g. CJK input) is left to the input method.
   - **Hide on blur**, except:
     - while the window is **held**: `window.xbot.windows.hold()` / `release()`
-      around internal popovers, and `withHold(win, fn)` (`windows/hold.ts`) around
-      every main-side `dialog.*` call (file pickers). `withHold` also drops the
-      always-on-top level while the dialog is up. The count is per webContents
-      and resets on hide and on reload;
+      while any popover, menu or sheet is open (`useHoldWhile` in
+      `composer/App.tsx`, asked for again when the window shows with a sheet
+      still open), and `withHold(win, fn)` (`windows/hold.ts`) around every
+      main-side `dialog.*` call (file pickers). `withHold` also drops the
+      always-on-top level while the dialog is up, and refocuses a still-visible
+      window afterwards so the next outside click blurs it again. The count is
+      per webContents and resets on hide and on reload;
     - while DevTools are open (unpackaged).
   - A tray click within 250 ms of a blur-hide is ignored, because it is the click
     that caused the blur.
@@ -281,6 +298,11 @@ do windows really close. `will-quit` disposes services and closes the DB.
     `resources/tray.svg` is rendered by `pnpm icons` to 18×18 and 36×36 PNGs,
     which ship via `extraResources`.
   - Left-click toggles the composer.
+  - On macOS it is also a drop target: dragging files over it shows the
+    composer, and dropping them on it attaches them to the current draft
+    (`importDroppedOnTray`). A drag that starts in Finder can activate Finder
+    and blur (hide) the composer before it reaches the window; the icon, or a
+    Cmd-drag from Finder, avoids that.
   - Right-click shows a menu that is rebuilt on every open: Write Post / Open
     Media Studio / Pause reminders (bound to `reminders.paused`) / Settings… (shows
     the composer and emits `ui:open-settings`) / Quit.
@@ -421,16 +443,23 @@ Prop changes are additive only; siblings build against these.
 ### Surfaces and their props
 
 - **Composer** (`composer/`):
-  - `ComposerHeader` and `AccountMenu({ account: { kind: 'disconnected' } | { kind: 'connected' | 'preview', handle } })`;
-  - `PostEditor({ value, onChange })`, with no `maxLength`; the counter shows the
-    over-limit state. The count is code points until T9 adds X's weighting;
-  - `AttachmentList({ attachments, onRemove(id), onReorder(from, to), onEditInStudio(id) })`;
-  - `UploadZone({ onAdd?, disabledReason? })`;
+  - `ComposerHeader({ account, onConnect?, menuItems? })`: the xBot mark and
+    name are the app menu's trigger (New draft, Draft history…, Settings…);
+    `AccountMenu({ account: { kind: 'disconnected' } | { kind: 'connected' | 'preview', handle } })`;
+  - `PostEditor({ value, onChange, readOnly?, maxLength?, saveState?, onEmoji?, editorRef? })`.
+    `maxLength` is only the 25 000-character storage bound; the counter shows
+    X's over-limit state. The count is X's weighted length
+    (`src/shared/postLength.ts`, `twitter-text`);
+  - `AttachmentList({ attachments, onRemove(id), onReorder(from, to), onEditInStudio(id) })`:
+    drag or ↑/↓ to reorder; more than two cards scroll inside the panel;
+  - `UploadZone({ onAdd?, disabledReason?, dragActive?, busy? })`;
   - `ActionRow({ count, limit, canPost, postDisabledReason?, onPost, notice? })`;
   - `ReminderRow({ label, muted?, onClick? })`;
-  - `SettingsSheet`, which holds the Appearance toggles; T3 adds its sections.
+  - sheets, one open at a time: `OnboardingSheet`, `SettingsSheet`
+    (`settings/`), `HistorySheet`, `PublishSheet`.
 
-  The draft is local state in `composer/App.tsx` until T3.
+  In normal mode the draft is persisted (`composer/useDraft.ts`, see "Drafts
+  and media"); preview mode keeps its fixed sample in local state.
 - **Studio** (`studio/`):
   - `StudioTopBar`;
   - `StudioToolbar({ items, active, onSelect })`;
@@ -441,10 +470,17 @@ Prop changes are additive only; siblings build against these.
   composition as DOM (only the media is an image) at any size, using container
   query units. `common/previewComposition.ts` is a placeholder model; T4
   replaces it with the shared composition model.
-- **Honest states.** In normal mode the header reads "Connect X", Post is
-  disabled ("Connect X to post"), the upload zone and the Studio tools are
-  inert with a tooltip, and the reminder row says reminders aren't set up. The
-  sample handle and media exist only in preview mode, labelled "Preview".
+- **Honest states.** In normal mode the header reads "Connect X". Until T9,
+  Post opens the publish-options sheet (Copy text / Export media / Open X); it
+  is disabled with a reason while the draft loads ("Loading your draft…"), when
+  the draft is empty ("Write something or add media first") and over the limit
+  ("Over the 280-character limit"). The Studio tools are inert with a tooltip,
+  and the reminder row says reminders aren't set up. The sample handle and media
+  exist only in preview mode, labelled "Preview", where Post says "Posting is
+  off in preview" and adding media is off.
+- **Studio hand-off.** "Edit in Studio ↗" calls `drafts.openInStudio({ draftId, attachmentId })`;
+  `studio/StudioTarget.tsx` (`useStudioTarget`, `StudioTargetView`) shows that
+  media read-only, with its size in the footer. T4 replaces it with editing.
 
 ### Visual verification
 
@@ -455,6 +491,73 @@ assertion. Its limits:
 - The behind-window blur and the native tint are simulated (blur 24 px,
   saturate 1.3, with and without an approximate dark tint). Only
   `pnpm capture --desktop` on a Mac shows the real material.
+
+## Drafts and media
+
+T3 (XBOT-6F4GAC). Migration `202610212200_drafts_media.sql`.
+
+- **Tables.** `drafts` (one row has `is_current = 1`: the draft the composer
+  edits; the rest are history), `media` (one row per imported file, unique by
+  sha256; `path` / `thumb_path` relative to `userData/media`) and
+  `draft_attachments` (a draft's media in `position` order; `UNIQUE(draft_id,
+  position)`, renumbered through negative values). T4 adds
+  `studio_document_id TEXT REFERENCES studio_documents(id)` with `ALTER TABLE`.
+- **Service.** `services/drafts/service.ts` and `services/media/service.ts` are
+  electron-free (`createDraftsService`, `createMediaService({ db, paths, log,
+  tools, drafts, now })`); Electron decoding lives in `services/media/tools.ts`.
+  Every write is one transaction. Calls that change a draft's structure and
+  media imports run through one serial queue (`services/drafts/queue.ts`),
+  enqueued only at the entry points (IPC handlers, the menu-bar drop).
+- **Autosave.** `composer/useDraft.ts` saves 400 ms after the last keystroke,
+  and at once on blur, hide, `pagehide`, before restore / new / copy /
+  open-in-Studio, and on `drafts:flush-requested` (quit). `data-ready` waits
+  for the draft; the editor is read-only until then. A change made in main
+  (`draft:changed`) reloads the attachments but never overwrites unsaved text
+  of the same draft.
+- **Import.** By content, never extension (`services/media/sniff.ts`): PNG,
+  JPEG, GIF, WebP, MP4, MOV. Sizes come from the headers (EXIF orientation,
+  the `tkhd` rotation); images are capped at 20 MB and 16 384 px a side, video
+  at 1 GB, and an MP4/MOV must have a `moov` box and no box past the end of the
+  file. The file streams into `tmp/` while hashing, then the row is reused by
+  sha256 or the file is renamed into `media/<uuid>.<ext>` (thumbnail
+  `media/thumbs/<uuid>.png`) inside the transaction that attaches it. A
+  rejected file leaves nothing behind and is named in an inline error.
+- **Thumbnails.** QuickLook (`nativeImage.createThumbnailFromPath`, 10 s
+  timeout) on macOS; otherwise `nativeImage` for PNG / JPEG, ffmpeg for video
+  if one is installed, a video tile, or the image itself. T5 refines video.
+- **Ownership and cleanup.** Every table that refers to media must do so with
+  a declared foreign key to `media(id)`; every file at the root of `media/` and
+  in `media/thumbs/` belongs to a media row. Other files go in subfolders. At
+  startup the media service deletes rows that no foreign key references and
+  `<uuid>.<ext>` files no row names, both only when older than 24 h, and logs
+  each deletion.
+- **Export.** `media.exportForDraft` copies a draft's media in order as
+  `01-<name>.<ext>` into a folder the user picks, never overwriting (a
+  `.partial` file, then a link to the first free name), and reports "Export
+  running" through the status registry while it copies.
+
+## Registries
+
+Later tickets add onboarding steps, settings sections and status chips by
+adding their own files; nobody edits a shared list.
+
+- **Onboarding** (`renderer/onboarding/`): each `steps/<id>.tsx` default-exports
+  `{ id, order, title, Component({ next, skip, isLast }) }`, collected with
+  `import.meta.glob`. The sheet shows, in order (`order`, then `id`), the steps
+  whose ids are not in `ui.onboardingSeen`, on the composer's first load, never
+  in preview. Moving past a step marks it seen; Skip, the close button and
+  Escape mark the whole run seen. Welcome is `order: 0`; suggested: Ollama 10,
+  model 20, folders 30, X 40, reminder hours 50.
+- **Settings** (`renderer/settings/`): each `sections/<id>.tsx` default-exports
+  `{ id, order, title, Component }`; the component reads its own state. A
+  section that renders nothing is hidden. Built in: Status (0), Appearance (100).
+- **Status** (`src/main/status.ts`, electron-free): a domain calls
+  `registerStatusProvider({ id, order, get })` once, where `get()` returns an
+  `IntegrationStatus { id, label, tone: 'ok' | 'neutral' | 'warning' | 'busy', detail? }`
+  or null from cached state, and calls `statusChanged()` when it moves. The
+  renderer reads `app.getStatus()` and the `status:changed` event
+  (`status/useIntegrationStatus.ts`); Settings → Status shows the chips, so the
+  default view stays as in the reference.
 
 ## Security rules
 
@@ -497,6 +600,8 @@ assertion. Its limits:
 - **Drag-in:** `File.path` no longer exists. The preload calls
   `webUtils.getPathForFile(file)`, and main validates and copies the file into
   `userData/media` before anything else uses it.
+- **Clipboard:** xBot only writes it (`drafts.copyText`, on a click) and never
+  reads it.
 - **Credentials:** tokens are stored only through Electron `safeStorage`. If
   `safeStorage.isEncryptionAvailable()` is false, refuse to store them and say
   why; never fall back to plaintext.
@@ -518,6 +623,10 @@ assertion. Its limits:
   `pnpm-workspace.yaml`, and `pnpm ignored-builds` must list nothing.
 - pnpm 11 also refuses versions published in the last day
   (`minimumReleaseAge`). Commit whatever `minimumReleaseAgeExclude` entry it adds.
+- `twitter-text` (the counter) is bundled into the composer only. Its
+  `core-js@2` dependency's postinstall only prints a banner, so it is listed
+  as `core-js: false` under `allowBuilds`. Renderer code never imports values
+  from contract files (they pull in zod); types only.
 - **Native modules** must ship N-API prebuilds, or be rebuilt for Electron. Add a
   `files` filter in `electron-builder.yml` so only the target platform's binary
   ships.

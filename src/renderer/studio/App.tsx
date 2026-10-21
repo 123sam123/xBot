@@ -9,6 +9,7 @@ import { PREVIEW_CLIP, PREVIEW_OUTPUT, PREVIEW_SOURCE, PREVIEW_ZOOM } from '../p
 import { StudioFooter, type FitMode } from './StudioFooter';
 import { StudioToolbar, type ToolbarItem } from './StudioToolbar';
 import { StudioTopBar } from './StudioTopBar';
+import { StudioTargetView, useStudioTarget } from './StudioTarget';
 import { Timeline } from './Timeline';
 import { toolPopoverId, ToolPopovers, type ToolId } from './ToolPopovers';
 
@@ -47,6 +48,7 @@ export function App() {
 }
 
 function Studio({ preview }: { preview: boolean }) {
+  const target = useStudioTarget(!preview);
   const anchors = {
     background: useRef<HTMLButtonElement>(null),
     frame: useRef<HTMLButtonElement>(null),
@@ -96,7 +98,7 @@ function Studio({ preview }: { preview: boolean }) {
       <StudioTopBar
         onBack={() => void backToPost()}
         onAdd={() => setNotice('Preview sample: nothing is attached')}
-        addDisabledReason={preview ? undefined : 'Add media first'}
+        addDisabledReason={preview ? undefined : target ? 'Editing arrives with Media Studio editing' : 'Add media first'}
         badge={preview ? 'Preview' : undefined}
         notice={notice && <StatusChip>{notice}</StatusChip>}
       />
@@ -109,6 +111,8 @@ function Studio({ preview }: { preview: boolean }) {
             className="studio-composition"
             testId="studio-composition"
           />
+        ) : target ? (
+          <StudioTargetView target={target} />
         ) : (
           <p className="studio-empty">No media yet</p>
         )}
@@ -118,7 +122,7 @@ function Studio({ preview }: { preview: boolean }) {
           items={tools}
           active={openTool}
           onSelect={(tool) => popovers.toggle(toolPopoverId(tool))}
-          disabledReason="Add media first"
+          disabledReason={target ? 'Editing arrives with Media Studio editing' : 'Add media first'}
         />
       </div>
       {preview && (
@@ -133,7 +137,13 @@ function Studio({ preview }: { preview: boolean }) {
         />
       )}
       <StudioFooter
-        dimensions={preview ? PREVIEW_OUTPUT : null}
+        dimensions={
+          preview
+            ? PREVIEW_OUTPUT
+            : target?.media.width && target.media.height
+              ? { width: target.media.width, height: target.media.height }
+              : null
+        }
         fit={fit}
         zoom={zoom}
         onFit={preview ? setFit : undefined}

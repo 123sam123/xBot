@@ -9,7 +9,8 @@ type Layer = { onEscape: () => void };
 const layers: Layer[] = [];
 
 function onKeyDown(event: KeyboardEvent): void {
-  if (event.key !== 'Escape' || event.defaultPrevented) return;
+  // An Escape that cancels IME composition belongs to the input method.
+  if (event.key !== 'Escape' || event.defaultPrevented || event.isComposing) return;
   const top = layers.at(-1);
   if (!top) return;
   event.preventDefault();

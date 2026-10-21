@@ -1,26 +1,41 @@
 import { useEffect, useRef, useState } from 'react';
+import type { Draft } from '../../shared/contracts/drafts';
+import type { IpcResult } from '../../shared/contracts/ipc';
+import type { ImportResult, MediaItem } from '../../shared/contracts/media';
+import { postLength } from '../../shared/postLength';
 import { CompositionPreview } from '../common/CompositionPreview';
 import { DEFAULT_COMPOSITION, type PreviewComposition } from '../common/previewComposition';
 import { useAppInfo, useReadyMarker } from '../common/useAppInfo';
 import { useEscapeToHide } from '../common/useEscapeToHide';
-import { useSettings } from '../common/useSettings';
-import { Divider, GlassPanel, popovers, StatusChip, useAnyPopoverOpen, useAppearance } from '../design-system';
+import { setSetting, useSettings } from '../common/useSettings';
+import { Divider, GlassPanel, popovers, StatusChip, useAnyPopoverOpen, useAppearance, type MenuItem } from '../design-system';
+import { OnboardingSheet } from '../onboarding/OnboardingSheet';
+import { unseenSteps } from '../onboarding/registry';
 import { PREVIEW_DRAFT_TEXT, PREVIEW_HANDLE, PREVIEW_REMINDER_LABEL, PREVIEW_SOURCE } from '../preview/fixtures';
+import { SettingsSheet } from '../settings/SettingsSheet';
 import type { AccountState } from './AccountMenu';
 import { ActionRow } from './ActionRow';
 import { AttachmentList, type ComposerAttachment } from './AttachmentList';
 import { ComposerHeader } from './ComposerHeader';
+import { HistorySheet } from './HistorySheet';
+import { MediaThumb } from './MediaThumb';
 import { PostEditor } from './PostEditor';
+import { PublishSheet } from './PublishSheet';
 import { ReminderRow } from './ReminderRow';
-import { SettingsSheet } from './SettingsSheet';
 import { UploadZone } from './UploadZone';
+import { useDraft } from './useDraft';
+import { useFileDrop } from './useFileDrop';
 
-// The Write Post composer. The draft lives in local state here; T3
-// (XBOT-6F4GAC) persists it and wires media, T8 the reminder row, T9 the X
-// account and Post.
+// The Write Post composer. In normal mode the draft and its media are
+// persisted (useDraft, window.xbot.drafts / .media); preview mode keeps T2's
+// fixed sample in local state. T8 wires the reminder row, T9 the X account
+// and real posting (until then Post opens the publish-options sheet).
 
-const X_POST_LIMIT = 280;
 const NOTICE_MS = 3200;
+/** The drafts contract's DRAFT_TEXT_MAX (not imported here: contract files bundle zod). */
+const TEXT_MAX = 25_000;
+
+type SheetId = 'onboarding' | 'history' | 'settings' | 'publish';
 
 /** The attachment thumbnail is the same composition, with more room around the frame. */
 const THUMBNAIL_COMPOSITION: PreviewComposition = { ...DEFAULT_COMPOSITION, padding: 0.13 };
@@ -47,18 +62,32 @@ function useFitWindowToContent(ref: React.RefObject<HTMLElement | null>): void {
   }, [ref]);
 }
 
-/**
- * Holds the window open on blur while a popover is up. Main resets the hold
- * whenever the window hides, so every popover closes then too, keeping
- * hold and release paired.
- */
-function useHoldWhilePopoverOpen(): void {
-  const anyOpen = useAnyPopoverOpen();
+function usePageVisible(): boolean {
+  const [visible, setVisible] = useState(() => document.visibilityState === 'visible');
   useEffect(() => {
-    if (!anyOpen) return;
+    const onVisibility = () => setVisible(document.visibilityState === 'visible');
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => document.removeEventListener('visibilitychange', onVisibility);
+  }, []);
+  return visible;
+}
+
+/**
+ * Holds the window open on blur while `active` (a popover, menu or sheet is
+ * open). Main resets every hold when the window hides, so the hold is asked
+ * for again each time the window shows with something still open.
+ */
+function useHoldWhile(active: boolean): void {
+  const visible = usePageVisible();
+  useEffect(() => {
+    if (!active || !visible) return;
     void window.xbot.windows.hold();
     return () => void window.xbot.windows.release();
-  }, [anyOpen]);
+  }, [active, visible]);
+}
+
+/** Popovers close when the window hides; sheets stay (and re-hold on show). */
+function useClosePopoversOnHide(): void {
   useEffect(() => {
     const onVisibility = () => {
       if (document.visibilityState === 'hidden') popovers.closeAll();
@@ -75,38 +104,53 @@ function move<T>(list: readonly T[], from: number, to: number): T[] {
   return next;
 }
 
+/** X's mix rules (T9 enforces them when posting): up to 4 images, or one video or GIF alone. */
+function mixWarning(media: readonly MediaItem[]): string | null {
+  const motion = media.filter((m) => m.kind === 'video' || m.mime === 'image/gif').length;
+  if (motion > 0 && media.length > 1) return 'X takes one video or GIF per post, on its own.';
+  if (media.length > 4) return 'X takes up to 4 images per post.';
+  return null;
+}
+
+const folderName = (path: string) => path.split(/[\\/]/).filter(Boolean).at(-1) ?? path;
+
 export function App() {
   const panel = useRef<HTMLDivElement>(null);
   const { info, ready: infoReady } = useAppInfo();
   const { values: settings, ready: settingsReady } = useSettings();
-  const [settingsOpen, setSettingsOpen] = useState(false);
-  const reduceTransparency = settings?.['ui.reduceTransparency'] ?? false;
-  const increaseContrast = settings?.['ui.increaseContrast'] ?? false;
 
   useEscapeToHide();
   useFitWindowToContent(panel);
-  useAppearance(reduceTransparency, increaseContrast);
-  useHoldWhilePopoverOpen();
-  useReadyMarker(infoReady && settingsReady);
-  useEffect(() => window.xbot.events.on('ui:open-settings', () => setSettingsOpen(true)), []);
+  useAppearance(settings?.['ui.reduceTransparency'] ?? false, settings?.['ui.increaseContrast'] ?? false);
+  useClosePopoversOnHide();
 
   const preview = info?.isPreview ?? false;
   return (
     <GlassPanel ref={panel} className="composer" data-testid="composer-panel">
-      {infoReady && <Composer key={preview ? 'preview' : 'normal'} preview={preview} />}
-      <SettingsSheet
-        open={settingsOpen}
-        onClose={() => setSettingsOpen(false)}
-        reduceTransparency={reduceTransparency}
-        increaseContrast={increaseContrast}
-      />
+      {infoReady && settingsReady && (
+        <Composer
+          key={preview ? 'preview' : 'normal'}
+          preview={preview}
+          emojiPanel={info?.emojiPanel ?? false}
+          seenSteps={settings?.['ui.onboardingSeen'] ?? []}
+        />
+      )}
     </GlassPanel>
   );
 }
 
-function Composer({ preview }: { preview: boolean }) {
-  const [text, setText] = useState(preview ? PREVIEW_DRAFT_TEXT : '');
-  const [attachments, setAttachments] = useState<ComposerAttachment[]>(() =>
+function Composer({ preview, emojiPanel, seenSteps }: { preview: boolean; emojiPanel: boolean; seenSteps: readonly string[] }) {
+  const model = useDraft(!preview);
+  const { draft } = model;
+  const editor = useRef<HTMLTextAreaElement>(null);
+
+  // Onboarding shows its unseen steps once, on the first load, never in preview.
+  const [onboarding] = useState(() => (preview ? [] : unseenSteps(seenSteps)));
+  const [sheet, setSheet] = useState<SheetId | null>(() => (onboarding.length > 0 ? 'onboarding' : null));
+  const seen = useRef<readonly string[]>(seenSteps);
+
+  const [previewText, setPreviewText] = useState(PREVIEW_DRAFT_TEXT);
+  const [previewAttachments, setPreviewAttachments] = useState<ComposerAttachment[]>(() =>
     preview
       ? [
           {
@@ -118,47 +162,217 @@ function Composer({ preview }: { preview: boolean }) {
       : [],
   );
   const [notice, setNotice] = useState<string | null>(null);
+  const [errors, setErrors] = useState<string[]>([]);
+  const [importing, setImporting] = useState(false);
 
+  useHoldWhile(useAnyPopoverOpen() || sheet !== null);
+  useReadyMarker(preview || draft !== null);
+  useEffect(() => window.xbot.events.on('ui:open-settings', () => setSheet('settings')), []);
+  useEffect(() => {
+    if (preview) return;
+    // A drop on the menu-bar icon: main imported it; useDraft reloads the attachments.
+    return window.xbot.events.on('media:imported', ({ rejected }) => setErrors(rejected.map((r) => r.message)));
+  }, [preview]);
+  useEffect(() => {
+    const onVisibility = () => {
+      if (document.visibilityState === 'hidden') setErrors([]);
+    };
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => document.removeEventListener('visibilitychange', onVisibility);
+  }, []);
   useEffect(() => {
     if (!notice) return;
     const timer = window.setTimeout(() => setNotice(null), NOTICE_MS);
     return () => window.clearTimeout(timer);
   }, [notice]);
 
-  // Code points for now; X's weighted counting (URLs, emoji, CJK) comes with T9.
-  const count = [...text].length;
-  const overLimit = count > X_POST_LIMIT;
-  const account: AccountState = preview ? { kind: 'preview', handle: PREVIEW_HANDLE } : { kind: 'disconnected' };
-  const postDisabledReason = !preview
-    ? 'Connect X to post'
-    : overLimit
-      ? `Over the ${X_POST_LIMIT}-character limit`
-      : count === 0
+  const run = async (call: Promise<IpcResult<Draft>>): Promise<boolean> => {
+    const result = await call;
+    if (result.ok) model.apply(result.data);
+    else setErrors([result.error.message]);
+    return result.ok;
+  };
+
+  const importWith = async (call: (draftId: string) => Promise<IpcResult<ImportResult>>) => {
+    if (!draft) return;
+    setErrors([]);
+    setImporting(true);
+    try {
+      const result = await call(draft.id);
+      if (!result.ok) {
+        setErrors([result.error.message]);
+        return;
+      }
+      model.apply(result.data.draft);
+      setErrors(result.data.rejected.map((r) => r.message));
+    } finally {
+      setImporting(false);
+    }
+  };
+  const addFiles = (files: File[]) => void importWith((id) => window.xbot.media.importFiles(id, files));
+  const dragActive = useFileDrop(!preview && draft !== null, addFiles);
+
+  const text = preview ? previewText : model.text;
+  const media = draft?.attachments.map((a) => a.media) ?? [];
+  const attachments: ComposerAttachment[] = preview
+    ? previewAttachments
+    : (draft?.attachments ?? []).map((a, index) => ({
+        id: a.id,
+        label: `attachment ${index + 1}, ${a.media.name}`,
+        thumbnail: <MediaThumb media={a.media} />,
+      }));
+
+  const remove = (id: string) => {
+    if (preview) setPreviewAttachments((list) => list.filter((a) => a.id !== id));
+    else if (draft) void run(window.xbot.drafts.removeAttachment(draft.id, id));
+  };
+  const reorder = (from: number, to: number) => {
+    if (preview) {
+      setPreviewAttachments((list) => move(list, from, to));
+      return;
+    }
+    if (!draft) return;
+    const next = move(draft.attachments, from, to);
+    model.apply({ ...draft, attachments: next }); // at once, so focus can follow the moved card
+    void run(
+      window.xbot.drafts.reorderAttachments(
+        draft.id,
+        next.map((a) => a.id),
+      ),
+    );
+  };
+  const editInStudio = async (id: string) => {
+    if (preview || !draft) {
+      void window.xbot.windows.openStudio();
+      return;
+    }
+    await model.flush();
+    const result = await window.xbot.drafts.openInStudio(draft.id, id);
+    if (!result.ok) setErrors([result.error.message]);
+  };
+
+  const startNew = async () => {
+    await model.flush();
+    if (await run(window.xbot.drafts.startNew())) {
+      setErrors([]);
+      editor.current?.focus();
+    }
+  };
+  const restore = async (id: string) => {
+    await model.flush();
+    if (await run(window.xbot.drafts.restore(id))) {
+      setErrors([]);
+      setSheet(null);
+      editor.current?.focus();
+    }
+  };
+  const copyText = async (): Promise<string | null> => {
+    if (!draft) return 'Your draft hasn’t loaded yet.';
+    if (!(await model.flush())) return 'Your latest text isn’t saved yet. Try again.';
+    const result = await window.xbot.drafts.copyText(draft.id);
+    return result.ok ? null : result.error.message;
+  };
+  const exportMedia = async () => {
+    if (!draft) return null;
+    const result = await window.xbot.media.exportForDraft(draft.id);
+    if (!result.ok) return { tone: 'warning' as const, text: result.error.message };
+    if (!result.data) return null;
+    const { count, folder } = result.data;
+    return { tone: 'neutral' as const, text: `Exported ${count === 1 ? '1 file' : `${count} files`} to ${folderName(folder)}` };
+  };
+  const markSeen = (ids: readonly string[]) => {
+    seen.current = [...new Set([...seen.current, ...ids])].slice(-200);
+    setSetting('ui.onboardingSeen', [...seen.current]);
+  };
+
+  const { weightedLength, overLimit, limit } = postLength(text);
+  const hasContent = text.trim() !== '' || attachments.length > 0;
+  const postDisabledReason = preview
+    ? overLimit
+      ? `Over the ${limit}-character limit`
+      : weightedLength === 0
         ? 'Write something first'
-        : undefined;
+        : undefined
+    : !draft
+      ? 'Loading your draft…'
+      : !hasContent
+        ? 'Write something or add media first'
+        : overLimit
+          ? `Over the ${limit}-character limit`
+          : undefined;
+
+  const account: AccountState = preview ? { kind: 'preview', handle: PREVIEW_HANDLE } : { kind: 'disconnected' };
+  const unavailableInPreview = preview ? 'Not available in preview' : undefined;
+  const menuItems: MenuItem[] = [
+    { id: 'new-draft', label: 'New draft', detail: unavailableInPreview, disabled: preview || !draft, onSelect: () => void startNew() },
+    { id: 'history', label: 'Draft history…', detail: unavailableInPreview, disabled: preview, onSelect: () => setSheet('history') },
+    { id: 'settings', label: 'Settings…', onSelect: () => setSheet('settings') },
+  ];
+  const warning = preview ? null : mixWarning(media);
 
   return (
     <>
-      <ComposerHeader account={account} />
+      <ComposerHeader account={account} menuItems={menuItems} />
       <h1 className="composer-title">Write Post</h1>
-      <PostEditor value={text} onChange={setText} autoFocus />
-      <AttachmentList
-        attachments={attachments}
-        onRemove={(id) => setAttachments((list) => list.filter((a) => a.id !== id))}
-        onReorder={(from, to) => setAttachments((list) => move(list, from, to))}
-        onEditInStudio={() => void window.xbot.windows.openStudio()}
+      <PostEditor
+        value={text}
+        onChange={preview ? setPreviewText : model.setText}
+        autoFocus
+        readOnly={!preview && !draft}
+        maxLength={TEXT_MAX}
+        saveState={preview ? undefined : model.saveState}
+        onEmoji={emojiPanel ? () => void window.xbot.windows.showEmojiPanel() : undefined}
+        editorRef={editor}
       />
-      <UploadZone disabledReason="Adding media isn’t available yet" />
+      <AttachmentList attachments={attachments} onRemove={remove} onReorder={reorder} onEditInStudio={(id) => void editInStudio(id)} />
+      {warning && (
+        <div className="composer-warning">
+          <StatusChip tone="warning">{warning}</StatusChip>
+        </div>
+      )}
+      <UploadZone
+        onAdd={preview || !draft ? undefined : () => void importWith((id) => window.xbot.media.pick(id))}
+        disabledReason={preview ? 'Adding media is off in preview' : 'Loading your draft…'}
+        dragActive={dragActive}
+        busy={importing}
+      />
+      {errors.length > 0 && (
+        <div className="composer-errors" role="alert" data-testid="import-errors">
+          {errors.map((message, index) => (
+            <p key={index}>{message}</p>
+          ))}
+        </div>
+      )}
       <ActionRow
-        count={count}
-        limit={X_POST_LIMIT}
+        count={weightedLength}
+        limit={limit}
         canPost={postDisabledReason === undefined}
         postDisabledReason={postDisabledReason}
-        onPost={() => setNotice('Posting is off in preview')}
+        onPost={preview ? () => setNotice('Posting is off in preview') : () => setSheet('publish')}
         notice={notice && <StatusChip>{notice}</StatusChip>}
       />
       <Divider className="composer-divider" />
       <ReminderRow label={preview ? PREVIEW_REMINDER_LABEL : 'Reminders aren’t set up yet'} muted={!preview} />
+
+      <OnboardingSheet
+        open={sheet === 'onboarding'}
+        steps={onboarding}
+        onSeen={markSeen}
+        onDone={() => {
+          setSheet(null);
+          editor.current?.focus();
+        }}
+      />
+      <SettingsSheet open={sheet === 'settings'} onClose={() => setSheet(null)} />
+      <HistorySheet open={sheet === 'history'} onClose={() => setSheet(null)} onRestore={(id) => void restore(id)} />
+      <PublishSheet
+        open={sheet === 'publish'}
+        onClose={() => setSheet(null)}
+        hasText={text.trim() !== ''}
+        mediaCount={attachments.length}
+        onCopy={copyText}
+        onExport={exportMedia}
+      />
     </>
   );
 }

@@ -85,6 +85,15 @@ body,
   inset: 0;
 }
 
+/* The media "Edit in Studio ↗" opened, shown as-is until T4's editing. */
+.studio-target {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
 .studio-empty {
   position: absolute;
   inset: 0;

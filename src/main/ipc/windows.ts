@@ -1,4 +1,4 @@
-import { BrowserWindow } from 'electron';
+import { app, BrowserWindow } from 'electron';
 import { z } from 'zod';
 import { windowsChannels } from '../../shared/contracts/windows.channels';
 import { resizeComposerSchema } from '../../shared/contracts/windows';
@@ -30,6 +30,14 @@ export function registerWindowsIpc(): void {
   });
   handle(windowsChannels.openStudio, z.undefined(), () => {
     openStudio();
+    return null;
+  });
+  handle(windowsChannels.showEmojiPanel, z.undefined(), () => {
+    if (!app.isEmojiPanelSupported()) return null;
+    // The composer is a non-activating panel: activate xBot so the picker
+    // types into its focused editor, not into the previously active app.
+    app.focus({ steal: true });
+    app.showEmojiPanel();
     return null;
   });
 }

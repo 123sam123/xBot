@@ -47,6 +47,8 @@ test('the tray toggle shows a 420 px composer that hides on Escape', async () =>
   await expect.poll(async () => (await composerState())?.visible).toBe(true);
   expect((await composerState())?.bounds.width).toBe(420);
 
+  // A fresh userData shows the one-time Welcome sheet; Escape would close the sheet first.
+  await page.getByTestId('onboarding-sheet').getByRole('button', { name: 'Skip' }).click();
   await page.keyboard.press('Escape');
   await expect.poll(async () => (await composerState())?.visible).toBe(false);
 });

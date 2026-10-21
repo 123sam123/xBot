@@ -3,18 +3,22 @@ import { bundledMigrations, openDatabase, type Db } from './db';
 import { migrate } from './db/migrate';
 import { appEvents, forwardEventsToRenderers } from './events';
 import { registerIpc } from './ipc';
+import { requestDraftFlush } from './ipc/drafts';
 import { log } from './log';
 import { installAppMenu } from './menu';
 import type { AppPaths } from './paths';
 import { handleMediaProtocol } from './protocols/media';
 import { installSecurityHandlers } from './security';
 import { disposeServices, initServices } from './services';
+import { onStatusChanged } from './status';
 import { createTray } from './tray';
 import { applyAppearance, markQuitting } from './windows/common';
 import { createComposerWindow, toggleComposer } from './windows/composer';
 import { createStudioWindow, openStudio } from './windows/studio';
 
 let db: Db | null = null;
+/** How long quitting waits for the composer to save typed text. */
+const QUIT_FLUSH_MS = 1000;
 
 function openAndMigrate(paths: AppPaths): Db | null {
   let opened: Db | null = null;
@@ -49,6 +53,7 @@ export async function startApp(paths: AppPaths): Promise<void> {
   handleMediaProtocol(paths.media);
   registerIpc();
   forwardEventsToRenderers();
+  onStatusChanged((statuses) => appEvents.emit('status:changed', { statuses }));
 
   applyAppearance();
   createComposerWindow();
@@ -58,11 +63,24 @@ export async function startApp(paths: AppPaths): Promise<void> {
 
   app.on('second-instance', () => toggleComposer());
   app.on('activate', () => toggleComposer());
-  app.on('before-quit', () => markQuitting());
+  // The first quit waits (at most QUIT_FLUSH_MS) for the composer to save text
+  // still inside its autosave debounce, then quits for real.
+  let flushedForQuit = false;
+  app.on('before-quit', (event) => {
+    if (!flushedForQuit) {
+      flushedForQuit = true;
+      event.preventDefault();
+      void requestDraftFlush(QUIT_FLUSH_MS).finally(() => app.quit());
+      return;
+    }
+    markQuitting();
+  });
   app.on('will-quit', () => {
-    void disposeServices();
-    db?.close();
-    db = null;
+    // Services first (an import may still be finishing), then the database.
+    void disposeServices().finally(() => {
+      db?.close();
+      db = null;
+    });
   });
   // A menu-bar app keeps running with no windows.
   app.on('window-all-closed', () => {});
