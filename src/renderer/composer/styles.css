@@ -1,0 +1,74 @@
+.composer {
+  margin: 0;
+  padding: 28px 32px 24px;
+  border-radius: 28px;
+  background: rgb(28 32 44 / 0.55);
+  border: 1px solid rgb(255 255 255 / 0.25);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.composer-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 18px;
+  font-weight: 500;
+}
+
+.composer-logo {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.composer-account {
+  margin-left: auto;
+  font-size: 14px;
+  color: rgb(255 255 255 / 0.7);
+}
+
+.composer h1 {
+  margin: 0;
+  font-size: 26px;
+  font-weight: 650;
+}
+
+.composer-editor {
+  font: inherit;
+  font-size: 18px;
+  line-height: 1.3;
+  color: #fff;
+  caret-color: #fff;
+  resize: none;
+  padding: 16px;
+  border-radius: 18px;
+  border: 1px solid rgb(255 255 255 / 0.25);
+  background: rgb(255 255 255 / 0.08);
+  user-select: text;
+}
+
+.composer-editor:focus {
+  outline: 2px solid rgb(255 255 255 / 0.5);
+  outline-offset: 1px;
+}
+
+.composer-note {
+  margin: 0;
+  font-size: 14px;
+  color: rgb(255 255 255 / 0.75);
+}
+
+.composer-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.composer-meta {
+  font-size: 13px;
+  color: rgb(255 255 255 / 0.6);
+}

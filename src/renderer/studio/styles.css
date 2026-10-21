@@ -1,0 +1,48 @@
+html,
+body,
+#root {
+  height: 100%;
+}
+
+.studio {
+  height: 100%;
+  padding: 20px 32px 28px;
+  border-radius: 28px;
+  background: rgb(28 32 44 / 0.55);
+  border: 1px solid rgb(255 255 255 / 0.25);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* Frameless window: the top bar drags it; its buttons stay clickable. */
+.studio-bar {
+  -webkit-app-region: drag;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+}
+
+.studio-bar button {
+  -webkit-app-region: no-drag;
+  justify-self: start;
+}
+
+.studio-bar button.primary {
+  justify-self: end;
+}
+
+.studio-bar h1 {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 600;
+}
+
+.studio-canvas {
+  flex: 1;
+  display: grid;
+  place-items: center;
+  border-radius: 14px;
+  border: 1px dashed rgb(255 255 255 / 0.4);
+  color: rgb(255 255 255 / 0.7);
+}

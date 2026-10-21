@@ -1,0 +1,50 @@
+{
+  "name": "xbot",
+  "productName": "xBot",
+  "version": "0.1.0",
+  "description": "A macOS menu-bar app that turns the small tools we build every day into authentic X posts.",
+  "private": true,
+  "main": "out/main/index.js",
+  "author": "xBot",
+  "license": "UNLICENSED",
+  "packageManager": "pnpm@11.28.6",
+  "engines": {
+    "node": ">=22.12"
+  },
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "test": "vitest run",
+    "test:e2e": "electron-vite build && playwright test",
+    "typecheck": "tsc --noEmit --composite false -p tsconfig.node.json && tsc --noEmit --composite false -p tsconfig.web.json",
+    "lint": "eslint .",
+    "package": "electron-vite build && electron-builder --publish never",
+    "icons": "node scripts/render-icons.mjs"
+  },
+  "dependencies": {
+    "better-sqlite3": "^13.0.3"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@playwright/test": "^1.64.1",
+    "@resvg/resvg-js": "^2.6.2",
+    "@types/better-sqlite3": "^9.6.0",
+    "@types/node": "^24.19.2",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.1.2",
+    "electron": "45.0.0",
+    "electron-builder": "26.15.3",
+    "electron-vite": "^6.0.0",
+    "eslint": "^10.13.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "globals": "^17.13.0",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "typescript": "6.0.3",
+    "typescript-eslint": "^8.72.0",
+    "vite": "^8.3.4",
+    "vitest": "^5.0.5",
+    "zod": "^4.6.7"
+  }
+}
