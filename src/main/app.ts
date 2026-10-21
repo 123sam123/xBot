@@ -10,7 +10,7 @@ import { handleMediaProtocol } from './protocols/media';
 import { installSecurityHandlers } from './security';
 import { disposeServices, initServices } from './services';
 import { createTray } from './tray';
-import { markQuitting } from './windows/common';
+import { applyAppearance, markQuitting } from './windows/common';
 import { createComposerWindow, toggleComposer } from './windows/composer';
 import { createStudioWindow, openStudio } from './windows/studio';
 
@@ -50,6 +50,7 @@ export async function startApp(paths: AppPaths): Promise<void> {
   registerIpc();
   forwardEventsToRenderers();
 
+  applyAppearance();
   createComposerWindow();
   createStudioWindow();
   createTray();

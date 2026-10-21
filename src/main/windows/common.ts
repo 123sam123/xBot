@@ -1,5 +1,6 @@
 import { join } from 'node:path';
-import { app, type BrowserWindow, type BrowserWindowConstructorOptions } from 'electron';
+import { app, nativeTheme, type BrowserWindow, type BrowserWindowConstructorOptions } from 'electron';
+import type { RendererMaterial } from '../../shared/contracts/windows';
 import { log } from '../log';
 
 // Shared window plumbing: secure webPreferences, the page loader, the native
@@ -28,8 +29,11 @@ export function secureWebPreferences(): BrowserWindowConstructorOptions['webPref
 }
 
 export function loadPage(win: BrowserWindow, page: Page): Promise<void> {
+  const query = { material: rendererMaterial() };
   const dev = devServerUrl();
-  return dev ? win.loadURL(`${dev}/${page}/index.html`) : win.loadFile(join(rendererDir(), page, 'index.html'));
+  return dev
+    ? win.loadURL(`${dev}/${page}/index.html?${new URLSearchParams(query)}`)
+    : win.loadFile(join(rendererDir(), page, 'index.html'), { query });
 }
 
 const VIBRANCY = ['popover', 'hud', 'under-window', 'fullscreen-ui'] as const;
@@ -48,6 +52,27 @@ export function materialOptions(): BrowserWindowConstructorOptions {
   if (requested === 'none') return transparent;
   const vibrancy: Vibrancy = (VIBRANCY as readonly string[]).includes(requested) ? (requested as Vibrancy) : 'under-window';
   return { vibrancy, visualEffectState: 'active', backgroundColor: '#00000000', roundedCorners: true };
+}
+
+/**
+ * What the page draws over. Unpackaged runs may force it with
+ * `XBOT_MATERIAL=vibrancy|css`, so captures on Linux can render the macOS
+ * layers on a transparent window.
+ */
+export function rendererMaterial(): RendererMaterial {
+  const forced = process.env.XBOT_MATERIAL;
+  if (!app.isPackaged && (forced === 'vibrancy' || forced === 'css')) return forced;
+  return 'vibrancy' in materialOptions() ? 'vibrancy' : 'css';
+}
+
+/**
+ * App appearance, read at startup: `XBOT_APPEARANCE` = dark | system (default
+ * dark). xBot's text is white, and the light under-window material behind it
+ * is the rejected milky-silver look. `themeSource` is app-wide, so native
+ * menus and dialogs follow it too.
+ */
+export function applyAppearance(): void {
+  nativeTheme.themeSource = process.env.XBOT_APPEARANCE === 'system' ? 'system' : 'dark';
 }
 
 const knownIds = new Set<number>();

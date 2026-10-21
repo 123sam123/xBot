@@ -38,10 +38,17 @@ src/
   preload/                   index.ts (window.xbot), invoke.ts, api/<domain>.ts
   shared/contracts/          <domain>.ts, <domain>.channels.ts, ipc.ts, define.ts,
                              bridge.ts, events.ts, settings.ts (aggregators)
-  renderer/                  composer/, studio/ (one Vite page each), common/
+  renderer/
+    design-system/           tokens, glass material, shared components (see "Design system")
+    common/                  base.css, CompositionPreview, hooks shared by both pages
+    preview/                 preview mode's fixed sample content
+    composer/, studio/       one Vite page each
 resources/                   tray.svg → trayTemplate.png / @2x (pnpm icons)
+  fixtures/                  preview mode's sample media (pnpm fixtures)
+scripts/                     capture-ui.ts (pnpm capture), render-fixtures.ts, capture-stage.cjs,
+                             fixtures/*.html (the fixtures' sources), render-icons.mjs
 tests/unit/  tests/e2e/
-docs/
+docs/                        SPEC.md, ARCHITECTURE.md, reference/ (+ captures/)
 ```
 
 ## Process boundaries
@@ -85,7 +92,7 @@ imported by every aggregator, so **a sibling ticket edits only its own files**:
 | `projects` | T7 (XBOT-5UVE6R) |
 | `reminders` (+ launch at login, global shortcut) | T8 (XBOT-8V5WV5) |
 | `x` | T9 (XBOT-OE2XV9) |
-| `backup` (+ README, preview mode fixtures, packaging) | T10 (XBOT-1DDYA1) |
+| `backup` (+ README, preview mode fixtures, packaging) | T10 (XBOT-1DDYA1). T2 created `src/renderer/preview/` and `resources/fixtures/`; T10 extends them. |
 
 Shared files that several tickets may still touch, so coordinate:
 - `package.json` / `pnpm-lock.yaml`, for new dependencies (see below);
@@ -217,7 +224,7 @@ Defined by `src/main/index.ts` and `src/main/app.ts`:
    5. `protocol.handle`;
    6. `registerIpc()`;
    7. forward events to the renderers;
-   8. create both windows, hidden;
+   8. `applyAppearance()` (`XBOT_APPEARANCE`), then create both windows, hidden;
    9. create the tray and the app menu;
    10. attach the lifecycle handlers;
    11. log `xBot ready`.
@@ -326,8 +333,128 @@ on macOS yet**: T1 was built on a Linux machine.
   match.
 - **Rejected:** NSGlassEffectView exists only on macOS 26, and the human's Mac
   runs 15.5. `electron-liquid-glass` relies on private API.
-- Reduced transparency and the adaptive scrim belong to T2. The
-  `ui.reduceTransparency` setting key already exists.
+- **T2's outcome** (still not observed on macOS: T2 also ran on Linux):
+  - The default stays `under-window`. Each page is told what it draws over through
+    `?material=vibrancy|css` (`rendererMaterial()` in `windows/common.ts`, used
+    by `loadPage`). Over `vibrancy` the page adds only translucent, neutral
+    layers; over `css` it paints its own neutral graphite base.
+    `XBOT_MATERIAL=vibrancy|css` overrides what the page is told, in unpackaged
+    runs only: `pnpm capture` uses it to draw the macOS layers on Linux's
+    transparent window.
+  - `XBOT_APPEARANCE=dark|system` (default `dark`) sets `nativeTheme.themeSource`
+    at startup. xBot's text is white, and the light `under-window` material
+    under it is the rejected milky-silver look. `themeSource` is app-wide, so
+    the tray menu and native dialogs (T3's file pickers) are dark too.
+  - Corners: under vibrancy the CSS window radius is the system radius
+    (`--radius-window-native`, 10 px; tune it from a Mac capture), so the
+    rim follows the native silhouette instead of drawing a 40 px curve inside a
+    10 px one. The CSS path keeps 40 px. The `maskImage` addon is the follow-up
+    if Mac captures show the system radius is too far from the reference; it
+    was not built because it could not be compiled or observed here.
+  - Run `pnpm capture --desktop` on a Mac for real captures over four
+    wallpapers, per material (`XBOT_CAPTURE_MATERIALS`, default
+    `under-window,hud,none`). It needs Screen Recording permission for the
+    terminal.
+
+## Design system
+
+T2 (XBOT-6AU4BQ) built it. It is the only source of look-and-feel. Build new
+UI from these pieces instead of adding page-local styles that restate them.
+
+### Material and modes
+
+- `design-system/tokens.css` holds every colour, radius, type size, scrim and
+  shadow. `glass.css` holds the material:
+  - `.glass-panel`, the window shell: neutral tint, scrim, refractive
+    highlights, an inner bevel and a 1 px gradient specular rim drawn with
+    `mask-composite`;
+  - `.glass-card`, lighter inner glass for text-bearing cards;
+  - `.glass-float`, popovers and the Studio toolbar.
+- Modes are attributes on `<html>`; either source turns a mode on:
+
+  | Attribute | Set by | Also on with |
+  |---|---|---|
+  | `data-material="vibrancy"\|"css"` | `applyMaterialFromLocation()`, before the first render | — |
+  | `data-reduce-transparency="on"` | `useAppearance`, from `ui.reduceTransparency` | `prefers-reduced-transparency: reduce` |
+  | `data-contrast="more"` | `useAppearance`, from `ui.increaseContrast` | `prefers-contrast: more` |
+
+  Settings arrive through the forwarded `settings:changed` event and media
+  queries update live, so both switch without a reload. Reduced transparency
+  is opaque graphite (`#2b2d31`), never navy.
+- **Scrim.** "Adaptive" means it follows the material, the settings and the OS
+  preferences. The renderer cannot sample the wallpaper. Defaults keep editor
+  text at 3:1 or better over a light wallpaper under an approximate dark
+  native tint; Increase contrast keeps it at 4.5:1 or better with no tint at
+  all. `pnpm capture` gates both.
+- `backdrop-filter` only blurs in-window content (popovers and the toolbar
+  over the canvas). It never applies to text, icons or media.
+- Each page's root sets `<html data-ready>` once app info and settings have
+  loaded. Captures and tests wait for it.
+
+### Components (`design-system/index.ts`)
+
+Prop changes are additive only; siblings build against these.
+
+- `GlassPanel`, `GlassCard`, `Divider({ vertical? })`, `StatusChip({ tone? })`.
+- `FrostedButton`, `GhostButton` and `IconButton({ label, size?, bare? })`.
+  `disabled` renders `aria-disabled` and stays focusable, so a `Tooltip` can say
+  why. Wrap a disabled control in `Tooltip({ label })`; the label is also its
+  accessible description.
+- `Popover({ id, anchor, placement?, offset?, crossOffset?, label, role?, testId? })`
+  and `Menu({ id, anchor, label, items: { id, label, detail?, disabled?, checked?, onSelect? }[] })`:
+  - they render into `document.body` with `position: fixed`, so opening one
+    never moves the page (the Studio canvas keeps its rect);
+  - one per window is open at a time (`popovers`, a React-free store; open
+    with `popovers.open(id)`, `.toggle(id)`, `.closeAll()`);
+  - placement is clamped 8 px inside the window and redone on resize;
+  - Escape and an outside click close them, and focus returns to the anchor.
+- `Sheet({ open, title, onClose })` covers its positioned parent (the panel)
+  without changing the window size.
+- Escape goes through `useEscapeLayer(active, onEscape)`: the top-most layer
+  closes first and the event is marked handled, so `useEscapeToHide` only
+  hides the window when nothing is open.
+- `Slider` (`<input type="range">`), `SwatchGroup`, `Segmented` (radiogroups),
+  `Toggle` (`role="switch"`), and the inline SVG icons in `icons.tsx`.
+- The composer holds its window (`windows.hold()`) while any popover is open,
+  and closes every popover when it hides (main resets the hold then).
+
+### Surfaces and their props
+
+- **Composer** (`composer/`):
+  - `ComposerHeader` and `AccountMenu({ account: { kind: 'disconnected' } | { kind: 'connected' | 'preview', handle } })`;
+  - `PostEditor({ value, onChange })`, with no `maxLength`; the counter shows the
+    over-limit state. The count is code points until T9 adds X's weighting;
+  - `AttachmentList({ attachments, onRemove(id), onReorder(from, to), onEditInStudio(id) })`;
+  - `UploadZone({ onAdd?, disabledReason? })`;
+  - `ActionRow({ count, limit, canPost, postDisabledReason?, onPost, notice? })`;
+  - `ReminderRow({ label, muted?, onClick? })`;
+  - `SettingsSheet`, which holds the Appearance toggles; T3 adds its sections.
+
+  The draft is local state in `composer/App.tsx` until T3.
+- **Studio** (`studio/`):
+  - `StudioTopBar`;
+  - `StudioToolbar({ items, active, onSelect })`;
+  - `ToolPopovers` (Background, Frame, Padding, Shadow, Crop);
+  - `Timeline({ duration, current, trim, frames, playing, onTogglePlay })`;
+  - `StudioFooter({ dimensions, fit, zoom, onFit?, onZoom? })`.
+- `common/CompositionPreview({ composition, source, zoom? })` draws a
+  composition as DOM (only the media is an image) at any size, using container
+  query units. `common/previewComposition.ts` is a placeholder model; T4
+  replaces it with the shared composition model.
+- **Honest states.** In normal mode the header reads "Connect X", Post is
+  disabled ("Connect X to post"), the upload zone and the Studio tools are
+  inert with a tooltip, and the reminder row says reminders aren't set up. The
+  sample handle and media exist only in preview mode, labelled "Preview".
+
+### Visual verification
+
+`pnpm capture` writes to `test-results/captures/` and copies the comparisons
+the PR carries to `docs/reference/captures/`. It exits non-zero on any failed
+assertion. Its limits:
+- Linux captures use Inter, so text runs a little wider than SF Pro.
+- The behind-window blur and the native tint are simulated (blur 24 px,
+  saturate 1.3, with and without an approximate dark tint). Only
+  `pnpm capture --desktop` on a Mac shows the real material.
 
 ## Security rules
 
@@ -403,10 +530,12 @@ on macOS yet**: T1 was built on a Linux machine.
 | `pnpm build` | builds `out/main`, `out/preload` and `out/renderer` |
 | `pnpm test` | Vitest unit tests (`tests/unit/**/*.test.ts`, Node environment) |
 | `pnpm test:e2e` | builds, then runs the Playwright `_electron` smoke test (`tests/e2e`) |
-| `pnpm typecheck` | `tsc` for `tsconfig.node.json` (main, preload, shared, tests) and `tsconfig.web.json` (renderer, shared) |
+| `pnpm typecheck` | `tsc` for `tsconfig.node.json` (main, preload, shared, tests), `tsconfig.web.json` (renderer, shared) and `tsconfig.scripts.json` (`scripts/**/*.ts`, with the DOM lib for `page.evaluate` bodies) |
 | `pnpm lint` | ESLint, including the process-boundary rules |
 | `pnpm package` | build plus electron-builder: `dist/*.dmg` and `dist/*.zip` on macOS, `dist/*.zip` on Linux |
 | `pnpm icons` | re-renders the tray PNGs from `resources/tray.svg` |
+| `pnpm fixtures` | re-renders `resources/fixtures/*.png` from `scripts/fixtures/*.html` |
+| `pnpm capture` | builds, then captures both surfaces and compares them with the reference (see "Design system → Visual verification") |
 
 - Modules that unit tests import must not import `electron`. Put the logic in a
   pure module, as `position.ts`, `ipc/core.ts` and `db/` do, and pass in the

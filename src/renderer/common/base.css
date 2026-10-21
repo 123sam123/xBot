@@ -1,8 +1,14 @@
-/* Placeholder base styles. T2 (XBOT-6AU4BQ) replaces these with the design system. */
+/* Loaded once per page: the design system's tokens, material and components. */
+@import '../design-system/tokens.css';
+@import '../design-system/glass.css';
+@import '../design-system/components.css';
+
 :root {
   color-scheme: dark;
-  font-family: system-ui, -apple-system, 'SF Pro Text', sans-serif;
-  color: #fff;
+  font-family: var(--font-ui);
+  color: var(--text-primary);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
 
 html,
@@ -18,24 +24,9 @@ body {
   box-sizing: border-box;
 }
 
-button {
-  font: inherit;
-  color: inherit;
-  border: 1px solid rgb(255 255 255 / 0.3);
-  background: rgb(255 255 255 / 0.12);
-  border-radius: 999px;
-  padding: 8px 16px;
-  cursor: pointer;
-}
-
-button.primary {
-  background: rgb(255 255 255 / 0.92);
-  color: #0d1b3a;
-  border-color: transparent;
-  font-weight: 600;
-}
-
-button:disabled {
-  opacity: 0.5;
-  cursor: default;
+h1,
+h2,
+h3,
+p {
+  margin: 0;
 }

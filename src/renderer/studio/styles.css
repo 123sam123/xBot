@@ -1,3 +1,5 @@
+/* Media Studio. 790×635 by default, resizable down to 720×560. */
+
 html,
 body,
 #root {
@@ -5,44 +7,349 @@ body,
 }
 
 .studio {
-  height: 100%;
-  padding: 20px 32px 28px;
-  border-radius: 28px;
-  background: rgb(28 32 44 / 0.55);
-  border: 1px solid rgb(255 255 255 / 0.25);
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  height: 100%;
+  overflow: hidden;
 }
 
-/* Frameless window: the top bar drags it; its buttons stay clickable. */
+/* ---------- Top bar (drags the frameless window; .btn opts out) ---------- */
+
 .studio-bar {
   -webkit-app-region: drag;
+  flex: none;
   display: grid;
   grid-template-columns: 1fr auto 1fr;
   align-items: center;
+  height: 88px;
+  padding: 10px 28px 0 24px;
 }
 
-.studio-bar button {
-  -webkit-app-region: no-drag;
+.studio-back {
   justify-self: start;
+  gap: 12px;
+  font-size: 16.5px;
 }
 
-.studio-bar button.primary {
+.studio-title {
+  position: relative;
+  font-size: var(--fs-title);
+  font-weight: var(--fw-semibold);
+  letter-spacing: -0.01em;
+}
+
+.studio-badge {
+  position: absolute;
+  left: calc(100% + 10px);
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.studio-bar-end {
   justify-self: end;
+  display: flex;
+  align-items: center;
+  gap: 10px;
 }
 
-.studio-bar h1 {
-  margin: 0;
-  font-size: 22px;
-  font-weight: 600;
+.studio-add {
+  min-width: 116px;
+  padding: 0 18px;
 }
+
+/* ---------- Canvas ---------- */
 
 .studio-canvas {
+  position: relative;
   flex: 1;
+  min-height: 0;
+  margin: 0 39px;
+  overflow: hidden;
+  border-radius: var(--radius-canvas);
+  background: rgb(255 255 255 / 0.06);
+}
+
+.studio-canvas::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  box-shadow:
+    inset 0 0 0 1px rgb(255 255 255 / 0.28),
+    inset 0 1px 8px rgb(255 255 255 / 0.18);
+  pointer-events: none;
+}
+
+.studio-composition {
+  position: absolute;
+  inset: 0;
+}
+
+.studio-empty {
+  position: absolute;
+  inset: 0;
   display: grid;
   place-items: center;
-  border-radius: 14px;
-  border: 1px dashed rgb(255 255 255 / 0.4);
-  color: rgb(255 255 255 / 0.7);
+  color: var(--text-tertiary);
+  font-size: var(--fs-md);
+}
+
+/* ---------- Floating toolbar: overlaps the canvas bottom by 9 px ---------- */
+
+.studio-toolbar-row {
+  position: relative;
+  flex: none;
+  height: 63px;
+}
+
+.studio-toolbar {
+  position: absolute;
+  left: 50%;
+  top: -9px;
+  display: flex;
+  align-items: center;
+  width: 583px;
+  height: 72px;
+  padding: 0 7px;
+  border-radius: 36px;
+  transform: translateX(-50%);
+}
+
+.tool-slot {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  height: 100%;
+}
+
+.tool-slot .tooltip-anchor {
+  flex: 1;
+}
+
+.tool-divider {
+  flex: none;
+  width: 1px;
+  height: 30px;
+  background: var(--divider);
+}
+
+.tool {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 59px;
+  margin: 0 3px;
+  padding: 0;
+  border: 0;
+  border-radius: 22px;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-shadow: inherit;
+}
+
+.tool:not([aria-disabled='true']):hover {
+  background: rgb(255 255 255 / 0.1);
+}
+
+.tool:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.tool[aria-disabled='true'] {
+  opacity: 0.45;
+}
+
+.tool-active,
+.tool-active:not([aria-disabled='true']):hover {
+  background: var(--glass-active-fill);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.28),
+    inset 0 0 0 0.5px rgb(255 255 255 / 0.22);
+}
+
+.tool-label {
+  font-size: var(--fs-xs);
+}
+
+/* ---------- Tool popovers ---------- */
+
+.tool-popover {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 196px;
+  padding: 13px 18px 13px 19px;
+}
+
+.tool-popover .slider {
+  min-width: 0;
+}
+
+.tool-popover-background .swatches {
+  gap: 6px;
+}
+
+.tool-popover-title {
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-medium);
+  line-height: 20px;
+}
+
+.tool-popover-adornment {
+  flex: none;
+  color: rgb(255 255 255 / 0.9);
+}
+
+/* ---------- Timeline ---------- */
+
+.timeline {
+  flex: none;
+  display: flex;
+  align-items: center;
+  height: 65px;
+  margin: 11px 24px 0;
+  padding: 0 8px 0 20px;
+}
+
+.timeline-time {
+  flex: none;
+  width: 92px;
+  margin-left: 14px;
+  font-size: 13.5px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.timeline-strip {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  height: 37px;
+  margin-left: 12px;
+}
+
+/* Frames outside the trim range fade, letting the glass show through (no tint of our own). */
+.timeline-frames {
+  display: flex;
+  gap: 2px;
+  height: 100%;
+  overflow: hidden;
+  border-radius: 8px;
+  mask-image: linear-gradient(
+    to right,
+    rgb(0 0 0 / 0.42) var(--trim-start),
+    #000 var(--trim-start),
+    #000 var(--trim-end),
+    rgb(0 0 0 / 0.42) var(--trim-end)
+  );
+}
+
+.timeline-frames img {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 2px;
+}
+
+.timeline-trim {
+  position: absolute;
+  top: -5px;
+  bottom: -5px;
+  border: 3px solid #fff;
+  border-radius: 10px;
+  box-shadow:
+    0 0 0 0.5px rgb(0 0 0 / 0.18),
+    0 2px 8px rgb(0 0 0 / 0.22);
+}
+
+.trim-handle {
+  position: absolute;
+  top: 50%;
+  width: 4px;
+  height: 15px;
+  border-radius: 2px;
+  background: rgb(255 255 255 / 0.95);
+  box-shadow: 0 0 0 0.5px rgb(0 0 0 / 0.25);
+  transform: translateY(-50%);
+}
+
+.trim-handle-start {
+  left: 3px;
+}
+
+.trim-handle-end {
+  right: 3px;
+}
+
+.timeline-playhead {
+  position: absolute;
+  top: -10px;
+  bottom: -10px;
+  width: 2px;
+  margin-left: -1px;
+  border-radius: 1px;
+  background: #fff;
+  box-shadow: 0 0 3px rgb(0 0 0 / 0.25);
+}
+
+.timeline-playhead::before,
+.timeline-playhead::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  width: 8px;
+  height: 8px;
+  margin-left: -4px;
+  border-radius: 50%;
+  background: #fff;
+}
+
+.timeline-playhead::before {
+  top: -3px;
+}
+
+.timeline-playhead::after {
+  bottom: -3px;
+}
+
+/* ---------- Footer ---------- */
+
+.studio-footer {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 65px;
+  margin-top: auto;
+  padding: 0 44px 0 42px;
+}
+
+.studio-dims {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: var(--fs-sm);
+  font-variant-numeric: tabular-nums;
+}
+
+.studio-view {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.studio-view .divider-vertical {
+  height: 26px;
+}
+
+.studio-view-button {
+  gap: 8px;
+  padding: 0 4px;
+  font-size: var(--fs-sm);
 }
