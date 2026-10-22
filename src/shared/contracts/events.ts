@@ -6,6 +6,7 @@ import { backupForwardedEvents, type BackupEvents } from './backup';
 import { draftsForwardedEvents, type DraftsEvents } from './drafts';
 import { mediaForwardedEvents, type MediaEvents } from './media';
 import { projectsForwardedEvents, type ProjectsEvents } from './projects';
+import { recordingsForwardedEvents, type RecordingsEvents } from './recordings';
 import { remindersForwardedEvents, type RemindersEvents } from './reminders';
 import { settingsForwardedEvents, type SettingsEvents } from './settings';
 import { studioForwardedEvents, type StudioEvents } from './studio';
@@ -23,7 +24,8 @@ export interface AppEventPayloads
     ProjectsEvents,
     RemindersEvents,
     XEvents,
-    BackupEvents {}
+    BackupEvents,
+    RecordingsEvents {}
 
 export type AppEventName = keyof AppEventPayloads;
 
@@ -40,6 +42,7 @@ export const forwardedEvents = [
   ...remindersForwardedEvents,
   ...xForwardedEvents,
   ...backupForwardedEvents,
+  ...recordingsForwardedEvents,
 ] as const satisfies readonly AppEventName[];
 
 export type ForwardedEventName = (typeof forwardedEvents)[number];

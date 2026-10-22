@@ -6,6 +6,7 @@ import { draftsModule } from './drafts';
 import { ffmpegModule } from './ffmpeg';
 import { mediaModule } from './media';
 import { projectsModule } from './projects';
+import { recordingsModule } from './recordings';
 import { remindersModule } from './reminders';
 import { settingsModule } from './settings';
 import { studioModule } from './studio';
@@ -19,6 +20,7 @@ const modules: readonly ServiceModule[] = [
   ffmpegModule,
   mediaModule,
   studioModule,
+  recordingsModule,
   aiModule,
   projectsModule,
   remindersModule,

@@ -1480,3 +1480,123 @@ body,
   background: rgb(255 255 255 / 0.12);
 }
 
+
+/* ---------- Camera and cursor tabs ---------- */
+
+.camera-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  grid-template-rows: repeat(2, 64px);
+  padding: 8px;
+  border: 1px solid var(--studio-panel-border);
+  border-radius: 12px;
+  background: rgb(255 255 255 / 0.03);
+}
+
+.camera-grid-dot {
+  display: flex;
+  align-items: center;
+  border: 0;
+  background: none;
+  padding: 0 6px;
+}
+
+.camera-grid-dot:nth-child(3n + 2) {
+  justify-content: center;
+}
+
+.camera-grid-dot:nth-child(3n) {
+  justify-content: flex-end;
+}
+
+.camera-grid-dot:nth-child(-n + 3) {
+  align-items: flex-start;
+}
+
+.camera-grid-dot:nth-child(n + 4) {
+  align-items: flex-end;
+}
+
+.camera-grid-dot span {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  background: rgb(255 255 255 / 0.1);
+}
+
+.camera-grid-dot span::after {
+  content: '';
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #fff;
+}
+
+.camera-grid-dot:hover span {
+  background: rgb(255 255 255 / 0.18);
+}
+
+.camera-grid-dot-active span {
+  background: var(--studio-accent);
+}
+
+.radio-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.radio-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid var(--studio-panel-border);
+  border-radius: 12px;
+  background: rgb(255 255 255 / 0.03);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+}
+
+.radio-card:hover {
+  background: rgb(255 255 255 / 0.06);
+}
+
+.radio-card-active {
+  border-color: var(--studio-accent);
+  background: rgb(47 106 232 / 0.12);
+}
+
+.radio-card-dot {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  margin-top: 1px;
+  border: 1.5px solid rgb(255 255 255 / 0.4);
+  border-radius: 50%;
+}
+
+.radio-card-active .radio-card-dot {
+  border: 5px solid var(--studio-accent);
+  background: #fff;
+}
+
+.radio-card-text {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.radio-card-label {
+  font-size: 14.5px;
+  font-weight: var(--fw-medium);
+}
+
+.radio-card-description {
+  color: var(--text-secondary);
+  font-size: 13px;
+}

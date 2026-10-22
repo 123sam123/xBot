@@ -6,6 +6,7 @@ import { registerBackupIpc } from './backup';
 import { registerDraftsIpc } from './drafts';
 import { registerMediaIpc } from './media';
 import { registerProjectsIpc } from './projects';
+import { registerRecordingsIpc } from './recordings';
 import { registerRemindersIpc } from './reminders';
 import { registerSettingsIpc } from './settings';
 import { registerStudioIpc } from './studio';
@@ -24,4 +25,5 @@ export function registerIpc(): void {
   registerRemindersIpc();
   registerXIpc();
   registerBackupIpc();
+  registerRecordingsIpc();
 }

@@ -303,6 +303,20 @@ export const CheckerIcon = icon(
 
 export const DragHandleIcon = icon('DragHandleIcon', <path d="M5 9.5h14M5 14.5h14" />);
 
+export const StopIcon = icon('StopIcon', <rect x="6" y="6" width="12" height="12" rx="2.5" fill="currentColor" stroke="none" />);
+
+export const RestartIcon = icon('RestartIcon', <path d="M4.5 12a7.5 7.5 0 1 0 2.2-5.3M4.5 4.5v4h4" />);
+
+export const WindowIcon = icon(
+  'WindowIcon',
+  <>
+    <rect x="3.5" y="5" width="17" height="14" rx="2.5" />
+    <path d="M3.5 9h17" />
+  </>,
+);
+
+export const AreaIcon = icon('AreaIcon', <path d="M4 8V5.5A1.5 1.5 0 0 1 5.5 4H8M16 4h2.5A1.5 1.5 0 0 1 20 5.5V8M20 16v2.5a1.5 1.5 0 0 1-1.5 1.5H16M8 20H5.5A1.5 1.5 0 0 1 4 18.5V16" />);
+
 /** The xBot mark: blue "audio bars" on a white rounded square. */
 export function AppMark({ size = 30 }: { size?: number }) {
   return (

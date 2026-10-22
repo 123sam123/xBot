@@ -6,8 +6,9 @@ import { protocol } from 'electron';
 import { log } from '../log';
 
 // `xbot-media://media/<path relative to userData/media>` — the only way a page
-// loads user media — and `xbot-media://wallpapers/<file>` for the Studio's
-// bundled wallpapers. Serves real files whose realpath stays inside that
+// loads user media — `xbot-media://wallpapers/<file>` for the Studio's
+// bundled wallpapers and `xbot-media://recordings/<id>/<file>` for a
+// recording's camera and cursor data. Serves real files whose realpath stays inside that
 // host's folder (no traversal, no symlink escapes); everything else is a 404.
 // Single byte ranges get a proper 206, so <video> can seek.
 
@@ -42,6 +43,8 @@ export interface MediaRoots {
   media: string;
   /** The bundled wallpapers (resources/wallpapers). */
   wallpapers: string;
+  /** userData/recordings: a recording's camera video, cursor data and cursor images. */
+  recordings?: string;
 }
 
 export async function resolveMediaPath(roots: MediaRoots | string, rawUrl: string): Promise<string | null> {
@@ -52,8 +55,8 @@ export async function resolveMediaPath(roots: MediaRoots | string, rawUrl: strin
     return null;
   }
   if (url.protocol !== `${MEDIA_SCHEME}:`) return null;
-  const { media, wallpapers } = typeof roots === 'string' ? { media: roots, wallpapers: null } : roots;
-  const mediaRoot = url.hostname === 'media' ? media : url.hostname === 'wallpapers' ? wallpapers : null;
+  const { media, wallpapers, recordings } = typeof roots === 'string' ? { media: roots, wallpapers: null, recordings: null } : roots;
+  const mediaRoot = url.hostname === 'media' ? media : url.hostname === 'wallpapers' ? wallpapers : url.hostname === 'recordings' ? (recordings ?? null) : null;
   if (!mediaRoot) return null;
 
   let candidate: string;

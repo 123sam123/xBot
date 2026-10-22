@@ -1,0 +1,497 @@
+/* The recorder's windows: the glass panel, the camera bubble, the stop bar and the area overlay. */
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+html[data-recorder='camera'],
+html[data-recorder='bar'],
+html[data-recorder='area'] {
+  background: transparent;
+}
+
+/* ---------- Panel ---------- */
+
+.recorder-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  height: 100%;
+  padding: 16px 18px 18px;
+  background: rgb(16 16 19 / 0.82);
+  -webkit-app-region: drag;
+}
+
+.recorder-panel button,
+.recorder-panel .toggle-row {
+  -webkit-app-region: no-drag;
+}
+
+.recorder-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.recorder-head h1 {
+  flex: 1;
+  font-size: 16px;
+  font-weight: var(--fw-semibold);
+}
+
+.recorder-modes {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+  padding: 4px;
+  border-radius: 12px;
+  background: rgb(255 255 255 / 0.06);
+}
+
+.recorder-mode {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  height: 36px;
+  border: 0;
+  border-radius: 9px;
+  background: none;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: var(--fw-medium);
+}
+
+.recorder-mode:hover {
+  color: var(--text-primary);
+}
+
+.recorder-mode-active {
+  background: rgb(255 255 255 / 0.16);
+  color: var(--text-primary);
+}
+
+.recorder-sources {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 0;
+  flex: 1;
+}
+
+.recorder-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+  max-height: 210px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+
+.recorder-grid-wide {
+  grid-template-columns: 1fr;
+}
+
+.recorder-source {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 6px;
+  border: 1px solid rgb(255 255 255 / 0.08);
+  border-radius: 11px;
+  background: rgb(255 255 255 / 0.04);
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 12.5px;
+  text-align: left;
+}
+
+.recorder-source:hover {
+  background: rgb(255 255 255 / 0.08);
+}
+
+.recorder-source-active {
+  border-color: #4a84f5;
+  box-shadow: 0 0 0 1px #4a84f5;
+  color: var(--text-primary);
+}
+
+.recorder-thumb {
+  display: block;
+  aspect-ratio: 16 / 10;
+  border-radius: 7px;
+  background: rgb(255 255 255 / 0.06) center / cover no-repeat;
+}
+
+.recorder-grid-wide .recorder-thumb {
+  aspect-ratio: 16 / 7;
+}
+
+.recorder-source-name {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.recorder-area,
+.recorder-device {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 40px;
+  padding: 0 12px;
+  border: 1px solid rgb(255 255 255 / 0.08);
+  border-radius: 10px;
+  background: rgb(255 255 255 / 0.05);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 13.5px;
+}
+
+.recorder-device span {
+  flex: 1;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  text-align: left;
+}
+
+.recorder-device svg:last-child {
+  opacity: 0.6;
+}
+
+.recorder-device[aria-disabled='true'] {
+  opacity: 0.45;
+}
+
+.recorder-area:hover,
+.recorder-device:hover:not([aria-disabled='true']) {
+  background: rgb(255 255 255 / 0.1);
+}
+
+.recorder-devices {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.recorder-toggle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 4px 0 13px;
+}
+
+.recorder-toggle .toggle-row {
+  flex: 1;
+}
+
+.recorder-toggle .toggle-label {
+  font-size: 13.5px;
+}
+
+.recorder-start {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  height: 44px;
+  border: 0;
+  border-radius: 12px;
+  background: linear-gradient(180deg, #ff5a52, #e5342b);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.25),
+    0 6px 18px rgb(229 52 43 / 0.35);
+  color: #fff;
+  font: inherit;
+  font-size: 15px;
+  font-weight: var(--fw-semibold);
+}
+
+.recorder-start:hover:not([aria-disabled='true']) {
+  filter: brightness(1.06);
+}
+
+.recorder-start[aria-disabled='true'] {
+  opacity: 0.45;
+  box-shadow: none;
+}
+
+.recorder-dot {
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: #fff;
+}
+
+.recorder-note,
+.recorder-error {
+  color: var(--text-tertiary);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.recorder-error {
+  color: var(--warning);
+}
+
+.recorder-link {
+  border: 0;
+  background: none;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 13px;
+}
+
+.recorder-permission {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  text-align: center;
+}
+
+.recorder-permission h2 {
+  font-size: 16px;
+  font-weight: var(--fw-semibold);
+}
+
+.recorder-permission p {
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.recorder-permission .recorder-start {
+  align-self: stretch;
+}
+
+.recorder-countdown {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.recorder-countdown span {
+  font-size: 120px;
+  font-weight: var(--fw-bold);
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  animation: recorder-pop 900ms ease-out;
+}
+
+.recorder-countdown p {
+  color: var(--text-secondary);
+}
+
+@keyframes recorder-pop {
+  from {
+    transform: scale(1.35);
+    opacity: 0;
+  }
+  25% {
+    opacity: 1;
+  }
+  to {
+    transform: scale(1);
+  }
+}
+
+/* ---------- Camera bubble ---------- */
+
+.camera-bubble {
+  position: fixed;
+  inset: 8px;
+  overflow: hidden;
+  border-radius: 50%;
+  background: #111;
+  box-shadow:
+    0 0 0 3px rgb(255 255 255 / 0.85),
+    0 10px 30px rgb(0 0 0 / 0.45);
+  -webkit-app-region: drag;
+}
+
+.camera-video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transform: scaleX(-1);
+}
+
+.camera-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: var(--text-tertiary);
+  font-size: 12px;
+}
+
+/* ---------- Stop bar ---------- */
+
+.stop-bar {
+  position: fixed;
+  inset: 6px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 8px;
+  border-radius: 16px;
+  background: rgb(22 22 26 / 0.94);
+  box-shadow:
+    0 0 0 1px rgb(255 255 255 / 0.12),
+    0 10px 30px rgb(0 0 0 / 0.4);
+  -webkit-app-region: drag;
+}
+
+.stop-bar button {
+  -webkit-app-region: no-drag;
+}
+
+.stop-bar-stop {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  height: 38px;
+  padding: 0 14px 0 12px;
+  border: 0;
+  border-radius: 11px;
+  background: #e5342b;
+  color: #fff;
+  font: inherit;
+  font-size: 14.5px;
+  font-weight: var(--fw-semibold);
+}
+
+.stop-bar-stop:hover {
+  filter: brightness(1.08);
+}
+
+.stop-bar-time {
+  min-width: 38px;
+  font-variant-numeric: tabular-nums;
+}
+
+.stop-bar-sep {
+  width: 1px;
+  height: 22px;
+  margin: 0 6px;
+  background: rgb(255 255 255 / 0.16);
+}
+
+.stop-bar-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border: 0;
+  border-radius: 10px;
+  background: none;
+  color: var(--text-primary);
+}
+
+.stop-bar-btn:hover {
+  background: rgb(255 255 255 / 0.1);
+}
+
+.stop-bar-saving {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  font-size: 14px;
+}
+
+.stop-bar-spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid rgb(255 255 255 / 0.25);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: stop-bar-spin 800ms linear infinite;
+}
+
+@keyframes stop-bar-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* ---------- Area overlay ---------- */
+
+.area-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgb(0 0 0 / 0.35);
+  cursor: crosshair;
+}
+
+.area-hint {
+  position: absolute;
+  top: 40%;
+  left: 50%;
+  padding: 10px 16px;
+  border-radius: 12px;
+  background: rgb(22 22 26 / 0.9);
+  font-size: 15px;
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
+.area-rect {
+  position: absolute;
+  border: 2px solid #fff;
+  border-radius: 4px;
+  box-shadow: 0 0 0 9999px rgb(0 0 0 / 0.25);
+  background: rgb(255 255 255 / 0.04);
+}
+
+.area-size {
+  position: absolute;
+  top: -30px;
+  left: 0;
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: rgb(22 22 26 / 0.9);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.area-actions {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  display: flex;
+  gap: 8px;
+}
+
+.area-actions button {
+  height: 34px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 9px;
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: var(--fw-medium);
+  cursor: default;
+}
+
+.area-cancel {
+  background: rgb(22 22 26 / 0.9);
+  color: #fff;
+}
+
+.area-confirm {
+  background: #e5342b;
+  color: #fff;
+}

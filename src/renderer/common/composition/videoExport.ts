@@ -16,7 +16,7 @@ import {
 } from 'mediabunny';
 import { videoExportLayout } from '../../../shared/composition/layout';
 import type { Composition, VideoResolution } from '../../../shared/composition/model';
-import { clipLength, sourceTimeAt, timelineDuration, zoomAt } from '../../../shared/composition/timeline';
+import { clipLength, sceneAt, sourceTimeAt, timelineDuration, zoomAt } from '../../../shared/composition/timeline';
 import { drawComposition, type CompositionAssets } from './draw';
 import { RenderError } from './render';
 
@@ -31,6 +31,8 @@ export interface VideoExportOptions {
   assets: CompositionAssets;
   /** The source video's xbot-media URL. */
   sourceUrl: string;
+  /** A recording's camera video and where it starts in the recording, ms. */
+  camera?: { url: string; offsetMs: number } | null;
   resolution: VideoResolution;
   fps: 30 | 60;
   /** Writes `bytes` at `position` of the output file. */
@@ -55,7 +57,7 @@ function sliceAudio(buffer: AudioBuffer, from: number, to: number): AudioBuffer 
   return out;
 }
 
-export async function exportVideo({ composition, assets, sourceUrl, resolution, fps, write, onProgress, signal }: VideoExportOptions): Promise<void> {
+export async function exportVideo({ composition, assets, sourceUrl, camera, resolution, fps, write, onProgress, signal }: VideoExportOptions): Promise<void> {
   const video = composition.video;
   if (!video) throw new RenderError('render_failed', 'Only a video exports as MP4.');
   const layout = videoExportLayout(composition, resolution);
@@ -63,6 +65,7 @@ export async function exportVideo({ composition, assets, sourceUrl, resolution, 
   if (!(await canEncodeVideo('avc', { width, height }))) throw new RenderError('render_failed', 'This Mac can’t encode H.264 video here.');
 
   const input = new Input({ source: new UrlSource(sourceUrl), formats: ALL_FORMATS });
+  const cameraInput = camera && composition.camera && !composition.camera.hidden ? new Input({ source: new UrlSource(camera.url), formats: ALL_FORMATS }) : null;
   let output: Output | null = null;
   const check = () => {
     if (signal.aborted) throw new Canceled();
@@ -93,12 +96,29 @@ export async function exportVideo({ composition, assets, sourceUrl, resolution, 
       for (let i = 0; i < frames; i++) yield sourceTimeAt(video, (i * 1000) / fps).sourceMs / 1000;
     };
 
+    // The camera's frames, pulled in step with the screen's.
+    const cameraTrack = cameraInput ? await cameraInput.getPrimaryVideoTrack().catch(() => null) : null;
+    const cameraFrames = cameraTrack
+      ? new CanvasSink(cameraTrack, { poolSize: 2 }).canvasesAtTimestamps(
+          (function* () {
+            for (let i = 0; i < frames; i++) yield Math.max(0, (sourceTimeAt(video, (i * 1000) / fps).sourceMs - camera!.offsetMs) / 1000);
+          })(),
+        )
+      : null;
+
     const encodeVideo = async () => {
       let i = 0;
       for await (const frame of frameSink.canvasesAtTimestamps(times())) {
         check();
         const tMs = (i * 1000) / fps;
-        drawComposition(ctx, composition, layout, assets, { frame: frame?.canvas ?? null, zoom: zoomAt(video.zooms, tMs) });
+        const cameraFrame = cameraFrames ? ((await cameraFrames.next()).value ?? null) : null;
+        drawComposition(ctx, composition, layout, assets, {
+          frame: frame?.canvas ?? null,
+          zoom: zoomAt(video.zooms, tMs),
+          sourceMs: sourceTimeAt(video, tMs).sourceMs,
+          camera: cameraFrame?.canvas ?? null,
+          scene: sceneAt(video.scenes, tMs),
+        });
         await videoSource.add(i / fps, 1 / fps);
         i++;
         onProgress(i / frames);
@@ -132,5 +152,6 @@ export async function exportVideo({ composition, assets, sourceUrl, resolution, 
     throw new RenderError('render_failed', 'Couldn’t export this video.');
   } finally {
     input.dispose();
+    cameraInput?.dispose();
   }
 }

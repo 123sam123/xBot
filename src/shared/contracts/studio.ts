@@ -63,6 +63,15 @@ export type FfmpegStatus =
   | { state: 'ready'; version: string; encoder: H264Encoder; path: string }
   | { state: 'missing'; reason: FfmpegMissingReason; message: string };
 
+/** What a document made from a screen recording adds: its camera and cursor. */
+export interface StudioRecording {
+  id: string;
+  /** The webcam video; its time 0 is `offsetMs` into the recording. */
+  camera: { url: string; offsetMs: number } | null;
+  /** The cursor track (cursor.json), and the folder its images are relative to. */
+  cursor: { url: string; base: string } | null;
+}
+
 /** An editable Studio document: one source image or video and its composition. */
 export interface StudioDocument {
   id: string;
@@ -78,6 +87,8 @@ export interface StudioDocument {
   gif: boolean;
   /** Set for a video document: what ffprobe read when the document was created. */
   video: VideoInfo | null;
+  /** Set when the document is a screen recording. */
+  recording: StudioRecording | null;
   updatedAt: string;
 }
 
@@ -224,6 +235,8 @@ export interface StudioApi {
   checkFfmpeg(): Promise<IpcResult<FfmpegStatus>>;
   /** Lets the user pick the ffmpeg program; null when cancelled. */
   locateFfmpeg(): Promise<IpcResult<FfmpegStatus | null>>;
+  /** Imports the desktop picture of the display the Studio is on, for an image background. */
+  desktopWallpaper(): Promise<IpcResult<MediaItem>>;
   /** Shows the document's source file in Finder. */
   reveal(documentId: string): Promise<IpcResult<null>>;
   /** Closes the open document: the Studio shows its empty state. */

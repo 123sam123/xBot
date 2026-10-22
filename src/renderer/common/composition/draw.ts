@@ -1,6 +1,7 @@
 import { zoomedSourceCrop, type Layout } from '../../../shared/composition/layout';
-import { brightnessWash, CHROME, GRADIENTS, SHADOW_COLOR, type Composition, type GradientDef, type Rect } from '../../../shared/composition/model';
+import { brightnessWash, CHROME, GRADIENTS, SHADOW_COLOR, type Composition, type GradientDef, type Rect, type SceneMode } from '../../../shared/composition/model';
 import type { ZoomState } from '../../../shared/composition/timeline';
+import { cursorAt, type LoadedCursor } from './cursor';
 
 // The one draw routine behind the Studio preview and every export: images,
 // and each frame of a video (the preview draws the playing <video>, the MP4
@@ -16,6 +17,12 @@ export interface DrawOptions {
   frame?: CanvasImageSource | null;
   /** The zoom at this moment (none by default). */
   zoom?: ZoomState;
+  /** Recording time of the frame, ms: where the cursor is. */
+  sourceMs?: number;
+  /** The camera's frame at this moment, for a recording with a camera. */
+  camera?: CanvasImageSource | null;
+  /** A scene segment at this moment: the camera alone, or no camera. */
+  scene?: SceneMode | null;
 }
 
 export interface CompositionAssets {
@@ -23,6 +30,8 @@ export interface CompositionAssets {
   source: ImageBitmap | null;
   /** The decoded background image or wallpaper; without it the background falls back to the default gradient. */
   background: ImageBitmap | null;
+  /** A recording's cursor track and images. */
+  cursor?: LoadedCursor | null;
 }
 
 // The 24-unit icon paths from design-system/icons.tsx, drawn as vectors.
@@ -54,8 +63,37 @@ export function drawComposition(ctx: Ctx2D, comp: Composition, layout: Layout, a
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = 'high';
   drawBackground(ctx, comp, layout, assets);
+  if (options.scene === 'cameraFull' && options.camera && comp.camera) {
+    drawCameraFull(ctx, comp, layout, options.camera);
+    ctx.restore();
+    return;
+  }
   drawShadows(ctx, layout);
   drawFrame(ctx, comp, layout, assets, options);
+  if (options.scene !== 'hideCamera') drawCamera(ctx, comp, layout, options.camera ?? null);
+  ctx.restore();
+}
+
+/** A "camera only" scene: the camera fills the framed area, cover-fitted. */
+function drawCameraFull(ctx: Ctx2D, comp: Composition, layout: Layout, frame: CanvasImageSource): void {
+  const box = layout.frame;
+  const source = frame as CanvasImageSource & { videoWidth?: number; videoHeight?: number; width?: number; height?: number };
+  const fw = source.videoWidth || (source.width as number) || 1;
+  const fh = source.videoHeight || (source.height as number) || 1;
+  const scale = Math.max(box.width / fw, box.height / fh);
+  const sw = box.width / scale;
+  const sh = box.height / scale;
+  drawShadows(ctx, layout);
+  ctx.save();
+  roundRect(ctx, box, layout.radius);
+  ctx.clip();
+  if (comp.camera?.mirror) {
+    ctx.translate(box.x + box.width, box.y);
+    ctx.scale(-1, 1);
+    ctx.drawImage(frame, (fw - sw) / 2, (fh - sh) / 2, sw, sh, 0, 0, box.width, box.height);
+  } else {
+    ctx.drawImage(frame, (fw - sw) / 2, (fh - sh) / 2, sw, sh, box.x, box.y, box.width, box.height);
+  }
   ctx.restore();
 }
 
@@ -181,9 +219,15 @@ function drawFrame(ctx: Ctx2D, comp: Composition, layout: Layout, assets: Compos
   ctx.fillRect(frame.x, frame.y, frame.width, frame.height);
   drawChrome(ctx, comp, layout);
   const image = options.frame ?? assets.source;
-  if (image) {
-    const shown = options.zoom ? zoomedSourceCrop(sourceCrop, options.zoom) : sourceCrop;
-    ctx.drawImage(image, shown.x, shown.y, shown.width, shown.height, content.x, content.y, content.width, content.height);
+  const shown = options.zoom ? zoomedSourceCrop(sourceCrop, options.zoom) : sourceCrop;
+  if (image) ctx.drawImage(image, shown.x, shown.y, shown.width, shown.height, content.x, content.y, content.width, content.height);
+  if (assets.cursor && comp.cursor?.show && options.sourceMs !== undefined) {
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(content.x, content.y, content.width, content.height);
+    ctx.clip();
+    drawCursor(ctx, comp, layout, assets.cursor, shown, options.sourceMs);
+    ctx.restore();
   }
   ctx.restore();
 
@@ -196,6 +240,75 @@ function drawFrame(ctx: Ctx2D, comp: Composition, layout: Layout, assets: Compos
     ctx.stroke();
     ctx.restore();
   }
+}
+
+/** The recorded cursor where it was, through the same crop and zoom as the picture. */
+function drawCursor(ctx: Ctx2D, comp: Composition, layout: Layout, cursor: LoadedCursor, shown: Rect, ms: number): void {
+  const point = cursorAt(cursor.track, ms);
+  if (!point) return;
+  const image = cursor.images.get(point.cursor) ?? cursor.images.values().next().value;
+  if (!image) return;
+  const { content } = layout;
+  const k = content.width / shown.width;
+  const px = point.x * comp.source.width;
+  const py = point.y * comp.source.height;
+  const x = content.x + (px - shown.x) * k;
+  const y = content.y + (py - shown.y) * k;
+  const scale = comp.source.width * k * (comp.cursor?.size ?? 1);
+  const { info, bitmap } = image;
+  if (comp.cursor?.type === 'circle') {
+    // A touch point: about the arrow's height across, centred on the hotspot.
+    const r = (info.height * scale) / 2.2;
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(255,255,255,0.55)';
+    ctx.fill();
+    ctx.lineWidth = Math.max(1, r * 0.12);
+    ctx.strokeStyle = 'rgba(0,0,0,0.35)';
+    ctx.stroke();
+    return;
+  }
+  ctx.drawImage(bitmap, x - info.hotX * scale, y - info.hotY * scale, info.width * scale, info.height * scale);
+}
+
+/** The camera bubble: a cover-fitted square of the camera in a corner or edge of the canvas. */
+function drawCamera(ctx: Ctx2D, comp: Composition, layout: Layout, frame: CanvasImageSource | null): void {
+  const camera = comp.camera;
+  if (!camera || camera.hidden || !frame) return;
+  const { width, height } = layout.canvas;
+  const shortSide = Math.min(width, height);
+  const size = camera.size * shortSide;
+  const margin = 0.035 * shortSide;
+  const [row, col] = camera.position.split('-') as ['top' | 'bottom', 'left' | 'center' | 'right'];
+  const x = col === 'left' ? margin : col === 'right' ? width - margin - size : (width - size) / 2;
+  const y = row === 'top' ? margin : height - margin - size;
+  const radius = camera.shape === 'circle' ? size / 2 : camera.shape === 'rounded' ? size * 0.22 : size * 0.06;
+
+  const source = frame as CanvasImageSource & { videoWidth?: number; videoHeight?: number; width?: number; height?: number };
+  const fw = source.videoWidth || (source.width as number) || 1;
+  const fh = source.videoHeight || (source.height as number) || 1;
+  const side = Math.min(fw, fh);
+
+  ctx.save();
+  ctx.shadowColor = 'rgba(0,0,0,0.35)';
+  ctx.shadowBlur = size * 0.12;
+  ctx.shadowOffsetY = size * 0.03;
+  ctx.fillStyle = '#000';
+  roundRect(ctx, { x, y, width: size, height: size }, radius);
+  ctx.fill();
+  ctx.restore();
+
+  ctx.save();
+  roundRect(ctx, { x, y, width: size, height: size }, radius);
+  ctx.clip();
+  if (camera.mirror) {
+    ctx.translate(x + size, y);
+    ctx.scale(-1, 1);
+    ctx.drawImage(frame, (fw - side) / 2, (fh - side) / 2, side, side, 0, 0, size, size);
+  } else {
+    ctx.drawImage(frame, (fw - side) / 2, (fh - side) / 2, side, side, x, y, size, size);
+  }
+  ctx.restore();
 }
 
 function drawIcon(ctx: Ctx2D, box: Rect, d: string, color: string, fill = false): void {

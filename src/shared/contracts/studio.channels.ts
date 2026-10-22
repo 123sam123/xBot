@@ -28,6 +28,8 @@ export const studioChannels = {
   /** Pick the ffmpeg program by hand. */
   locateFfmpeg: 'studio:locate-ffmpeg',
   toggleFullscreen: 'studio:toggle-fullscreen',
+  /** Import the Mac's desktop picture as a background image. */
+  desktopWallpaper: 'studio:desktop-wallpaper',
   /** Show the open document's source file in Finder. */
   reveal: 'studio:reveal',
   /** Stop showing the open document (it stays saved). */

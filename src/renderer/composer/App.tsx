@@ -560,6 +560,10 @@ function Composer({ preview, emojiPanel, seenSteps }: { preview: boolean; emojiP
         disabledReason="Loading your draft…"
         dragActive={dragActive}
         busy={importing}
+        onRecord={() => {
+          void window.xbot.windows.hide();
+          void window.xbot.recordings.openPanel();
+        }}
       />
       {errors.length > 0 && (
         <div className="composer-errors" role="alert" data-testid="import-errors">

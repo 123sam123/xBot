@@ -10,9 +10,10 @@ directories:
 files:
   - out/**
   - package.json
-  # The native glass addon (scripts/build-glass.mjs; universal, so both
+  # The native addons (scripts/build-native.mjs; universal, so both
   # architectures share it). asarUnpack below unpacks it.
   - native/glass/build/glass.node
+  - native/capture/build/capture.node
   # better-sqlite3 ships every platform's N-API prebuild plus SQLite's sources;
   # keep only this platform's prebuild. (app-builder-lib only honours negated
   # patterns for node_modules, hence one negated extglob.)
@@ -61,6 +62,9 @@ mac:
   extendInfo:
     # Menu-bar app: no Dock icon, no app switcher entry.
     LSUIElement: true
+    # The recorder's camera bubble and microphone (screen recording is asked for by macOS itself).
+    NSCameraUsageDescription: xBot shows your camera in screen recordings when you turn it on.
+    NSMicrophoneUsageDescription: xBot records your microphone in screen recordings when you choose one.
 dmg:
   sign: false
 linux:

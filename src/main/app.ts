@@ -24,6 +24,7 @@ import { onStatusChanged } from './status';
 import { createTray } from './tray';
 import { applyAppearance, applyGlass, markQuitting } from './windows/common';
 import { composerWindow, createComposerWindow, toggleComposer } from './windows/composer';
+import { createRecorderWindows } from './windows/recorder';
 import { createStudioWindow, openStudio, studioWindow } from './windows/studio';
 
 let db: Db | null = null;
@@ -94,7 +95,7 @@ export async function startApp(paths: AppPaths): Promise<void> {
   await initServices({ db, paths, events: appEvents, log });
 
   installSecurityHandlers();
-  handleMediaProtocol({ media: paths.media, wallpapers: wallpapersDir() });
+  handleMediaProtocol({ media: paths.media, wallpapers: wallpapersDir(), recordings: paths.recordings });
   registerIpc();
   forwardEventsToRenderers();
   onStatusChanged((statuses) => appEvents.emit('status:changed', { statuses }));
@@ -103,6 +104,7 @@ export async function startApp(paths: AppPaths): Promise<void> {
   applyAppearance();
   createComposerWindow();
   createStudioWindow();
+  createRecorderWindows();
   // Settings → Appearance → Glass clarity applies live, to both windows.
   appEvents.on('settings:changed', ({ key }) => {
     if (key !== 'ui.glassClarity') return;

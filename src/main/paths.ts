@@ -8,6 +8,8 @@ export interface AppPaths {
   exports: string;
   logs: string;
   tmp: string;
+  /** Screen recordings: one folder each (camera, cursor data, metadata). */
+  recordings: string;
 }
 
 export interface UserDataOptions {
@@ -41,6 +43,7 @@ export function appPaths(userData: string): AppPaths {
     exports: join(userData, 'exports'),
     logs: join(userData, 'logs'),
     tmp: join(userData, 'tmp'),
+    recordings: join(userData, 'recordings'),
   };
 }
 
@@ -51,7 +54,7 @@ export function appPaths(userData: string): AppPaths {
 export function prepareUserData(paths: AppPaths): void {
   const fresh = !existsSync(paths.userData);
   const ours = fresh || existsSync(paths.db);
-  for (const dir of [paths.userData, paths.media, paths.exports, paths.logs]) mkdirSync(dir, { recursive: true });
+  for (const dir of [paths.userData, paths.media, paths.exports, paths.logs, paths.recordings]) mkdirSync(dir, { recursive: true });
   if (ours) rmSync(paths.tmp, { recursive: true, force: true });
   mkdirSync(paths.tmp, { recursive: true });
 }

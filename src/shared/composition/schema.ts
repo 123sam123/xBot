@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { CANVAS_LIMITS, MIN_CROP_PX, upgradeComposition, ZOOM_LIMITS, type Composition, type Style } from './model';
+import { CAMERA_LIMITS, CANVAS_LIMITS, MIN_CROP_PX, upgradeComposition, ZOOM_LIMITS, type Composition, type Style } from './model';
 
 // The composition as main validates it: every stored document, every save and
 // every export. Main and the studio contract import this; the renderer never
@@ -111,6 +111,26 @@ const currentCompositionSchema = z
     background: backgroundSchema,
     output: z.strictObject({ format: z.enum(['png', 'jpeg']), scale: z.union([z.literal(1), z.literal(2)]) }),
     video: videoSchema.optional(),
+    camera: z
+      .strictObject({
+        hidden: z.boolean(),
+        position: z.enum(['top-left', 'top-center', 'top-right', 'bottom-left', 'bottom-center', 'bottom-right']),
+        size: z.number().min(CAMERA_LIMITS.min).max(CAMERA_LIMITS.max),
+        shape: z.enum(['circle', 'rounded', 'square']),
+        mirror: z.boolean(),
+      })
+      .optional(),
+    cursor: z
+      .strictObject({
+        show: z.boolean(),
+        type: z.enum(['auto', 'circle']),
+        size: z.number().min(0.5).max(4),
+        smooth: z.boolean(),
+        hideWhenIdle: z.boolean(),
+        clickEffect: z.boolean(),
+        tilt: fraction,
+      })
+      .optional(),
   })
   .superRefine(({ crop, source }, ctx) => {
     if (crop.x + crop.width > 1 + EPSILON || crop.y + crop.height > 1 + EPSILON) {

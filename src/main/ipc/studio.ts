@@ -1,7 +1,8 @@
 // Owned by T4/T5 (XBOT-1N58PP, XBOT-G66JJK). Register `studio:*` handlers here with `handle(channel, schema, fn)`.
-import { copyFile } from 'node:fs/promises';
+import { copyFile, rm, writeFile } from 'node:fs/promises';
+import { randomUUID } from 'node:crypto';
 import { basename, join } from 'node:path';
-import { app, dialog, shell, type OpenDialogOptions, type SaveDialogOptions } from 'electron';
+import { app, dialog, screen, shell, type OpenDialogOptions, type SaveDialogOptions } from 'electron';
 import { z } from 'zod';
 import type { MediaItem } from '../../shared/contracts/media';
 import {
@@ -24,6 +25,7 @@ import { appEvents } from '../events';
 import { draftsQueue } from '../services/drafts/queue';
 import { ffmpeg } from '../services/ffmpeg';
 import { media } from '../services/media';
+import { recordings } from '../services/recordings';
 import { MediaRejected } from '../services/media/service';
 import { adoptOpened, beginOpen, closeStudioSession, currentSession, isLatestOpen, openedFromAttachment, studio } from '../services/studio';
 import type { Opened } from '../services/studio/service';
@@ -186,6 +188,21 @@ export function registerStudioIpc(): void {
   });
 
   handle(studioChannels.toggleFullscreen, z.undefined(), () => toggleStudioFullscreen());
+
+  // macOS draws HEIC desktop pictures; Chromium can't decode them, so the native side converts it to JPEG for import.
+  handle(studioChannels.desktopWallpaper, z.undefined(), async () => {
+    const win = studioWindow();
+    const display = win ? screen.getDisplayMatching(win.getBounds()) : screen.getPrimaryDisplay();
+    const jpeg = recordings.desktopWallpaper(display.id);
+    if (!jpeg) throw new IpcError('wallpaper_unreadable', 'Your desktop picture can’t be read (live and photo-shuffle wallpapers aren’t pictures).');
+    const file = join(app.getPath('temp'), `xbot-desktop-${randomUUID()}.jpg`);
+    await writeFile(file, jpeg);
+    try {
+      return await importMedia('Desktop.jpg', file, true);
+    } finally {
+      await rm(file, { force: true });
+    }
+  });
 
   handle(studioChannels.reveal, documentIdSchema, ({ documentId }) => {
     shell.showItemInFolder(studio().sourcePath(documentId));

@@ -1,6 +1,8 @@
 import { useState, type ReactNode } from 'react';
 import { CameraIcon, CursorIcon, ImageIcon, SpeakerIcon, Toggle, Tooltip } from '../design-system';
 import { BackgroundTab } from './sidebar/BackgroundTab';
+import { CameraTab } from './sidebar/CameraTab';
+import { CursorTab } from './sidebar/CursorTab';
 import { Section, TabNote, type TabProps } from './sidebar/parts';
 
 export type SidebarTab = 'background' | 'camera' | 'audio' | 'cursor';
@@ -17,9 +19,11 @@ export function Sidebar({
   disabledReason,
   hasAudio,
   onPickImage,
+  onDesktop,
   pickDisabledReason,
   ...tab
 }: Partial<TabProps> & {
+  onDesktop(): void;
   /** Why editing is off (no document, rendering…); every tab is inert then. */
   disabledReason?: string;
   /** The video has a sound track. */
@@ -54,7 +58,7 @@ export function Sidebar({
         {!ready ? (
           <p className="sidebar-note">{disabledReason ?? 'Open a screenshot, video or recording to edit it.'}</p>
         ) : active === 'background' ? (
-          <BackgroundTab composition={composition} onChange={onChange} onCommit={onCommit} onPickImage={onPickImage} pickDisabledReason={pickDisabledReason} />
+          <BackgroundTab composition={composition} onChange={onChange} onCommit={onCommit} onPickImage={onPickImage} onDesktop={onDesktop} pickDisabledReason={pickDisabledReason} />
         ) : active === 'audio' ? (
           composition.video ? (
             <Section title="Audio">
@@ -71,6 +75,10 @@ export function Sidebar({
               Screenshots have no sound. Open a video or a recording to set its audio.
             </TabNote>
           )
+        ) : active === 'camera' && composition.camera ? (
+          <CameraTab composition={composition} onChange={onChange} onCommit={onCommit} />
+        ) : active === 'cursor' && composition.cursor ? (
+          <CursorTab composition={composition} onChange={onChange} onCommit={onCommit} />
         ) : active === 'camera' ? (
           <TabNote icon={<CameraIcon size={28} />} title="Camera">
             Record with xBot and turn on your camera to place, size and style it here.

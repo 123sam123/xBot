@@ -10,12 +10,13 @@ import { drafts } from './api/drafts';
 import { events } from './api/events';
 import { media } from './api/media';
 import { projects } from './api/projects';
+import { recordings } from './api/recordings';
 import { reminders } from './api/reminders';
 import { settings } from './api/settings';
 import { studio } from './api/studio';
 import { windows } from './api/windows';
 import { x } from './api/x';
 
-const bridge: XbotBridge = { app, windows, settings, events, drafts, media, studio, ai, projects, reminders, x, backup };
+const bridge: XbotBridge = { app, windows, settings, events, drafts, media, studio, ai, projects, reminders, x, backup, recordings };
 
 contextBridge.exposeInMainWorld('xbot', Object.freeze(bridge));

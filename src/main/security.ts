@@ -1,9 +1,11 @@
 import { app, session, shell } from 'electron';
 import { log } from './log';
+import { isRecorderContents } from './windows/recorder';
 
 // App-wide hardening for every webContents: no navigation away from xBot's
-// pages, no new windows, no <webview>, no permissions. Links to a short list of
-// https hosts open in the user's browser instead.
+// pages, no new windows, no <webview>, no permissions except the camera and
+// microphone for the recorder's own windows. Links to a short list of https
+// hosts open in the user's browser instead.
 
 // ffmpeg.org and brew.sh: the Studio's "how to get FFmpeg" links (T5).
 const EXTERNAL_HOSTS = new Set(['x.com', 'twitter.com', 'ollama.com', 'github.com', 'ffmpeg.org', 'brew.sh']);
@@ -47,10 +49,12 @@ export function installSecurityHandlers(): void {
     });
   });
 
-  session.defaultSession.setPermissionRequestHandler((_contents, permission, callback) => {
+  session.defaultSession.setPermissionRequestHandler((contents, permission, callback, details) => {
+    const media = permission === 'media' && 'mediaTypes' in details && (details.mediaTypes ?? []).every((type) => type === 'video' || type === 'audio');
+    if (media && isRecorderContents(contents)) return callback(true);
     log.warn('security: denied permission request', permission);
     callback(false);
   });
-  session.defaultSession.setPermissionCheckHandler(() => false);
+  session.defaultSession.setPermissionCheckHandler((contents, permission) => permission === 'media' && contents !== null && isRecorderContents(contents));
   session.defaultSession.setDevicePermissionHandler(() => false);
 }

@@ -4,6 +4,7 @@ import { appEvents } from './events';
 import { importDroppedOnTray } from './ipc/media';
 import { settings } from './services/settings';
 import { attachTray, showComposer, toggleComposer } from './windows/composer';
+import { recordings } from './services/recordings';
 import { openStudio } from './windows/studio';
 
 // Kept at module level: a Tray that is garbage-collected disappears.
@@ -17,6 +18,7 @@ function iconPath(): string {
 function buildMenu(): Menu {
   return Menu.buildFromTemplate([
     { label: 'Write Post', click: () => showComposer() },
+    { label: 'Start Recording…', click: () => recordings.openPanel() },
     { label: 'Open Media Studio', click: () => openStudio() },
     { type: 'separator' },
     {

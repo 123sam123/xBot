@@ -12,20 +12,20 @@
     "node": ">=22.12"
   },
   "scripts": {
-    "postinstall": "node scripts/install-electron.mjs && node scripts/build-glass.mjs",
-    "dev": "node scripts/build-glass.mjs && electron-vite dev",
-    "build": "node scripts/build-glass.mjs && electron-vite build",
+    "postinstall": "node scripts/install-electron.mjs && node scripts/build-native.mjs",
+    "dev": "node scripts/build-native.mjs && electron-vite dev",
+    "build": "node scripts/build-native.mjs && electron-vite build",
     "test": "vitest run",
     "test:e2e": "pnpm build && playwright test",
     "typecheck": "tsc --noEmit --composite false -p tsconfig.node.json && tsc --noEmit --composite false -p tsconfig.web.json && tsc --noEmit --composite false -p tsconfig.scripts.json",
     "lint": "eslint .",
-    "package": "node scripts/build-glass.mjs --strict && electron-vite build && electron-builder --publish never",
+    "package": "node scripts/build-native.mjs --strict && electron-vite build && electron-builder --publish never",
     "icons": "node scripts/render-icons.mjs",
     "fixtures": "pnpm build && node --experimental-strip-types --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/render-fixtures.ts",
     "preview:ui": "pnpm build && node scripts/preview-ui.mjs",
     "capture": "pnpm build && node --experimental-strip-types --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/capture-ui.ts",
     "capture:glass": "pnpm build && node scripts/capture-glass.mjs",
-    "glass": "node scripts/build-glass.mjs",
+    "native": "node scripts/build-native.mjs",
     "wallpapers": "node scripts/render-wallpapers.mjs"
   },
   "dependencies": {

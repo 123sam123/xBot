@@ -8,7 +8,7 @@ import { createGlass, GLASS_RADIUS, type Glass } from './glass';
 // Shared window plumbing: secure webPreferences, the page loader, the native
 // material switch and glass, the registry of xBot's own webContents and close → hide.
 
-export type Page = 'composer' | 'studio';
+export type Page = 'composer' | 'studio' | 'recorder';
 
 /** The Vite dev-server URL while `pnpm dev` runs; null for built files (including e2e). */
 export function devServerUrl(): string | null {
@@ -30,8 +30,8 @@ export function secureWebPreferences(): BrowserWindowConstructorOptions['webPref
   };
 }
 
-export function loadPage(win: BrowserWindow, page: Page): Promise<void> {
-  const query = { material: rendererMaterial(), ...glassQuery(win) };
+export function loadPage(win: BrowserWindow, page: Page, extra: Record<string, string> = {}): Promise<void> {
+  const query = { material: rendererMaterial(), ...glassQuery(win), ...extra };
   const dev = devServerUrl();
   return dev
     ? win.loadURL(`${dev}/${page}/index.html?${new URLSearchParams(query)}`)
@@ -180,7 +180,7 @@ export function markQuitting(): void {
 }
 
 /** Registers an xBot window: trusted for IPC, hidden (never destroyed) on close, reloaded after a crash. */
-export function manageWindow(win: BrowserWindow, page: Page): void {
+export function manageWindow(win: BrowserWindow, page: Page, query: Record<string, string> = {}): void {
   const id = win.webContents.id;
   knownIds.add(id);
   win.webContents.on('destroyed', () => knownIds.delete(id));
@@ -202,6 +202,6 @@ export function manageWindow(win: BrowserWindow, page: Page): void {
       return;
     }
     crashes.push(now);
-    void loadPage(win, page);
+    void loadPage(win, page, query);
   });
 }

@@ -1,4 +1,4 @@
-import { minTrimMs, ZOOM_LIMITS, type Clip, type SceneSegment, type VideoSettings, type ZoomSegment } from './model';
+import { minTrimMs, ZOOM_LIMITS, type Clip, type SceneMode, type SceneSegment, type VideoSettings, type ZoomSegment } from './model';
 
 // The video timeline, pure and zod-free. Clips are source ranges played back
 // to back; output time ("timeline ms") runs over them in order. Zoom and scene
@@ -166,4 +166,10 @@ export function zoomAt(zooms: readonly ZoomSegment[], tMs: number): ZoomState {
     return { scale: 1 + (zoom.scale - 1) * amount, x: zoom.x, y: zoom.y };
   }
   return { scale: 1, x: 0.5, y: 0.5 };
+}
+
+/** The scene at output time `tMs`, or null for the default (screen with the camera bubble). */
+export function sceneAt(scenes: readonly SceneSegment[], tMs: number): SceneMode | null {
+  for (const scene of scenes) if (tMs >= scene.startMs && tMs < scene.endMs) return scene.mode;
+  return null;
 }

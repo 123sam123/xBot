@@ -31,6 +31,7 @@ export const studio: StudioApi = {
   checkFfmpeg: () => invoke(studioChannels.ffmpegCheck),
   locateFfmpeg: () => invoke(studioChannels.locateFfmpeg),
   toggleFullscreen: () => invoke(studioChannels.toggleFullscreen),
+  desktopWallpaper: () => invoke(studioChannels.desktopWallpaper),
   reveal: (documentId) => invoke(studioChannels.reveal, { documentId }),
   close: () => invoke(studioChannels.close),
   flushed: () => invoke(studioChannels.flushed),

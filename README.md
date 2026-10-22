@@ -58,7 +58,7 @@ pnpm package          # dist/: a .dmg and a .zip for Apple Silicon and for Intel
 | `pnpm preview:ui` | Builds, then opens [preview mode](#preview-mode) on a fresh sample userData. |
 | `pnpm capture` | Builds, then captures both windows and compares them with the reference image (`docs/reference/captures/`). Needs FFmpeg. On a Mac, `pnpm capture --desktop` also takes real screenshots over four wallpapers; it needs Screen Recording permission for the terminal. |
 | `pnpm capture:glass` | macOS: builds, then takes real screenshots of both windows over on-screen backdrops at Glass clarity 0, 80% and 100%, and checks text contrast and the glass's opacity (`test-results/glass/`). Needs Screen Recording permission for the terminal and an unlocked screen; your wallpaper is not changed. |
-| `pnpm glass` | Rebuilds the native glass addon (`dev`, `build`, `package` and `pnpm install` do it when needed). |
+| `pnpm native` | Rebuilds the native addons, glass and screen capture (`dev`, `build`, `package` and `pnpm install` do it when needed). |
 | `pnpm fixtures` | Builds, then re-renders preview mode's sample media in `resources/fixtures/`. Needs FFmpeg with libx264. |
 | `pnpm icons` | Re-renders the tray PNGs and `build/icon.png` from the SVGs in `resources/`. |
 
@@ -113,7 +113,7 @@ Reduce transparency is on.
 (`xcode-select --install`). Without them it prints one line and xBot runs with
 the system's glass: frosted, with small corners, and the slider disabled.
 `pnpm package` refuses to package without the addon. After installing the
-tools, run `pnpm glass`.
+tools, run `pnpm native`.
 
 ## Local AI with Ollama
 

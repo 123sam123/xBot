@@ -60,7 +60,8 @@ export function BackgroundTab({
   onCommit,
   onPickImage,
   pickDisabledReason,
-}: TabProps & { onPickImage(): void; pickDisabledReason?: string }) {
+  onDesktop,
+}: TabProps & { onPickImage(): void; pickDisabledReason?: string; onDesktop(): void }) {
   const bg = composition.background;
   // A tile can be picked before it changes the background (Image before a file is chosen); otherwise the background says.
   const [picked, setPicked] = useState<{ kind: BackgroundKind; on: Background } | null>(null);
@@ -93,6 +94,7 @@ export function BackgroundTab({
   const blurOf = bg.type === 'image' || bg.type === 'wallpaper' ? bg.blur : 0;
 
   const choose = (next: BackgroundKind) => {
+    if (next === 'desktop') return onDesktop();
     setPicked({ kind: next, on: bg });
     if (next === 'gradient' && bg.type !== 'gradient') set(gradientBackground('blue', brightness));
     else if (next === 'color' && bg.type !== 'solid') set({ type: 'solid', color: bg.type === 'gradient' ? bg.from : '#0a84ff', brightness });
@@ -104,7 +106,7 @@ export function BackgroundTab({
   };
 
   const tiles: { kind: BackgroundKind; label: string; icon: ReactNode; disabled?: string }[] = [
-    { kind: 'desktop', label: 'Desktop', icon: <MonitorIcon size={17} />, disabled: 'Uses your Mac’s wallpaper once screen recording is set up' },
+    { kind: 'desktop', label: 'Desktop', icon: <MonitorIcon size={17} /> },
     { kind: 'wallpaper', label: 'Wallpaper', icon: <span className="bg-tile-dot bg-tile-dot-wallpaper" /> },
     { kind: 'image', label: 'Image', icon: <CheckerIcon size={16} /> },
     { kind: 'color', label: 'Color', icon: <span className="bg-tile-dot bg-tile-dot-color" /> },

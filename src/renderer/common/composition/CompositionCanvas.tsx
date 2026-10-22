@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { computeLayout, type Layout } from '../../../shared/composition/layout';
 import { outputSize, type Composition } from '../../../shared/composition/model';
-import { zoomAt } from '../../../shared/composition/timeline';
+import { sceneAt, sourceTimeAt, zoomAt } from '../../../shared/composition/timeline';
 import type { Clock } from './clock';
 import { drawComposition, type CompositionAssets } from './draw';
 
@@ -41,10 +41,11 @@ function drawKey(composition: Composition, scale: number): string {
   return (hash >>> 0).toString(36);
 }
 
-/** A video source for the preview: its element (the frame shown) and the playhead (the zoom at that moment). */
+/** A video source for the preview: its element (the frame shown), the playhead (zoom, cursor) and a recording's camera. */
 export interface CanvasVideo {
   element: HTMLVideoElement | null;
   clock: Clock;
+  camera?: HTMLVideoElement | null;
 }
 
 /**
@@ -82,6 +83,7 @@ export function CompositionCanvas({
   const key = drawKey(composition, scale);
   const element = video?.element ?? null;
   const clock = video?.clock ?? null;
+  const camera = video?.camera ?? null;
 
   useEffect(() => {
     let frame = 0;
@@ -95,8 +97,14 @@ export function CompositionCanvas({
       const ctx = el.getContext('2d');
       if (!ctx) return;
       const videoReady = element !== null && element.readyState >= 2;
-      const zoom = composition.video && clock ? zoomAt(composition.video.zooms, clock.get()) : undefined;
-      drawComposition(ctx, composition, layout, assets, { frame: videoReady ? element : null, zoom });
+      const now = composition.video && clock ? clock.get() : null;
+      drawComposition(ctx, composition, layout, assets, {
+        frame: videoReady ? element : null,
+        zoom: now !== null ? zoomAt(composition.video!.zooms, now) : undefined,
+        sourceMs: now !== null ? sourceTimeAt(composition.video!, now).sourceMs : undefined,
+        camera: camera && camera.readyState >= 2 ? camera : null,
+        scene: now !== null ? sceneAt(composition.video!.scenes, now) : null,
+      });
       el.dataset.drawnKey = assetsReady && (!composition.video || videoReady) ? key : '';
     };
     const schedule = () => {
@@ -105,13 +113,13 @@ export function CompositionCanvas({
     schedule();
     const offClock = clock?.subscribe(schedule);
     const events = ['loadeddata', 'seeked', 'timeupdate'] as const;
-    for (const name of events) element?.addEventListener(name, schedule);
+    for (const target of [element, camera]) for (const name of events) target?.addEventListener(name, schedule);
     return () => {
       if (frame) cancelAnimationFrame(frame);
       offClock?.();
-      for (const name of events) element?.removeEventListener(name, schedule);
+      for (const target of [element, camera]) for (const name of events) target?.removeEventListener(name, schedule);
     };
-  }, [composition, assets, assetsReady, displayScale, dpr, quality, key, element, clock]);
+  }, [composition, assets, assetsReady, displayScale, dpr, quality, key, element, clock, camera]);
 
   return (
     <canvas

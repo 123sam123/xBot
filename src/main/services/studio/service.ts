@@ -3,10 +3,10 @@ import { existsSync } from 'node:fs';
 import { open, rm, unlink, writeFile, type FileHandle } from 'node:fs/promises';
 import { basename, extname, join } from 'node:path';
 import { exportLayout } from '../../../shared/composition/layout';
-import { defaultComposition, effectiveFormat, gradientBackground, MAX_EDIT_PIXELS, minTrimMs, type Composition, type Style } from '../../../shared/composition/model';
+import { defaultComposition, effectiveFormat, gradientBackground, MAX_EDIT_PIXELS, minTrimMs, recordingComposition, type Composition, type Style } from '../../../shared/composition/model';
 import { compositionSchema, styleSchema } from '../../../shared/composition/schema';
 import type { MediaItem } from '../../../shared/contracts/media';
-import type { AddToPostResult, BeginExportResult, ExportFileFormat, SaveResult, StudioDocument, StudioPreset, StudioView, VideoInfo } from '../../../shared/contracts/studio';
+import type { AddToPostResult, BeginExportResult, ExportFileFormat, SaveResult, StudioDocument, StudioPreset, StudioRecording, StudioView, VideoInfo } from '../../../shared/contracts/studio';
 import type { Db } from '../../db';
 import { IpcError } from '../../ipc/core';
 import type { Logger } from '../../log';
@@ -83,6 +83,8 @@ export interface StudioService {
   openForAttachment(draftId: string, attachmentId: string): Promise<Opened>;
   /** The newest document for this media (or for the document it was exported from), else a new one. */
   openForMedia(item: MediaItem): Promise<Opened>;
+  /** A new document for a screen recording whose video was imported as `item`. */
+  createForRecording(item: MediaItem, recordingId: string, has: { camera: boolean; cursor: boolean }): Promise<StudioDocument>;
   save(documentId: string, baseRevision: number, composition: Composition): SaveResult;
   listPresets(): StudioPreset[];
   savePreset(name: string, style: Style): StudioPreset;
@@ -113,6 +115,7 @@ interface DocumentRow {
   composition_json: string;
   composition_backup: string | null;
   source_video_json: string | null;
+  recording_id: string | null;
   revision: number;
   created_at: string;
   updated_at: string;
@@ -124,6 +127,12 @@ interface AttachmentRow {
   media_id: string;
   position: number;
   studio_document_id: string | null;
+}
+
+/** What recordings.meta_json says about the camera and cursor files (main writes it). */
+interface RecordingMeta {
+  camera: { file: string; offsetMs: number } | null;
+  cursor: { file: string } | null;
 }
 
 interface PresetRow {
@@ -177,9 +186,10 @@ export function createStudioService({ db, paths, log, media, drafts, events, vid
       'SELECT document_id FROM studio_exports WHERE media_id = ? ORDER BY created_at DESC, rowid DESC LIMIT 1',
     ),
     insertDocument: db.prepare(
-      `INSERT INTO studio_documents (id, source_media_id, background_media_id, composition_json, source_video_json, revision, created_at, updated_at)
-       VALUES (?, ?, NULL, ?, ?, 0, ?, ?)`,
+      `INSERT INTO studio_documents (id, source_media_id, background_media_id, composition_json, source_video_json, revision, created_at, updated_at, recording_id)
+       VALUES (?, ?, NULL, ?, ?, 0, ?, ?, ?)`,
     ),
+    recording: db.prepare<[string], { id: string; dir: string; meta_json: string }>('SELECT id, dir, meta_json FROM recordings WHERE id = ?'),
     replaceCorrupt: db.prepare(
       'UPDATE studio_documents SET composition_json = ?, composition_backup = ?, background_media_id = NULL, revision = revision + 1 WHERE id = ?',
     ),
@@ -260,6 +270,24 @@ export function createStudioService({ db, paths, log, media, drafts, events, vid
     return fallback;
   }
 
+  function recordingOf(row: DocumentRow): StudioRecording | null {
+    if (!row.recording_id) return null;
+    const found = q.recording.get(row.recording_id);
+    if (!found) return null;
+    let meta: RecordingMeta;
+    try {
+      meta = JSON.parse(found.meta_json) as RecordingMeta;
+    } catch {
+      return null;
+    }
+    const base = `xbot-media://recordings/${encodeURIComponent(found.dir)}/`;
+    return {
+      id: found.id,
+      camera: meta.camera ? { url: base + meta.camera.file, offsetMs: meta.camera.offsetMs } : null,
+      cursor: meta.cursor ? { url: base + meta.cursor.file, base } : null,
+    };
+  }
+
   function toDocument(row: DocumentRow): StudioDocument {
     const source = mediaRow(row.source_media_id)!; // NOT NULL foreign key
     const info = videoOf(row);
@@ -278,6 +306,7 @@ export function createStudioService({ db, paths, log, media, drafts, events, vid
       background: background ? toMediaItem(background) : null,
       gif: source.mime === 'image/gif',
       video: info,
+      recording: recordingOf(row),
       updatedAt: row.updated_at,
     };
   }
@@ -291,11 +320,11 @@ export function createStudioService({ db, paths, log, media, drafts, events, vid
     return { width: row.width, height: row.height };
   }
 
-  function create(source: MediaRow, size: { width: number; height: number }, info: VideoInfo | null = null): DocumentRow {
+  function create(source: MediaRow, size: { width: number; height: number }, info: VideoInfo | null = null, composition?: Composition, recordingId: string | null = null): DocumentRow {
     const id = randomUUID();
     const at = stamp();
-    const composition = defaultComposition({ mediaId: source.id, width: size.width, height: size.height }, info ? { durationMs: info.durationMs } : undefined);
-    q.insertDocument.run(id, source.id, JSON.stringify(composition), info ? JSON.stringify(info) : null, at, at);
+    const comp = composition ?? defaultComposition({ mediaId: source.id, width: size.width, height: size.height }, info ? { durationMs: info.durationMs } : undefined);
+    q.insertDocument.run(id, source.id, JSON.stringify(comp), info ? JSON.stringify(info) : null, at, at, recordingId);
     return q.document.get(id)!;
   }
 
@@ -416,6 +445,15 @@ export function createStudioService({ db, paths, log, media, drafts, events, vid
       const size = editableImage(source);
       if (!size) throw new IpcError('not_editable', 'Media Studio edits images and videos.');
       return { document: toDocument(existing ? documentRow(existing.id) : create(source, size)) };
+    },
+
+    async createForRecording(item, recordingId, has) {
+      const source = mediaRow(item.id);
+      if (!source || source.kind !== 'video') throw new IpcError('media_rejected', 'The recording couldn’t be read as a video.');
+      const info = await probeSource(source);
+      if (!info) throw new IpcError('ffmpeg_missing', FFMPEG_NEEDED);
+      const composition = recordingComposition({ mediaId: source.id, width: info.width, height: info.height }, info.durationMs, has);
+      return toDocument(create(source, info, info, composition, recordingId));
     },
 
     save(documentId, baseRevision, composition) {

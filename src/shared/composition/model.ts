@@ -105,6 +105,37 @@ export interface SceneSegment {
   mode: SceneMode;
 }
 
+export type CameraPosition = 'top-left' | 'top-center' | 'top-right' | 'bottom-left' | 'bottom-center' | 'bottom-right';
+export type CameraShape = 'circle' | 'rounded' | 'square';
+
+/** The webcam overlay of a recording made with a camera. */
+export interface CameraSettings {
+  hidden: boolean;
+  position: CameraPosition;
+  /** The camera's side, a fraction of the canvas's shorter side. */
+  size: number;
+  shape: CameraShape;
+  mirror: boolean;
+}
+
+export type CursorType = 'auto' | 'circle';
+
+/** How a recording's cursor is drawn (the capture itself has no cursor). */
+export interface CursorSettings {
+  show: boolean;
+  type: CursorType;
+  /** × the recorded cursor size. */
+  size: number;
+  /** Spring-smoothed movement. */
+  smooth: boolean;
+  /** Fades the cursor out after a moment without movement. */
+  hideWhenIdle: boolean;
+  /** A ripple on each click. */
+  clickEffect: boolean;
+  /** Leans the cursor into its movement, 0–1. */
+  tilt: number;
+}
+
 /** A video source's edit. Present exactly when the source is a video. */
 export interface VideoSettings {
   clips: Clip[];
@@ -127,6 +158,10 @@ export interface Composition {
   background: Background;
   output: Output;
   video?: VideoSettings;
+  /** Present when the document is a recording made with a camera. */
+  camera?: CameraSettings;
+  /** Present when the document is a recording with cursor data. */
+  cursor?: CursorSettings;
 }
 
 /** What a preset carries: no source, crop, output or video. */
@@ -411,6 +446,35 @@ export function defaultComposition(source: SourceRef, video?: { durationMs: numb
     ...defaultStyle(),
     output: { format: 'png', scale: 1 },
     ...(video ? { video: { clips: [{ startMs: 0, endMs: video.durationMs }], zooms: [], scenes: [], muted: false } } : {}),
+  };
+}
+
+export const CAMERA_LIMITS = { min: 0.12, max: 0.5 } as const;
+
+export function defaultCamera(): CameraSettings {
+  return { hidden: false, position: 'bottom-right', size: 0.26, shape: 'circle', mirror: false };
+}
+
+export function defaultCursor(): CursorSettings {
+  return { show: true, type: 'auto', size: 1.4, smooth: true, hideWhenIdle: false, clickEffect: true, tilt: 0 };
+}
+
+/**
+ * A new recording's composition: a wallpaper, room around the capture and soft
+ * corners, no browser chrome (a screen recording is its own window), the
+ * camera and cursor when the recording has them.
+ */
+export function recordingComposition(source: SourceRef, durationMs: number, has: { camera: boolean; cursor: boolean }): Composition {
+  const base = defaultComposition(source, { durationMs });
+  return {
+    ...base,
+    frame: { ...base.frame, style: 'none', radius: 0.012 },
+    canvas: { ratio: 'original', width: 1920, height: 1080 },
+    padding: { x: 0.07, y: 0.07, linked: true },
+    shadow: shadowPreset('elevated'),
+    background: { type: 'wallpaper', id: 'macos-tide', blur: 0, brightness: 0.5 },
+    ...(has.camera ? { camera: defaultCamera() } : {}),
+    ...(has.cursor ? { cursor: defaultCursor() } : {}),
   };
 }
 

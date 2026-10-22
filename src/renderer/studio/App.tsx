@@ -4,6 +4,7 @@ import { clipStartTime, sourceTimeAt, splitAt, timelineDuration } from '../../sh
 import type { IpcResult } from '../../shared/contracts/ipc';
 import type { AddToPostResult, BeginExportResult, StudioPreset } from '../../shared/contracts/studio';
 import { CompositionCanvas } from '../common/composition/CompositionCanvas';
+import { loadCursor, type LoadedCursor } from '../common/composition/cursor';
 import { renderComposition, RenderError } from '../common/composition/render';
 import { exportVideo } from '../common/composition/videoExport';
 import '../common/composition/composition.css';
@@ -26,6 +27,7 @@ import { TopBar } from './TopBar';
 import { useCompositionAssets } from './useCompositionAssets';
 import { useFilmstrip } from './useFilmstrip';
 import { useStudioEditor } from './useStudioEditor';
+import { useCameraSync } from './useCameraSync';
 import { useTimelinePlayback } from './useTimelinePlayback';
 
 // Media Studio: Cap's editor in xBot's glass. A top bar, the preview with its
@@ -115,6 +117,26 @@ function Studio({ preview, settingsReady }: { preview: boolean; settingsReady: b
   const ffmpeg = useFfmpegStatus(true);
   const { ref: videoRef, element: videoElement, clock, playing, toggle: togglePlay, pause, seek } = useTimelinePlayback(composition?.video, hasAudio);
   const filmstrip = useFilmstrip(isVideo && doc ? doc.id : null, ffmpeg.state === 'ready');
+
+  // A recording's camera (synced to the playhead) and cursor.
+  const recording = status === 'document' ? (doc?.recording ?? null) : null;
+  const { ref: cameraRef, element: cameraElement } = useCameraSync(composition?.video, clock, playing, recording?.camera?.offsetMs ?? null);
+  const [cursor, setCursor] = useState<{ url: string; loaded: LoadedCursor } | null>(null);
+  const cursorUrl = recording?.cursor?.url ?? null;
+  const cursorBase = recording?.cursor?.base ?? '';
+  useEffect(() => {
+    if (!cursorUrl) return;
+    let alive = true;
+    loadCursor(cursorUrl, cursorBase).then(
+      (loaded) => alive && setCursor({ url: cursorUrl, loaded }),
+      (err: unknown) => console.error('studio: could not load the cursor track', err),
+    );
+    return () => {
+      alive = false;
+    };
+  }, [cursorUrl, cursorBase]);
+  const loadedCursor = cursor && cursor.url === cursorUrl ? cursor.loaded : null;
+  const assets = useMemo(() => ({ ...loaded.assets, cursor: loadedCursor }), [loaded.assets, loadedCursor]);
 
   const sourceItem = composition ? editor.media.get(composition.source.mediaId) : undefined;
   const sourceMissing = Boolean(composition && doc && ((doc.sourceMissing && composition.source.mediaId === doc.source.id) || loaded.sourceFailed));
@@ -251,6 +273,18 @@ function Studio({ preview, settingsReady }: { preview: boolean; settingsReady: b
     }));
   };
 
+  const pickDesktopPicture = async () => {
+    if (!composition) return;
+    const result = await window.xbot.studio.desktopWallpaper();
+    if (!result.ok) return setError(result.error.message);
+    const { id } = result.data;
+    editor.addMedia(result.data);
+    editor.update((current) => ({
+      ...current,
+      background: { type: 'image', mediaId: id, blur: 0, brightness: current.background.type === 'transparent' ? 0.5 : current.background.brightness },
+    }));
+  };
+
   const replaceSourceImage = async () => {
     const result = await window.xbot.studio.pickMedia('source');
     if (!result.ok) return setError(result.error.message);
@@ -291,7 +325,6 @@ function Studio({ preview, settingsReady }: { preview: boolean; settingsReady: b
     setBusy(true);
     setError(null);
     const frozen = composition;
-    const assets = loaded.assets;
     const { destination } = exportSettings;
     let token: string | null = null;
     try {
@@ -324,6 +357,7 @@ function Studio({ preview, settingsReady }: { preview: boolean; settingsReady: b
           composition: frozen,
           assets,
           sourceUrl: sourceItem.url,
+          camera: recording?.camera ?? null,
           resolution: destination === 'post' && exportSettings.resolution === '4k' ? '1080p' : exportSettings.resolution,
           fps: exportSettings.fps,
           write,
@@ -431,17 +465,20 @@ function Studio({ preview, settingsReady }: { preview: boolean; settingsReady: b
             displayScale > 0 && (
               <CompositionCanvas
                 composition={composition}
-                assets={loaded.assets}
+                assets={assets}
                 assetsReady={loaded.ready}
                 displayScale={displayScale}
                 quality={quality === 'half' ? 0.5 : 1}
-                video={isVideo ? { element: videoElement, clock: clock } : undefined}
+                video={isVideo ? { element: videoElement, clock, camera: cameraElement } : undefined}
                 testId="studio-preview-canvas"
               />
             )
           )}
           {isVideo && sourceItem && (
             <video ref={videoRef} className="stage-source" src={sourceItem.url} preload="auto" playsInline crossOrigin="anonymous" data-testid="studio-video" />
+          )}
+          {isVideo && recording?.camera && (
+            <video ref={cameraRef} className="stage-source" src={recording.camera.url} preload="auto" playsInline muted crossOrigin="anonymous" data-testid="studio-camera" />
           )}
         </>
       )}
@@ -585,6 +622,7 @@ function Studio({ preview, settingsReady }: { preview: boolean; settingsReady: b
           disabledReason={editable ? undefined : disabledReason}
           hasAudio={hasAudio}
           onPickImage={() => void pickBackground()}
+          onDesktop={() => void pickDesktopPicture()}
         />
       </div>
 
@@ -602,7 +640,7 @@ function Studio({ preview, settingsReady }: { preview: boolean; settingsReady: b
             selection={selection}
             onSelect={onSelect}
             onSplit={split}
-            hasCamera={false}
+            hasCamera={composition?.camera !== undefined}
             zoomAnchor={zoomAnchor}
           />
         </>

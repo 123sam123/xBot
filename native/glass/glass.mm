@@ -5,7 +5,7 @@
 // NSView.alphaValue fades the behind-window frost (the web content above it
 // stays fully opaque) and NSVisualEffectView.maskImage gives it rounded
 // corners. Plain Node-API C calls: ABI-stable, so one build serves every
-// Electron version. Built by scripts/build-glass.mjs.
+// Electron version. Built by scripts/build-native.mjs.
 
 #import <AppKit/AppKit.h>
 #include <math.h>

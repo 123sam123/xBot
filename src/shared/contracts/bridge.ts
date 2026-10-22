@@ -7,6 +7,7 @@ import type { DraftsApi } from './drafts';
 import type { EventsApi } from './events';
 import type { MediaApi } from './media';
 import type { ProjectsApi } from './projects';
+import type { RecordingsApi } from './recordings';
 import type { RemindersApi } from './reminders';
 import type { SettingsApi } from './settings';
 import type { StudioApi } from './studio';
@@ -26,4 +27,5 @@ export interface XbotBridge {
   reminders: RemindersApi;
   x: XApi;
   backup: BackupApi;
+  recordings: RecordingsApi;
 }

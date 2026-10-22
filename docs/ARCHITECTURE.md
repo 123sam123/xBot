@@ -425,9 +425,9 @@ native glass below.
   Node-API so one build serves any Electron) finds the window's behind-window
   effect views by class and sets their `alphaValue` (the frost fades; the web
   content above stays opaque) and a 40 px `maskImage` (a cap-inset, stretching
-  rounded rect, so it follows any size and scale). `scripts/build-glass.mjs`
+  rounded rect, so it follows any size and scale). `scripts/build-native.mjs`
   builds it universal (arm64 + x86_64) with `xcrun clang++` against
-  `node-api-headers`; `postinstall`, `dev`, `build` and `pnpm glass` rebuild it
+  `node-api-headers`; `postinstall`, `dev`, `build` and `pnpm native` rebuild it
   when its source is newer, and `package` refuses to go without it on macOS.
 - **Borderless windows.** A titled frameless window keeps the system's 10 px
   outline and shadow even with a 40 px mask, so with the addon both windows are

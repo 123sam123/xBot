@@ -74,6 +74,7 @@ export default defineConfig({
         input: {
           composer: resolve(__dirname, 'src/renderer/composer/index.html'),
           studio: resolve(__dirname, 'src/renderer/studio/index.html'),
+          recorder: resolve(__dirname, 'src/renderer/recorder/index.html'),
         },
       },
     },
