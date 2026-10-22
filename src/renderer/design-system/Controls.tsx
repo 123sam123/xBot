@@ -302,11 +302,14 @@ export function Toggle({
   description,
   checked,
   onChange,
+  disabled,
 }: {
   label: string;
   description?: string;
   checked: boolean;
   onChange(checked: boolean): void;
+  /** Shown but inert (aria-disabled, still focusable); say why in `description` (T8). */
+  disabled?: boolean;
 }) {
   const id = useId();
   return (
@@ -327,8 +330,9 @@ export function Toggle({
         aria-checked={checked}
         aria-labelledby={`${id}-label`}
         aria-describedby={description ? `${id}-desc` : undefined}
+        aria-disabled={disabled || undefined}
         className={cx('toggle', checked && 'toggle-on')}
-        onClick={() => onChange(!checked)}
+        onClick={() => !disabled && onChange(!checked)}
       >
         <span className="toggle-thumb" />
       </button>

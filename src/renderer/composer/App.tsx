@@ -15,7 +15,7 @@ import { setSetting, useSettings } from '../common/useSettings';
 import { Divider, GlassPanel, popovers, StatusChip, useAnyPopoverOpen, useAppearance, type MenuItem } from '../design-system';
 import { OnboardingSheet } from '../onboarding/OnboardingSheet';
 import { unseenSteps } from '../onboarding/registry';
-import { PREVIEW_DRAFT_TEXT, PREVIEW_HANDLE, PREVIEW_REMINDER_LABEL, PREVIEW_SOURCE, PREVIEW_THUMBNAIL_COMPOSITION } from '../preview/fixtures';
+import { PREVIEW_DRAFT_TEXT, PREVIEW_HANDLE, PREVIEW_SOURCE, PREVIEW_THUMBNAIL_COMPOSITION } from '../preview/fixtures';
 import { SettingsSheet } from '../settings/SettingsSheet';
 import { accountMenuEntries, accountTrigger, activeAccount, type AccountAction } from './account/accountMenu';
 import { connectX, useXState } from './account/useXState';
@@ -48,7 +48,7 @@ import { PublishStatus } from './publish/PublishStatus';
 import { ReconcileSheet } from './publish/ReconcileSheet';
 import { useClock, usePublishJobs } from './publish/usePublishJobs';
 import { PublishSheet } from './PublishSheet';
-import { ReminderRow } from './ReminderRow';
+import { ReminderControl } from './reminders';
 import { UploadZone } from './UploadZone';
 import { useDraft } from './useDraft';
 import { useFileDrop } from '../common/useFileDrop';
@@ -61,7 +61,8 @@ import { useFileDrop } from '../common/useFileDrop';
 // the ✦ menu, the suggestions sheet and the AI status row; an AI change goes
 // through the editor, so it autosaves and stays undoable. T7 adds project
 // ideas: the header's bulb and its popover, and the projects sheet; using an
-// idea goes through the same undoable path.
+// idea goes through the same undoable path. T8: the reminder row and its menu
+// (the idea a reminder brought uses that path too).
 
 const NOTICE_MS = 3200;
 /** The drafts contract's DRAFT_TEXT_MAX (not imported here: contract files bundle zod). */
@@ -619,7 +620,14 @@ function Composer({ preview, emojiPanel, seenSteps }: { preview: boolean; emojiP
         busy={jobBusy}
       />
       <Divider className="composer-divider" />
-      <ReminderRow label={preview ? PREVIEW_REMINDER_LABEL : 'Reminders aren’t set up yet'} muted={!preview} />
+      <ReminderControl
+        preview={preview}
+        onUseIdea={applyIdea}
+        onSettings={() => {
+          setSettingsFocus('reminders');
+          setSheet('settings');
+        }}
+      />
 
       <OnboardingSheet
         open={sheet === 'onboarding'}

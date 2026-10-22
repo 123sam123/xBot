@@ -40,6 +40,7 @@ src/
   shared/contracts/          <domain>.ts, <domain>.channels.ts, ipc.ts, define.ts,
                              bridge.ts, events.ts, settings.ts (aggregators)
   shared/composition/        model.ts, layout.ts (zod-free), schema.ts (zod, main only); see "Studio"
+  shared/reminders/          schedule.ts, label.ts, shortcut.ts (zod-free, pure); see "Reminders"
   renderer/
     design-system/           tokens, glass material, shared components (see "Design system")
     common/                  base.css, CompositionPreview, hooks shared by both pages,
@@ -98,15 +99,16 @@ imported by every aggregator, so **a sibling ticket edits only its own files**:
 | `studio` | T4 (XBOT-1N58PP) images; T5 (XBOT-G66JJK) video. T4 also added, additively and for the reasons in "Studio": `importLoose` and an exported `MediaRejected` to the media service, the Studio's quit flush to `app.ts`, full screen to `windows/studio.ts`, moved `useFileDrop` to `renderer/common/`, and the design-system pieces listed under "Components". T5 also added, additively and for the reasons in "Studio video": `services/ffmpeg/` (registered in `services/index.ts` before `media`); the optional `MediaTools.inspectVideo` hook, used by `media/service.ts`, `tools.ts` and `index.ts`; `ffmpeg.org` and `brew.sh` in `security.ts`; `{ hole }` in `drawComposition`; `previewLayout`, `useDevicePixelRatio` and `hole` in `CompositionCanvas`; `SpeakerIcon` and `SpeakerMutedIcon`; and `launch(userData, env?)` in `tests/e2e/studio-harness.ts` |
 | `ai` | T6 (XBOT-4BCGOR). T6 also added, additively: the `aiMenu` slot to `ComposerHeader`, `focusSection` to `SettingsSheet`, the ✦ menu, AI status row and suggestions sheet to `composer/App.tsx`, `src/shared/aiEndpoint.ts` and `src/shared/aiCopy.ts`, and the tighter dev CSP in `electron.vite.config.ts` (see "Local AI") |
 | `projects` | T7 (XBOT-5UVE6R). T7 also added, additively and for the reasons in "Project context": `generateTask` (with `buildTaskMessages` in `prompts.ts`, an exported `toFormat` in `schemas.ts` and an `'ideas'` running action) to the AI service, the `ideas` slot to `ComposerHeader`, `LightbulbIcon`, the `projects` sheet and Ideas wiring to `composer/App.tsx` (whose AI apply path became the shared `applyText`), `src/shared/ideaCopy.ts`, and the `ignore` devDependency |
-| `reminders` (+ launch at login, global shortcut) | T8 (XBOT-8V5WV5) |
+| `reminders` (+ launch at login, global shortcut) | T8 (XBOT-8V5WV5). T8 also added, additively and for the reasons in "Reminders": `showComposerInactive`, `isComposerVisible`, `composerDisplay`, the `onComposerHidden` / `onComposerFocused` hooks and the focus-instead-of-hide toggle to `windows/composer.ts`, `startReminders()` and the `fireReminder` test seam to `app.ts`, the `header` prop to the design system's `Menu`, `disabled` to `Toggle`, the reminder row's props, and the `src/shared/reminders/` lint block |
 | `x` | T9 (XBOT-OE2XV9). T9 also added, additively and for the reasons in "X publishing": the X wait in `app.ts`'s first `before-quit`, `openExternalIfAllowed` exported from `security.ts`, `db/durable.ts`, the design system's `TextField`, and props on `AccountMenu`, `ComposerHeader`, `ActionRow` and `PublishSheet` |
 | `backup` (+ README, preview mode fixtures, packaging) | T10 (XBOT-1DDYA1). T2 created `src/renderer/preview/` and `resources/fixtures/`; T10 extends them. |
 
 Shared files that several tickets may still touch, so coordinate:
 - `package.json` / `pnpm-lock.yaml`, for new dependencies (see below);
 - the renderer pages, which T2 restructures (others add to what T2 builds);
-- `tray.ts` (T8 adds reminder state), and `windows/composer.ts` (T8 adds a
-  `showInactive()` variant for auto-open).
+- `tray.ts` (its "Pause reminders" item is bound to `reminders.paused`; T8
+  left it as it was), and `windows/composer.ts` (T8 added the `showInactive()`
+  path for auto-open, see "Reminders").
 
 ### Adding a call, end to end
 
@@ -161,8 +163,8 @@ Its event map is merged from every domain's `<Domain>Events` interface:
 `status:changed`, `post:published`, `x:accounts-changed`, `x:job-changed`,
 `export:progress` (T5: `{ job }`, a video export job's state), `studio:ffmpeg`,
 `settings:changed`, `ui:open-settings`, `ai:state`, `ai:progress`,
-`ai:pull-progress`, `projects:changed` and `projects:ideas-changed` exist
-today. An event listed in a
+`ai:pull-progress`, `projects:changed`, `projects:ideas-changed` and
+`reminders:changed` exist today. An event listed in a
 domain's `<domain>ForwardedEvents` is forwarded to every window automatically.
 
 ## Settings
@@ -255,8 +257,11 @@ Defined by `src/main/index.ts` and `src/main/app.ts`:
    7. forward events to the renderers (and status changes as `status:changed`);
    8. `applyAppearance()` (`XBOT_APPEARANCE`), then create both windows, hidden;
    9. create the tray and the app menu;
-   10. attach the lifecycle handlers;
-   11. log `xBot ready`.
+   10. `startReminders()`: the reminder timer, powerMonitor, notifications and
+       the global shortcut, which need the windows, the tray and the forwarded
+       events (see "Reminders");
+   11. attach the lifecycle handlers;
+   12. log `xBot ready`.
 
 `second-instance` (another launch) and macOS `activate` (reopened from Finder)
 both toggle the composer. The first `before-quit` is prevented: main asks the
@@ -284,8 +289,12 @@ do windows really close. `will-quit` disposes services, then closes the DB.
     `window.xbot.windows.resizeComposer(height)`, and calls it again on
     `visibilitychange`. Main re-clamps the height, so no empty region ever shows
     below the panel. Keep the root element's height equal to the visible content.
-  - Show is position, then `show()`, then `focus()`. T8's automatic open must use
-    `showInactive()` instead, so the composer never steals focus.
+  - Show is position, then `show()`, then `focus()`. T8's automatic open uses
+    `showComposerInactive()` (position, then `showInactive()`), so the composer
+    never steals focus. While a composer shown that way has not been focused,
+    `toggleComposer()` (tray click, the global shortcut, `second-instance`,
+    `activate`) focuses it instead of hiding it; any other visible composer
+    toggles closed as before.
   - The panel does not activate xBot. Anything that needs xBot to be the
     active app (a parentless `dialog.showOpenDialog`, `app.showEmojiPanel()`)
     calls `app.focus({ steal: true })` first.
@@ -452,7 +461,8 @@ Prop changes are additive only; siblings build against these.
   why. Wrap a disabled control in `Tooltip({ label })`; the label is also its
   accessible description.
 - `Popover({ id, anchor, placement?, offset?, crossOffset?, label, role?, testId?, keepOpenWithin? })`
-  and `Menu({ id, anchor, label, items: { id, label, detail?, disabled?, checked?, onSelect? }[] })`:
+  and `Menu({ id, anchor, label, items: { id, label, detail?, disabled?, checked?, onSelect? }[], header? })`
+  (`header`, T8: non-interactive text above the items):
   - they render into `document.body` with `position: fixed`, so opening one
     never moves the page (the Studio canvas keeps its rect);
   - one per window is open at a time (`popovers`, a React-free store; open
@@ -469,7 +479,7 @@ Prop changes are additive only; siblings build against these.
 - `Slider({ …, onCommit?, testId? })` (`<input type="range">`; `onCommit` fires
   on pointer-up and key-up, so a drag is one undo step), `SwatchGroup`,
   `Segmented` (radiogroups; an option may be `disabled` with a `reason`
-  tooltip), `Toggle` (`role="switch"`), `TextField({ label, value, onChange,
+  tooltip), `Toggle` (`role="switch"`; T8 added `disabled`, shown but inert), `TextField({ label, value, onChange,
   onCommit?, stacked?, description?, error?, readOnly?, selectOnFocus?, code? })`
   (commits on blur and Enter; T9 added `stacked` (label above a full-width
   input) through `code`), `NumberField({ label, value, min,
@@ -500,7 +510,8 @@ Prop changes are additive only; siblings build against these.
     `busy` reads "Posting…";
   - `publish/PublishStatus({ job, now, draftLabel?, onAction })` (T9): the job row
     above the action row;
-  - `ReminderRow({ label, muted?, onClick? })`;
+  - `ReminderRow({ label, muted?, onClick?, buttonRef?, expanded?, idea?, hint? })`,
+    driven by T8's `ReminderControl` (`composer/reminders/`);
   - sheets, one open at a time: `OnboardingSheet`, `SettingsSheet({ open, onClose, focusSection? })`
     (`settings/`; `focusSection` scrolls that section into view), `HistorySheet`,
     `PublishSheet({ lede?, onConnect?, … })` (post it yourself), `SuggestionsSheet`
@@ -534,7 +545,8 @@ Prop changes are additive only; siblings build against these.
   while media is being added, and while the draft's post is on its way or
   waiting to be checked. The Studio's tools and "Add to post" are
   disabled with a reason until an image or video is open (a video needs FFmpeg),
-  and the reminder row says reminders aren't set up. The sample handle and media
+  and the reminder row shows the real schedule ("Next reminder in 24 min",
+  "Reminders paused", …). The sample handle and media
   exist only in preview mode, labelled "Preview", where Post says "Posting is
   off in preview" and adding media is off.
 - **Studio hand-off.** "Edit in Studio ↗" calls `drafts.openInStudio({ draftId, attachmentId })`;
@@ -971,10 +983,11 @@ adding their own files; nobody edits a shared list.
   whose ids are not in `ui.onboardingSeen`, on the composer's first load, never
   in preview. Moving past a step marks it seen; Skip, the close button and
   Escape mark the whole run seen. Welcome is `order: 0`; Ollama 10, model 20,
-  project folders 30; suggested: X 40, reminder hours 50.
+  project folders 30, X 40, reminder hours 50.
 - **Settings** (`renderer/settings/`): each `sections/<id>.tsx` default-exports
   `{ id, order, title, Component }`; the component reads its own state. A
   section that renders nothing is hidden. Built in: Status (0), Appearance (100).
+  Others: Local AI 10, Voice 20, Reminders 30, X 40, Startup and shortcut 90.
 - **Status** (`src/main/status.ts`, electron-free): a domain calls
   `registerStatusProvider({ id, order, get })` once, where `get()` returns an
   `IntegrationStatus { id, label, tone: 'ok' | 'neutral' | 'warning' | 'busy', detail? }`
@@ -984,6 +997,91 @@ adding their own files; nobody edits a shared list.
   default view stays as in the reference. Ids in use: T3's `media-export`
   (90), and T5's `studio-export` (91, "Export running") and `ffmpeg` (92,
   "FFmpeg not found" plus the fix).
+
+## Reminders
+
+T8 (XBOT-8V5WV5): SPEC §13, plus launch at login and the global shortcut
+from §4. Migration `202610221330_reminders_state.sql`.
+
+- **Files.**
+  - `src/shared/reminders/` is pure and zod-free, so the renderer imports it as values (an `eslint.config.mjs` block keeps zod and contract values out):
+    - `schedule.ts`: `nextDue`, the state transitions and `decideDelivery`;
+    - `label.ts`: the row's words;
+    - `shortcut.ts`: accelerators.
+  - `services/reminders/`:
+    - `service.ts`: the scheduler, electron-free;
+    - `store.ts`: the `reminder_state` row;
+    - `timeZone.ts`;
+    - `index.ts`: the only Electron glue.
+  - `composer/reminders/` holds the row, its menu and the fields that Settings and onboarding share. The settings sections are `reminders` and `startup`; the onboarding step is `reminders`.
+- **Settings and state.**
+  - Preferences are `reminders.*` settings:
+    - `intervalMinutes`;
+    - `workStart` / `workEnd` (`HH:MM`);
+    - `days` (ISO, 1 = Monday);
+    - `dailyCap`;
+    - `paused`, which the tray menu also toggles;
+    - `autoOpen`, `notificationOnly`;
+    - `shortcut`.
+  - What changes on every fire lives in the one-row `reminder_state` table. Times are ISO, all of them except `snoozed_until` are clamped to now when the clock goes backwards, and `snoozed_until` is capped at now + 8 days.
+- **The schedule** (`nextDue`). The rules:
+  - Nothing is due while paused, or until the `reminders` onboarding step is in `ui.onboardingSeen`. Moving past that step restarts the interval.
+  - Otherwise the latest of these applies:
+    - `interval_from` + interval. The interval restarts on a fire, a dismissal, unpausing, clearing a snooze, the end of onboarding and the first run;
+    - the snooze;
+    - `last_published_at` + 60 min;
+    - 2 min after launch;
+    - 1 min after a `reminders.*` settings change.
+  - That time then moves into the next working window: the start's local day must be a working day; end ≤ start runs past midnight; end == start is all day. A due time that falls past a window's end moves to the next window's start.
+  - A local day whose cap is reached moves on to the next day.
+  - Zone math uses `Intl` with the detected zone. A DST gap moves forward; an overlap takes the earlier instant.
+  - `nextDue` returns the rule that set the time (`reason`), which the labels use.
+- **The timer.** One `setTimeout`, re-armed at most 60 s ahead:
+  - every tick reads the zone again from the `/etc/localtime` link (not V8's cached zone) and the wall clock;
+  - a tick more than 90 s late counts as a wake from sleep;
+  - `resume`, `unlock-screen` and `user-did-become-active` wait 30 s, then tick;
+  - a tick fires only when `nextDue(now) ≤ now`, so any amount of missed time collapses into at most one reminder, and only inside working hours;
+  - state is written before delivery.
+- **Delivery** (`decideDelivery`):
+  1. The composer is already visible: nothing pops up. The reminder still counts.
+  2. Nobody is there (idle ≥ 5 min, a locked screen, or another macOS user active): the reminder waits and is checked on each tick.
+  3. Notification-only: a notification.
+  4. "Open dropdown" off: a notification, and the dropdown (when safe) only if that notification fails or none can be shown.
+  5. Otherwise the dropdown, unless an xBot modal is up or full-screen work is likely; then a notification.
+- **The cycle.**
+  - A fire opens a cycle: an id, the delivery and T7's top idea, which `projects:ideas-changed` keeps current.
+  - It ends on a dismissal, either Skip, a snooze, pause, `post:published` or the next fire. The end closes the notification.
+  - A composer hide during a cycle is a dismissal: the next reminder waits a full interval, and a cycle never reopens.
+  - An auto-opened composer nobody focuses hides itself after 2 min. An unfocused panel gets no blur, so an outside click can't close it.
+- **Notifications.**
+  - Each carries the fixed id `xbot-reminder`: the newest replaces the last, and the stale one is removed at launch.
+  - Actions are Write Post / Snooze 30 min / Skip. A click or Write Post always opens the composer; Snooze and Skip act only on their own cycle.
+  - No `show` within 10 s counts as failed. When reminders depend on notifications (notification-only, or "Open dropdown" off), the row and Settings then say notifications are off.
+  - Electron 45 notes that macOS notifications need a signed app, so the ad-hoc signed build may fail here.
+  - Onboarding's test notification asks for permission early.
+  - Notifications never carry idea text, which comes from project files. An auto-opened dropdown shows "An idea is ready" until it is focused.
+- **Ideas and AI.** On a fire, `suggestions().refresh('auto', 'background')` runs only when all of these hold:
+  - local AI is ready;
+  - `projects().hasNewActivitySince(last_generation_at)`;
+  - at least 2 h have passed since the last generation a reminder started.
+
+  `last_generation_at` is written when the refresh starts. It is put back after `ai_busy`, Ollama or model errors, and after a cancellation.
+- **What can and can't be detected.**
+  - **Can:** a locked screen (`getSystemIdleState`, lock events), fast user switching, user idle time, xBot's own modals (a held window or native dialog, the Studio, shortcut recording) and the composer being open.
+  - **Best effort, unverified on a Mac:** native full screen. The guess is that the display under the tray has no menu bar (its work area equals its bounds). With the menu bar set to always auto-hide, this always says "full screen", so xBot sends notifications instead. Chromium may also not refresh display info when Spaces change. A `panel` window floats over full-screen apps, so a miss shows the dropdown over them, unfocused, for at most 2 min.
+  - **Can't with public APIs:** Focus / Do Not Disturb, screen sharing, other apps' modal dialogs and browser-only full screen.
+  - Nothing captures the screen or watches other apps.
+- **`post:published`** starts the cooldown when the event arrives. Reconciliation (T9) can emit it hours after the post.
+- **Launch at login** is the OS login item (`app.get/setLoginItemSettings`), read back after each change because the call fails silently. It is offered only in the packaged app (a dev run would register the Electron binary), inside /Applications, on macOS and Windows. "Requires approval" points to System Settings → Login Items.
+- **The global shortcut** (default ⌥⌘X, `Alt+CommandOrControl+X`) toggles the composer.
+  - Every change goes through one register-first path, including a generic `settings:set`: a failure keeps the old shortcut and writes the old value back after the renderers have the rejected one.
+  - xBot refuses combos without two modifiers including ⌘/⌃ (function keys excepted), and macOS-reserved ones (⌃⌘Space, ⌥⌘Esc, ⇧⌘Q, …), which `register()` accepts.
+  - The settings field records from `event.code` while global shortcuts are suspended. The suspension is lifted on hide, on reload and before registering.
+  - A stored shortcut that fails at launch is kept, and its error is shown.
+- **Preview mode** has no timer, notifications or shortcut; the row keeps its sample label.
+- **Tests.**
+  - `tests/unit/reminders-schedule.test.ts` covers hours, days, DST and zones, snooze, pause, the cap and the cooldown.
+  - `tests/unit/reminders-service.test.ts` covers sleep recovery, restart, dismissal, and no AI call without new activity.
 
 ## Security rules
 
@@ -1090,8 +1188,10 @@ adding their own files; nobody edits a shared list.
   logger and similar dependencies.
 - The e2e test launches `electron .` with `XBOT_E2E=1` and a temporary
   `XBOT_USER_DATA_DIR`. In unpackaged runs only, `XBOT_E2E=1` exposes
-  `globalThis.__xbotTest` (`toggleComposer`, `openStudio`), so tests can drive
-  the real code paths.
+  `globalThis.__xbotTest` (`toggleComposer`, `openStudio`, `fireReminder`), so
+  tests can drive the real code paths. Under `XBOT_E2E=1` the reminder timer
+  never fires on its own; `fireReminder` fires one through the real delivery
+  rules.
 - The video tests (T5) run real FFmpeg:
   - `tests/unit/video-{export,import}.test.ts` run on the electron-free
     pipeline, with fixtures made by lavfi in `beforeAll`, never committed;

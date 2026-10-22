@@ -200,6 +200,17 @@
   flex-direction: column;
 }
 
+.menu-header {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 10px 10px;
+  margin-bottom: 4px;
+  border-bottom: 1px solid rgb(255 255 255 / 0.12);
+  font-size: var(--fs-xs);
+  color: var(--text-secondary);
+}
+
 .menu-item {
   display: flex;
   align-items: center;
@@ -471,6 +482,10 @@
 .toggle-on .toggle-thumb {
   transform: translateX(16px);
   background: var(--text-on-frost);
+}
+
+.toggle[aria-disabled='true'] {
+  opacity: 0.4;
 }
 
 .toggle:focus-visible {
