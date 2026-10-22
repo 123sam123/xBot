@@ -2,9 +2,8 @@
 // the export draw the same full-resolution bitmap, so they agree.
 //
 // `xbot-media:` URLs are fetched (the scheme sends CORS headers, so the
-// canvas stays readable); anything else, such as the bundled preview sample
-// (a `file:` URL in builds), goes through an <img>. EXIF orientation is
-// applied, and an animated GIF yields its first frame.
+// canvas stays readable); anything else goes through an <img>. EXIF
+// orientation is applied, and an animated GIF yields its first frame.
 
 const MEDIA_SCHEME = 'xbot-media:';
 

@@ -19,8 +19,9 @@ const MEDIA_FILTERS = [{ name: 'Images and video', extensions: ['png', 'jpg', 'j
  * Runs a picker for the composer. The composer is a non-activating panel, so
  * xBot may not be the active app: activate it first, or a parentless dialog
  * can open behind another app. `dialog` is read at call time so tests can stub it.
+ * T10's backup folder picker uses it too.
  */
-async function pickPaths(options: OpenDialogOptions): Promise<string[] | null> {
+export async function pickPaths(options: OpenDialogOptions): Promise<string[] | null> {
   const win = composerWindow();
   app.focus({ steal: true });
   const show = () => dialog.showOpenDialog(options);

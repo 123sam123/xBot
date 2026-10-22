@@ -2,7 +2,6 @@ import { join } from 'node:path';
 import { app, Menu, nativeImage, Tray } from 'electron';
 import { appEvents } from './events';
 import { importDroppedOnTray } from './ipc/media';
-import { isPreviewMode } from './paths';
 import { settings } from './services/settings';
 import { attachTray, showComposer, toggleComposer } from './windows/composer';
 import { openStudio } from './windows/studio';
@@ -47,13 +46,11 @@ export function createTray(): Tray {
   attachTray(tray);
 
   tray.on('click', () => toggleComposer());
-  if (!isPreviewMode(process.argv, process.env)) {
-    // A drag that starts in Finder can activate Finder and blur (hide) the
-    // composer, so the menu-bar icon is a drop target too: dragging over it
-    // shows the composer, dropping on it attaches to the current draft.
-    tray.on('drag-enter', () => showComposer());
-    tray.on('drop-files', (_event, files) => importDroppedOnTray(files));
-  }
+  // A drag that starts in Finder can activate Finder and blur (hide) the
+  // composer, so the menu-bar icon is a drop target too: dragging over it
+  // shows the composer, dropping on it attaches to the current draft.
+  tray.on('drag-enter', () => showComposer());
+  tray.on('drop-files', (_event, files) => importDroppedOnTray(files));
   if (process.platform === 'darwin') {
     // popUpContextMenu (not setContextMenu) so left-click stays a toggle; the
     // menu is rebuilt each time so "Pause reminders" is current.

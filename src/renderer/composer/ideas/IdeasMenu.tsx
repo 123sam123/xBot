@@ -11,7 +11,8 @@ const NOTE_MAX = 500;
  * The header's Ideas entry: a small bulb (with a dot when there are new
  * ideas) and its popover. Opening it asks main for ideas from activity no
  * generation has used yet, in the background, so an unchanged history costs
- * nothing. Nothing touches the post until the user picks Use.
+ * nothing. Nothing touches the post until the user picks Use. Preview mode
+ * (T10) lists its seeded sample idea, labelled, and finds no new ones.
  */
 export function IdeasMenu({
   state,
@@ -80,14 +81,7 @@ function IdeasBody({
   onAiSetup(): void;
 }) {
   const [useError, setUseError] = useState<string | null>(null);
-  if (preview || state?.preview) {
-    return (
-      <>
-        <h2 className="ideas-title">Ideas</h2>
-        <p className="sheet-note">{ideaCopy.preview}</p>
-      </>
-    );
-  }
+  const sample = preview || (state?.preview ?? false);
   const ideas = state?.ideas ?? [];
   const running = state?.running ?? null;
   const aiBlocked = aiState && aiState.phase !== 'ready' && aiState.phase !== 'checking' ? aiState.guidance : null;
@@ -107,15 +101,22 @@ function IdeasBody({
     <>
       <header className="ideas-head">
         <h2 className="ideas-title">Ideas</h2>
-        <GhostButton
-          className="ideas-refresh"
-          data-testid="ideas-refresh"
-          disabled={running !== null || aiBlocked !== null}
-          onClick={() => void window.xbot.projects.refreshIdeas('force')}
-        >
-          Refresh ideas
-        </GhostButton>
+        {!sample && (
+          <GhostButton
+            className="ideas-refresh"
+            data-testid="ideas-refresh"
+            disabled={running !== null || aiBlocked !== null}
+            onClick={() => void window.xbot.projects.refreshIdeas('force')}
+          >
+            Refresh ideas
+          </GhostButton>
+        )}
       </header>
+      {sample && (
+        <p className="sheet-note" data-testid="ideas-preview-note">
+          A preview sample. Finding new ideas is off in preview.
+        </p>
+      )}
 
       {running && (
         <div className="ai-running" role="status" data-testid="ideas-running">
@@ -161,7 +162,7 @@ function IdeasBody({
         </div>
       )}
 
-      {empty && !running && projects.length === 0 && !state?.needsContext && (
+      {empty && !running && !sample && projects.length === 0 && !state?.needsContext && (
         <p className="ideas-empty">Add a project folder and xBot suggests posts from its commits and docs, or just tell it what you built.</p>
       )}
       {empty && !running && state?.needsContext && (
@@ -170,7 +171,7 @@ function IdeasBody({
         </p>
       )}
 
-      <NoteField projects={projects} askForContext={empty && !running && (state?.needsContext ?? false)} disabled={running !== null} />
+      {!sample && <NoteField projects={projects} askForContext={empty && !running && (state?.needsContext ?? false)} disabled={running !== null} />}
 
       <footer className="ideas-foot">
         <GhostButton

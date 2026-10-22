@@ -1,8 +1,11 @@
-# Unsigned (ad-hoc) builds for local use; signing and notarization are out of scope.
+# Unsigned (ad-hoc) builds for local use. Signing with a Developer ID and
+# notarization are optional and not set up: see README.md → "Installing the
+# unsigned app". FFmpeg is not bundled (docs/FFMPEG.md): xBot uses the user's.
 appId: app.xbot.desktop
 productName: xBot
 directories:
   output: dist
+  # build/icon.png (1024×1024, from resources/icon.svg by `pnpm icons`) becomes the .icns.
   buildResources: build
 files:
   - out/**
@@ -17,10 +20,15 @@ files:
 asarUnpack:
   - "**/*.node"
 extraResources:
+  # Contents/Resources/: the tray's template PNGs, and preview mode's sample
+  # media (Contents/Resources/fixtures/, for `--preview`).
   - from: resources
     to: .
     filter:
       - trayTemplate*.png
+      - fixtures/my-tiny-tool.png
+      - fixtures/my-tiny-tool-framed.png
+      - fixtures/my-tiny-tool.mp4
 # N-API prebuilds are ABI-stable across Electron versions: nothing to rebuild.
 npmRebuild: false
 electronFuses:
@@ -29,11 +37,19 @@ electronFuses:
   enableNodeCliInspectArguments: false
   onlyLoadAppFromAsar: true
 mac:
+  # One build per architecture, not universal: each ships only its own
+  # better-sqlite3 prebuild (the filter above), which a universal merge can't
+  # reconcile. dist/ gets a .dmg and a .zip for each.
   target:
-    - dmg
-    - zip
+    - target: dmg
+      arch: [arm64, x64]
+    - target: zip
+      arch: [arm64, x64]
   category: public.app-category.productivity
   # Ad-hoc signature: Apple Silicon refuses to launch fully unsigned binaries.
+  # To sign and notarize instead, set `identity` to a Developer ID Application
+  # certificate, `hardenedRuntime: true`, and `notarize: true` (with the Apple
+  # ID or API key environment variables electron-builder documents).
   identity: "-"
   hardenedRuntime: false
   extendInfo:

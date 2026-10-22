@@ -54,8 +54,9 @@ export default defineConfig(
     },
   },
   {
-    // The reminder schedule, labels and shortcut rules are imported by the renderer as values (T8).
-    files: ['src/shared/reminders/**/*.ts'],
+    // The reminder schedule, labels and shortcut rules (T8) and preview mode's sample (T10) are
+    // imported as values by code that must stay zod-free.
+    files: ['src/shared/reminders/**/*.ts', 'src/shared/previewSample.ts'],
     rules: {
       '@typescript-eslint/no-restricted-imports': [
         'error',

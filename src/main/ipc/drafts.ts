@@ -9,7 +9,6 @@ import {
   updateDraftSchema,
 } from '../../shared/contracts/drafts';
 import { appEvents } from '../events';
-import { isPreviewMode } from '../paths';
 import { currentStudioTarget, drafts, setStudioTarget } from '../services/drafts';
 import { draftsQueue } from '../services/drafts/queue';
 import { composerWindow } from '../windows/composer';
@@ -21,12 +20,12 @@ let flushAck: (() => void) | null = null;
 
 /**
  * Asks the composer to save pending text and waits for its ack, at most
- * `timeoutMs`. Resolves at once when there is nothing to wait for: preview
- * mode, or a composer that is not loaded or has crashed.
+ * `timeoutMs`. Resolves at once when there is nothing to wait for: a composer
+ * that is not loaded or has crashed. Preview mode saves too (T10): its drafts
+ * are real rows in the preview userData.
  */
 export function requestDraftFlush(timeoutMs: number): Promise<void> {
   const composer = composerWindow();
-  if (isPreviewMode(process.argv, process.env)) return Promise.resolve();
   if (!composer || composer.isDestroyed() || composer.webContents.isCrashed() || composer.webContents.isLoading()) {
     return Promise.resolve();
   }

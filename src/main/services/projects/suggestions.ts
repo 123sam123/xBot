@@ -154,7 +154,8 @@ export function createSuggestionsService(deps: SuggestionsDeps) {
   }
 
   function state(): IdeasState {
-    const ideas = deps.isPreview ? [] : ranked().slice(0, SHOWN);
+    // Preview mode lists what is stored: the seeded sample idea (T10). Refresh stays refused.
+    const ideas = ranked().slice(0, SHOWN);
     return {
       ideas,
       running: running ? { requestId: running.requestId, priority: running.priority, projectName: running.projectName } : null,

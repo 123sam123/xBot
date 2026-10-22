@@ -44,7 +44,6 @@ import {
   useEscapeLayer,
   type MenuItem,
 } from '../design-system';
-import { PREVIEW_CLIP } from '../preview/fixtures';
 import { fitAspect } from './crop';
 import { CropOverlay } from './CropOverlay';
 import { FfmpegCard, useFfmpegStatus } from './FfmpegCard';
@@ -67,8 +66,8 @@ import { VideoStage } from './VideoStage';
 // (T4, XBOT-1N58PP). A video (T5, XBOT-G66JJK) plays in a <video> under the
 // canvas's frame layer, trims on the timeline, and exports as an FFmpeg job
 // whose progress arrives as `export:progress`. Without FFmpeg a video opens
-// read-only with guidance. Preview mode edits the sample locally and keeps
-// T2's sample timeline.
+// read-only with guidance. Preview mode (T10) runs all of this on its seeded
+// sample documents, labelled "Preview".
 
 const NOTICE_MS = 3200;
 
@@ -81,7 +80,6 @@ const TOOLS: { id: ToolId; label: string; icon: React.ReactNode }[] = [
 ];
 const TOOL_IDS = TOOLS.map((tool) => tool.id);
 const MORE_MENU = 'studio-more';
-const NOT_IN_PREVIEW = 'Not available in preview';
 
 async function backToPost() {
   await window.xbot.windows.hide();
@@ -130,7 +128,7 @@ export function App() {
 }
 
 function Studio({ preview, settingsReady }: { preview: boolean; settingsReady: boolean }) {
-  const editor = useStudioEditor(preview);
+  const editor = useStudioEditor();
   const { composition, document: doc, status } = editor;
   const loaded = useCompositionAssets(composition, editor.media, editor.history);
   useReadyMarker(settingsReady && status !== 'loading');
@@ -158,7 +156,7 @@ function Studio({ preview, settingsReady }: { preview: boolean; settingsReady: b
   // Video (T5).
   const videoInfo = status === 'document' ? (doc?.video ?? null) : null;
   const isVideo = videoInfo !== null && composition?.video !== undefined;
-  const ffmpeg = useFfmpegStatus(!preview);
+  const ffmpeg = useFfmpegStatus(true);
   const ffmpegReady = ffmpeg.state === 'ready';
   const playback = useVideoPlayback(composition?.video, videoInfo?.durationMs ?? 0, (videoInfo?.audioStream ?? null) !== null);
   const filmstrip = useFilmstrip(isVideo && doc ? doc.id : null, ffmpegReady);
@@ -288,7 +286,7 @@ function Studio({ preview, settingsReady }: { preview: boolean; settingsReady: b
     if (result.data) editor.openSession(result.data);
   };
 
-  const dropActive = useFileDrop(!preview && !busy, (files) => {
+  const dropActive = useFileDrop(!busy, (files) => {
     void window.xbot.studio.importFiles(files).then((result) => {
       if (!result.ok) return setError(result.error.message);
       editor.openSession(result.data.opened);
@@ -349,10 +347,6 @@ function Studio({ preview, settingsReady }: { preview: boolean; settingsReady: b
   };
 
   const addToPost = async () => {
-    if (preview) {
-      setNotice('Preview sample: nothing is attached');
-      return;
-    }
     if (!doc || !composition || busy || activeJob) return;
     popovers.closeAll();
     setBusy(true);
@@ -372,39 +366,31 @@ function Studio({ preview, settingsReady }: { preview: boolean; settingsReady: b
 
   const menuItems: MenuItem[] = [
     { id: 'reset', label: 'Reset style', disabled: !editable, onSelect: () => composition && change(resetStyle(composition)) },
-    {
-      id: 'presets',
-      label: 'Presets…',
-      detail: preview ? NOT_IN_PREVIEW : undefined,
-      disabled: preview || !editable,
-      onSelect: () => popovers.open(PRESETS_POPOVER),
-    },
-    { id: 'open', label: 'Open image or video…', detail: preview ? NOT_IN_PREVIEW : undefined, disabled: preview || busy, onSelect: () => void openMedia() },
+    { id: 'presets', label: 'Presets…', disabled: !editable, onSelect: () => popovers.open(PRESETS_POPOVER) },
+    { id: 'open', label: 'Open image or video…', disabled: busy, onSelect: () => void openMedia() },
     {
       id: 'replace',
       label: 'Replace source…',
-      detail: preview ? NOT_IN_PREVIEW : isVideo ? 'Images only' : undefined,
-      disabled: preview || busy || status !== 'document' || isVideo,
+      detail: isVideo ? 'Images only' : undefined,
+      disabled: busy || status !== 'document' || isVideo,
       onSelect: () => void replaceSourceImage(),
     },
   ];
 
   const canUndo = editable && (editor.history?.past.length ?? 0) > 0;
   const canRedo = editable && (editor.history?.future.length ?? 0) > 0;
-  const addDisabledReason = preview
-    ? undefined
-    : activeJob
-      ? 'Exporting…'
-      : (disabledReason ??
-        (isVideo && !ffmpegReady
-          ? ffmpeg.state === 'missing'
-            ? ffmpeg.message
-            : 'Looking for FFmpeg…'
-          : isVideo && composition?.background.type === 'transparent'
-            ? 'Video can’t have a transparent background'
-            : !loaded.ready
-              ? 'Loading the image…'
-              : undefined));
+  const addDisabledReason = activeJob
+    ? 'Exporting…'
+    : (disabledReason ??
+      (isVideo && !ffmpegReady
+        ? ffmpeg.state === 'missing'
+          ? ffmpeg.message
+          : 'Looking for FFmpeg…'
+        : isVideo && composition?.background.type === 'transparent'
+          ? 'Video can’t have a transparent background'
+          : !loaded.ready
+            ? 'Loading the image…'
+            : undefined));
   const progress = activeJob ? Math.round(activeJob.progress * 100) : 0;
   const addLabel = activeJob ? (activeJob.status === 'queued' ? 'Queued…' : `Exporting… ${progress}%`) : busy ? 'Rendering…' : undefined;
 
@@ -545,7 +531,6 @@ function Studio({ preview, settingsReady }: { preview: boolean; settingsReady: b
       <div className="studio-toolbar-row">
         <StudioToolbar items={tools} active={openTool} onSelect={selectTool} disabledReason={disabledReason} />
       </div>
-      {preview && <PreviewTimeline />}
       {isVideo && composition?.video && videoInfo && (
         <Timeline
           duration={durationMs / 1000}
@@ -591,7 +576,6 @@ function Studio({ preview, settingsReady }: { preview: boolean; settingsReady: b
             onChange={change}
             onCommit={editor.endGesture}
             onPickBackground={() => void pickBackground()}
-            pickDisabledReason={preview ? NOT_IN_PREVIEW : undefined}
             crop={cropControls}
           />
           <OutputPopover anchor={dimsAnchor} composition={composition} gif={doc?.gif ?? false} video={videoInfo} onChange={(next) => change(next)} />
@@ -615,36 +599,5 @@ function StudioViewport({ displayScale, children }: { displayScale: number; chil
     <div ref={viewport} className="studio-viewport">
       <div className="studio-viewport-inner">{children}</div>
     </div>
-  );
-}
-
-/** T2's sample clip, preview mode only. */
-function PreviewTimeline() {
-  const [current, setCurrent] = useState(PREVIEW_CLIP.current);
-  const [playing, setPlaying] = useState(false);
-  // Plays the sample clip's playhead through the trim range, looping.
-  useEffect(() => {
-    if (!playing) return;
-    const start = PREVIEW_CLIP.trim[0] * PREVIEW_CLIP.duration;
-    const end = PREVIEW_CLIP.trim[1] * PREVIEW_CLIP.duration;
-    let last = performance.now();
-    let frame = requestAnimationFrame(function tick(now) {
-      const elapsed = (now - last) / 1000;
-      last = now;
-      setCurrent((time) => (time + elapsed >= end || time < start ? start : time + elapsed));
-      frame = requestAnimationFrame(tick);
-    });
-    return () => cancelAnimationFrame(frame);
-  }, [playing]);
-  return (
-    <Timeline
-      duration={PREVIEW_CLIP.duration}
-      current={current}
-      trim={PREVIEW_CLIP.trim}
-      frames={PREVIEW_CLIP.frames}
-      playing={playing}
-      onTogglePlay={() => setPlaying((value) => !value)}
-      label="Sample clip timeline"
-    />
   );
 }
