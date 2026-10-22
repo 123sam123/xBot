@@ -7,7 +7,7 @@ import type { Composition } from '../../src/shared/composition/model';
 import type { FfmpegBinaries } from '../../src/main/services/ffmpeg/locate';
 import type { IntegrationStatus } from '../../src/shared/contracts/app';
 import { distance, ffprobe, findFfmpeg, frameAt, makeQuadrantClip, pixel, quadrantPng, QUADRANTS, type Rgb } from '../unit/helpers/videoFixtures';
-import { launch, previewDrawn, readDb, root, showComposerFirstRun, studioPage, stubPicker, windowVisible } from './studio-harness';
+import { composerPage, launch, previewDrawn, readDb, root, showComposerFirstRun, studioPage, stubPicker, windowVisible } from './studio-harness';
 
 // SPEC §16 video and §21: the real Studio with a real video and real FFmpeg.
 // It plays the clip inside its frame and trims it from the timeline
@@ -227,6 +227,40 @@ test('a video plays in its frame, trims on the timeline, exports with progress a
     expect(distance(sample(0), colour), `${edge} edge, first full pixel`).toBeLessThanOrEqual(64);
     expect(distance(sample(4), colour), `${edge} edge, 4 px in`).toBeLessThanOrEqual(8);
   }
+
+  // "Edit in Studio ↗" on the MP4 reopens its document, trim and all.
+  const composer = await composerPage(app);
+  await expect(composer.getByTestId('attachment-card')).toHaveCount(1);
+  await composer.getByTestId('attachment-card').getByRole('button', { name: 'Edit in Studio' }).click();
+  await expect.poll(() => windowVisible(app!, '/studio/')).toBe(true);
+  await expect(panel).toHaveAttribute('data-document-id', documentId);
+  await expect(studio.getByTestId('timeline-trim-start')).toHaveAttribute('aria-valuenow', '1.1');
+  await expect(studio.getByTestId('timeline-trim-end')).toHaveAttribute('aria-valuenow', '4');
+
+  // Back to the post mid-export: the job carries on, the new MP4 swaps into the same attachment,
+  // and the Studio doesn't come back.
+  await studio.getByTestId('timeline-trim-end').focus();
+  await studio.keyboard.press('Shift+ArrowLeft');
+  await stored(documentId, (c) => c.video?.trimEndMs === 3000);
+  await studio.getByTestId('studio-add').click();
+  await expect(add).toHaveText(/^Exporting… \d+%$/);
+  await studio.getByRole('button', { name: 'Back to post' }).click();
+  await expect.poll(() => windowVisible(app!, '/studio/')).toBe(false);
+  const mediaPath = () =>
+    readDb(userData, (db) =>
+      db
+        .prepare(
+          `SELECT m.path FROM draft_attachments a JOIN drafts d ON d.id = a.draft_id AND d.is_current = 1
+           JOIN media m ON m.id = a.media_id WHERE a.studio_document_id = ?`,
+        )
+        .pluck()
+        .get(documentId),
+    );
+  await expect.poll(mediaPath, { timeout: 30_000 }).not.toBe(attached.path);
+  expect(await windowVisible(app, '/studio/')).toBe(false);
+  await expect(composer.getByTestId('attachment-card')).toHaveCount(1);
+  const swapped = await ffprobe(bins!.ffprobe, join(userData, 'media', mediaPath() as string));
+  expect(Math.abs(Number(swapped.format.duration) - 1.9)).toBeLessThanOrEqual(0.1);
 });
 
 test('without FFmpeg a video opens read-only with guidance, and images still edit and export', async () => {
