@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { expect, test, type ElectronApplication } from '@playwright/test';
-import { launch, previewDrawn, readDb, root, showComposerFirstRun, studioPage, stubPicker, windowVisible } from './studio-harness';
+import { addToPost, launch, previewDrawn, readDb, root, showComposerFirstRun, studioPage, stubPicker, windowVisible } from './studio-harness';
 
 // SPEC §16/§22 "Composer/Studio round trip": attach a screenshot, edit it in
 // the Studio, Add to post, and come back to the same editable document — the
@@ -45,16 +45,14 @@ test('Add to post attaches the export and Edit in Studio reopens the same docume
   await previewDrawn(studio);
 
   // Change the background and the frame.
-  await studio.getByTestId('tool-background').click();
-  await studio.getByTestId('popover-background').getByRole('radio', { name: 'Violet' }).click();
-  await studio.keyboard.press('Escape');
-  await studio.getByTestId('tool-frame').click();
+  await studio.getByTestId('studio-sidebar').getByRole('radio', { name: 'Violet' }).click();
+  await studio.getByTestId('preview-frame').click();
   await studio.getByTestId('frame-style-minimal').click();
   await studio.getByTestId('frame-theme-light').click();
   await studio.keyboard.press('Escape');
   await previewDrawn(studio);
 
-  await studio.getByTestId('studio-add').click();
+  await addToPost(studio);
   await expect.poll(() => windowVisible(app!, '/composer/')).toBe(true);
   await expect.poll(() => windowVisible(app!, '/studio/')).toBe(false);
 
@@ -92,10 +90,8 @@ test('Add to post attaches the export and Edit in Studio reopens the same docume
   expect(JSON.parse(reopened.composition_json)).toEqual(JSON.parse(after.document.composition_json));
   expect(reopened.revision).toBe(after.document.revision);
 
-  await studio.getByTestId('tool-background').click();
-  await expect(studio.getByTestId('popover-background').getByRole('radio', { name: 'Violet' })).toHaveAttribute('aria-checked', 'true');
-  await studio.keyboard.press('Escape');
-  await studio.getByTestId('tool-frame').click();
+  await expect(studio.getByTestId('studio-sidebar').getByRole('radio', { name: 'Violet' })).toHaveAttribute('aria-checked', 'true');
+  await studio.getByTestId('preview-frame').click();
   await expect(studio.getByTestId('frame-style-minimal')).toHaveAttribute('aria-checked', 'true');
   await expect(studio.getByTestId('frame-theme-light')).toHaveAttribute('aria-checked', 'true');
 });

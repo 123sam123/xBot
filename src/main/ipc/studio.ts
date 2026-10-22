@@ -1,19 +1,23 @@
 // Owned by T4/T5 (XBOT-1N58PP, XBOT-G66JJK). Register `studio:*` handlers here with `handle(channel, schema, fn)`.
-import { basename } from 'node:path';
-import { dialog, type OpenDialogOptions } from 'electron';
+import { copyFile } from 'node:fs/promises';
+import { basename, join } from 'node:path';
+import { app, dialog, shell, type OpenDialogOptions, type SaveDialogOptions } from 'electron';
 import { z } from 'zod';
 import type { MediaItem } from '../../shared/contracts/media';
 import {
   addToPostSchema,
+  beginExportSchema,
   documentIdSchema,
-  exportVideoSchema,
-  jobIdSchema,
+  exportTokenSchema,
+  finishExportSchema,
   pickMediaSchema,
   presetIdSchema,
   saveCompositionSchema,
   savePresetSchema,
   studioImportSchema,
+  type FinishExportResult,
   type StudioImportResult,
+  writeExportSchema,
 } from '../../shared/contracts/studio';
 import { studioChannels } from '../../shared/contracts/studio.channels';
 import { appEvents } from '../events';
@@ -21,7 +25,7 @@ import { draftsQueue } from '../services/drafts/queue';
 import { ffmpeg } from '../services/ffmpeg';
 import { media } from '../services/media';
 import { MediaRejected } from '../services/media/service';
-import { adoptOpened, beginOpen, currentSession, isLatestOpen, openedFromAttachment, studio } from '../services/studio';
+import { adoptOpened, beginOpen, closeStudioSession, currentSession, isLatestOpen, openedFromAttachment, studio } from '../services/studio';
 import type { Opened } from '../services/studio/service';
 import { studioWindow, toggleStudioFullscreen } from '../windows/studio';
 import { IpcError } from './core';
@@ -58,6 +62,14 @@ async function pickPath(title: string, filters: OpenDialogOptions['filters']): P
   const options: OpenDialogOptions = { title, buttonLabel: 'Open', properties: ['openFile'], filters };
   const result = win && !win.isDestroyed() ? await dialog.showOpenDialog(win, options) : await dialog.showOpenDialog(options);
   return result.canceled ? null : (result.filePaths[0] ?? null);
+}
+
+/** A save panel parented to the Studio, starting in Downloads; null when cancelled. */
+async function pickSavePath(name: string): Promise<string | null> {
+  const win = studioWindow();
+  const options: SaveDialogOptions = { title: 'Save export', buttonLabel: 'Save', defaultPath: join(app.getPath('downloads'), name) };
+  const result = win && !win.isDestroyed() ? await dialog.showSaveDialog(win, options) : await dialog.showSaveDialog(options);
+  return result.canceled || !result.filePath ? null : result.filePath;
 }
 
 /** Imports one file as loose media (no draft), on the drafts/media queue. */
@@ -133,12 +145,32 @@ export function registerStudioIpc(): void {
     return draftsQueue(() => studio().addToPost({ ...payload, openedFromAttachmentId }));
   });
 
-  handle(studioChannels.exportVideo, exportVideoSchema, (payload) =>
-    // Not on the drafts queue: only the finished MP4's import and attach go there.
-    studio().exportVideo({ ...payload, openedFromAttachmentId: openedFromAttachment(payload.documentId) }),
-  );
+  handle(studioChannels.beginExport, beginExportSchema, (payload) => studio().beginExport(payload));
 
-  handle(studioChannels.cancelExport, jobIdSchema, ({ jobId }) => studio().cancelExport(jobId));
+  handle(studioChannels.writeExport, writeExportSchema, async ({ token, position, bytes }) => {
+    await studio().writeExport(token, position, bytes);
+    return null;
+  });
+
+  handle(studioChannels.finishExport, finishExportSchema, async ({ token, destination }): Promise<FinishExportResult> => {
+    if (destination === 'post') {
+      const { documentId } = await studio().closeExport(token);
+      return { destination, result: await studio().attachExportFile(token, openedFromAttachment(documentId)) };
+    }
+    try {
+      const file = await studio().closeExport(token);
+      const target = await pickSavePath(file.name);
+      if (target) await copyFile(file.path, target);
+      return { destination, path: target };
+    } finally {
+      await studio().discardExport(token);
+    }
+  });
+
+  handle(studioChannels.cancelExport, exportTokenSchema, async ({ token }) => {
+    await studio().discardExport(token);
+    return null;
+  });
 
   handle(studioChannels.filmstrip, documentIdSchema, ({ documentId }) => studio().filmstrip(documentId));
 
@@ -154,6 +186,16 @@ export function registerStudioIpc(): void {
   });
 
   handle(studioChannels.toggleFullscreen, z.undefined(), () => toggleStudioFullscreen());
+
+  handle(studioChannels.reveal, documentIdSchema, ({ documentId }) => {
+    shell.showItemInFolder(studio().sourcePath(documentId));
+    return null;
+  });
+
+  handle(studioChannels.close, z.undefined(), () => {
+    closeStudioSession();
+    return null;
+  });
 
   handle(studioChannels.flushed, z.undefined(), (_payload, event) => {
     if (event.sender === studioWindow()?.webContents) flushAck?.();

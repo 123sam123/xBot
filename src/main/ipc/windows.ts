@@ -13,6 +13,10 @@ export function registerWindowsIpc(): void {
     BrowserWindow.fromWebContents(event.sender)?.hide();
     return null;
   });
+  handle(windowsChannels.minimize, z.undefined(), (_payload, event) => {
+    BrowserWindow.fromWebContents(event.sender)?.minimize();
+    return null;
+  });
   handle(windowsChannels.hold, z.undefined(), (_payload, event) => {
     hold(event.sender);
     return null;

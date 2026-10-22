@@ -1,96 +1,50 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react';
-import {
-  applyStyle,
-  clampCrop,
-  clampTrim,
-  cropAspectRatio,
-  effectiveFormat,
-  minTrimMs,
-  outputSize,
-  replaceSource,
-  resetStyle,
-  styleOf,
-  type CropAspect,
-  type Rect,
-} from '../../shared/composition/model';
-import { exportLayout } from '../../shared/composition/layout';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { applyStyle, clampCrop, cropAspectRatio, effectiveFormat, outputSize, replaceSource, styleOf, type CanvasRatio, type CropAspect, type Rect, type VideoSettings } from '../../shared/composition/model';
+import { clipStartTime, sourceTimeAt, splitAt, timelineDuration } from '../../shared/composition/timeline';
 import type { IpcResult } from '../../shared/contracts/ipc';
-import type { AddToPostResult, ExportJob, ExportVideoResult, StudioPreset } from '../../shared/contracts/studio';
+import type { AddToPostResult, BeginExportResult, StudioPreset } from '../../shared/contracts/studio';
 import { CompositionCanvas } from '../common/composition/CompositionCanvas';
-import type { CompositionAssets } from '../common/composition/draw';
-import { renderComposition, RenderError, renderVideoLayer } from '../common/composition/render';
+import { renderComposition, RenderError } from '../common/composition/render';
+import { exportVideo } from '../common/composition/videoExport';
 import '../common/composition/composition.css';
 import { useAppInfo, useReadyMarker } from '../common/useAppInfo';
 import { useEscapeToHide } from '../common/useEscapeToHide';
 import { useFileDrop } from '../common/useFileDrop';
 import { useSettings } from '../common/useSettings';
-import {
-  CropIcon,
-  FrameIcon,
-  FrostedButton,
-  GhostButton,
-  GlassPanel,
-  IconButton,
-  ImageIcon,
-  Menu,
-  MoreIcon,
-  PaddingIcon,
-  popovers,
-  RedoIcon,
-  ShadowIcon,
-  StatusChip,
-  UndoIcon,
-  useAppearance,
-  useEscapeLayer,
-  useGlassShadow,
-  type MenuItem,
-} from '../design-system';
+import { FrostedButton, GhostButton, GlassPanel, Menu, popovers, Segmented, StatusChip, useAppearance, useEscapeLayer, useGlassShadow, type MenuItem } from '../design-system';
 import { fitAspect } from './crop';
 import { CropOverlay } from './CropOverlay';
+import { EXPORT_DIALOG, ExportDialog, type ExportSettings } from './ExportDialog';
 import { FfmpegCard, useFfmpegStatus } from './FfmpegCard';
-import { OUTPUT_POPOVER, OutputPopover } from './OutputPopover';
+import { FramePopover } from './FramePopover';
 import { PRESETS_POPOVER, PresetsPopover } from './PresetsPopover';
-import { StudioFooter, type FitMode } from './StudioFooter';
-import { StudioToolbar, type ToolbarItem } from './StudioToolbar';
-import { StudioTopBar } from './StudioTopBar';
-import { Timeline } from './Timeline';
-import { toolPopoverId, ToolPopovers, type ToolId } from './ToolPopovers';
+import { PreviewPanel, SIZE_POPOVER, SizePopover, Transport, type PreviewQuality } from './PreviewPanel';
+import { Sidebar } from './Sidebar';
+import { SCENE_EDITOR, SceneEditor, ZOOM_EDITOR, ZoomEditor } from './timeline/SegmentEditors';
+import { Timeline, type TimelineSelection } from './timeline/Timeline';
+import { TopBar } from './TopBar';
 import { useCompositionAssets } from './useCompositionAssets';
 import { useFilmstrip } from './useFilmstrip';
 import { useStudioEditor } from './useStudioEditor';
-import { useVideoPlayback } from './useVideoPlayback';
-import { VideoStage } from './VideoStage';
+import { useTimelinePlayback } from './useTimelinePlayback';
 
-// Media Studio: a non-destructive editor for one screenshot or video at a
-// time. The preview and the export draw the same Composition with the same
-// routine (common/composition); main stores documents, exports and presets
-// (T4, XBOT-1N58PP). A video (T5, XBOT-G66JJK) plays in a <video> under the
-// canvas's frame layer, trims on the timeline, and exports as an FFmpeg job
-// whose progress arrives as `export:progress`. Without FFmpeg a video opens
-// read-only with guidance. Preview mode (T10) runs all of this on its seeded
-// sample documents, labelled "Preview".
+// Media Studio: Cap's editor in xBot's glass. A top bar, the preview with its
+// toolbar and transport, the inspector on the right, and for a video the
+// multi-track timeline (clips, zooms, scenes). Screenshots open in the same
+// editor without the timeline. The preview and every export draw the same
+// Composition with the same routine (common/composition): images render to
+// PNG/JPEG here, videos are encoded here with WebCodecs and streamed to main,
+// which puts the result on the post or saves it to a file. Without FFmpeg a
+// video opens read-only with guidance (it is needed to read videos).
 
 const NOTICE_MS = 3200;
-
-const TOOLS: { id: ToolId; label: string; icon: React.ReactNode }[] = [
-  { id: 'background', label: 'Background', icon: <ImageIcon size={24} strokeWidth={1.6} /> },
-  { id: 'frame', label: 'Frame', icon: <FrameIcon size={24} strokeWidth={1.6} /> },
-  { id: 'padding', label: 'Padding', icon: <PaddingIcon size={24} strokeWidth={1.6} /> },
-  { id: 'shadow', label: 'Shadow', icon: <ShadowIcon size={24} strokeWidth={1.6} /> },
-  { id: 'crop', label: 'Crop', icon: <CropIcon size={24} strokeWidth={1.6} /> },
-];
-const TOOL_IDS = TOOLS.map((tool) => tool.id);
-const MORE_MENU = 'studio-more';
+const DELETE_MENU = 'studio-delete';
+const FILE_MENU = 'studio-file';
+const MIN_TIMELINE = 150;
 
 async function backToPost() {
   await window.xbot.windows.hide();
   await window.xbot.windows.showComposer();
-}
-
-/** The toolbar item whose popover is open, if any. */
-function useOpenTool(tools: readonly ToolId[]): ToolId | null {
-  const current = useSyncExternalStore(popovers.subscribe, popovers.current);
-  return tools.find((tool) => toolPopoverId(tool) === current) ?? null;
 }
 
 function isTextField(target: EventTarget | null): boolean {
@@ -111,8 +65,6 @@ function useElementSize(ref: React.RefObject<HTMLElement | null>): { width: numb
   return size;
 }
 
-const isActive = (job: ExportJob | null | undefined): job is ExportJob => job?.status === 'queued' || job?.status === 'running';
-
 export function App() {
   const { info, ready: infoReady } = useAppInfo();
   const { values: settings, ready: settingsReady } = useSettings();
@@ -122,11 +74,7 @@ export function App() {
   useGlassShadow();
 
   const preview = info?.isPreview ?? false;
-  return infoReady ? (
-    <Studio key={preview ? 'preview' : 'normal'} preview={preview} settingsReady={settingsReady} />
-  ) : (
-    <GlassPanel className="studio" data-testid="studio-panel" />
-  );
+  return infoReady ? <Studio key={preview ? 'preview' : 'normal'} preview={preview} settingsReady={settingsReady} /> : <GlassPanel className="studio" data-testid="studio-panel" />;
 }
 
 function Studio({ preview, settingsReady }: { preview: boolean; settingsReady: boolean }) {
@@ -135,62 +83,43 @@ function Studio({ preview, settingsReady }: { preview: boolean; settingsReady: b
   const loaded = useCompositionAssets(composition, editor.media, editor.history);
   useReadyMarker(settingsReady && status !== 'loading');
 
-  const anchors = {
-    background: useRef<HTMLButtonElement>(null),
-    frame: useRef<HTMLButtonElement>(null),
-    padding: useRef<HTMLButtonElement>(null),
-    shadow: useRef<HTMLButtonElement>(null),
-    crop: useRef<HTMLButtonElement>(null),
-  };
-  const moreAnchor = useRef<HTMLButtonElement>(null);
-  const dimsAnchor = useRef<HTMLButtonElement>(null);
-  const canvasArea = useRef<HTMLDivElement>(null);
+  const presetsAnchor = useRef<HTMLButtonElement>(null);
+  const aspectAnchor = useRef<HTMLButtonElement>(null);
+  const frameAnchor = useRef<HTMLButtonElement>(null);
+  const qualityAnchor = useRef<HTMLButtonElement>(null);
+  const exportAnchor = useRef<HTMLSpanElement>(null);
+  const deleteAnchor = useRef<HTMLButtonElement>(null);
+  const nameAnchor = useRef<HTMLButtonElement>(null);
+  const zoomAnchor = useRef<HTMLElement | null>(null);
+  const stageArea = useRef<HTMLDivElement>(null);
   const cropOverlay = useRef<HTMLDivElement>(null);
-  const area = useElementSize(canvasArea);
+  const area = useElementSize(stageArea);
 
-  const [fit, setFit] = useState<FitMode | null>('fit');
-  const [zoomLevel, setZoomLevel] = useState(100);
-  // A reload in full screen (main's `?fullscreen=1`) starts there.
   const [fullscreen, setFullscreen] = useState(() => document.documentElement.hasAttribute('data-fullscreen'));
   const [busy, setBusy] = useState(false);
   const [pendingCrop, setPendingCrop] = useState<{ crop: Rect; aspect: CropAspect } | null>(null);
+  /** The playhead when cropping began: the frame cropped against. */
+  const [cropTime, setCropTime] = useState(0);
+  const [quality, setQuality] = useState<PreviewQuality>('full');
+  const [timelineZoom, setTimelineZoom] = useState(1);
+  const [timelineHeight, setTimelineHeight] = useState(250);
+  const [selection, setSelection] = useState<TimelineSelection>(null);
+  const [exportSettings, setExportSettings] = useState<ExportSettings>({ destination: 'post', resolution: '1080p', fps: 30 });
+  const [exportProgress, setExportProgress] = useState<number | null>(null);
+  const exportAbort = useRef<AbortController | null>(null);
   const { notice, setNotice, error, setError } = editor;
 
-  // Video (T5).
   const videoInfo = status === 'document' ? (doc?.video ?? null) : null;
   const isVideo = videoInfo !== null && composition?.video !== undefined;
+  const hasAudio = (videoInfo?.audioStream ?? null) !== null;
   const ffmpeg = useFfmpegStatus(true);
-  const ffmpegReady = ffmpeg.state === 'ready';
-  const playback = useVideoPlayback(composition?.video, videoInfo?.durationMs ?? 0, (videoInfo?.audioStream ?? null) !== null);
-  const filmstrip = useFilmstrip(isVideo && doc ? doc.id : null, ffmpegReady);
-  const [jobs, setJobs] = useState<ReadonlyMap<string, ExportJob>>(() => new Map());
-  const known = doc ? jobs.get(doc.id) : undefined;
-  // The newer of what the document arrived with and what the events said since.
-  const latestJob = known && doc?.exportJob ? (known.updatedAt >= doc.exportJob.updatedAt ? known : doc.exportJob) : (known ?? doc?.exportJob ?? null);
-  const activeJob = isActive(latestJob) ? latestJob : null;
-
-  const shownDocument = useRef<string | null>(null);
-  useLayoutEffect(() => {
-    shownDocument.current = doc?.id ?? null;
-  }, [doc?.id]);
-
-  useEffect(
-    () =>
-      window.xbot.events.on('export:progress', ({ job }) => {
-        setJobs((current) => new Map(current).set(job.documentId, job));
-        if (job.documentId !== shownDocument.current) return;
-        if (job.status === 'succeeded') {
-          // Back to the post only while the Studio is still up showing this video; otherwise the attachment just swaps in.
-          if (window.document.visibilityState === 'visible') void backToPost();
-        } else if (job.status === 'failed') setError(job.error ?? 'The export failed.');
-        else if (job.status === 'canceled') setNotice(job.error ?? 'Export canceled.');
-      }),
-    [setError, setNotice],
-  );
+  const { ref: videoRef, element: videoElement, clock, playing, toggle: togglePlay, pause, seek } = useTimelinePlayback(composition?.video, hasAudio);
+  const filmstrip = useFilmstrip(isVideo && doc ? doc.id : null, ffmpeg.state === 'ready');
 
   const sourceItem = composition ? editor.media.get(composition.source.mediaId) : undefined;
   const sourceMissing = Boolean(composition && doc && ((doc.sourceMissing && composition.source.mediaId === doc.source.id) || loaded.sourceFailed));
-  const editable = status === 'document' && composition !== null && !sourceMissing && !busy;
+  const exporting = exportProgress !== null;
+  const editable = status === 'document' && composition !== null && !sourceMissing && !busy && !exporting;
   const disabledReason =
     status === 'loading'
       ? 'Loading…'
@@ -202,12 +131,11 @@ function Studio({ preview, settingsReady }: { preview: boolean; settingsReady: b
             : 'Video editing needs FFmpeg'
           : sourceMissing
             ? 'Source missing — replace it first'
-            : busy
-              ? 'Rendering…'
-              : undefined;
-
-  const tools: ToolbarItem<ToolId>[] = TOOLS.map((tool) => ({ ...tool, anchor: anchors[tool.id], disabled: !editable }));
-  const openTool = useOpenTool(TOOL_IDS);
+            : exporting
+              ? 'Exporting…'
+              : busy
+                ? 'Rendering…'
+                : undefined;
 
   useEffect(() => {
     if (!notice) return;
@@ -216,52 +144,99 @@ function Studio({ preview, settingsReady }: { preview: boolean; settingsReady: b
   }, [notice, setNotice]);
 
   useEffect(() => window.xbot.events.on('studio:fullscreen', ({ on }) => setFullscreen(on)), []);
-  // The glass's corners are square in full screen (tokens.css), as main makes the native ones.
   useEffect(() => {
     document.documentElement.toggleAttribute('data-fullscreen', fullscreen);
   }, [fullscreen]);
-  useEscapeLayer(fullscreen, () => void window.xbot.studio.toggleFullscreen().then((result) => result.ok && setFullscreen(result.data)));
+  const toggleFullscreen = () => void window.xbot.studio.toggleFullscreen().then((result) => result.ok && setFullscreen(result.data));
+  useEscapeLayer(fullscreen, toggleFullscreen);
 
-  // Crop mode lasts while the Crop popover is open; closing it any other way than Apply discards the edit.
-  const cropping = openTool === 'crop' && pendingCrop !== null;
-  const selectTool = (tool: ToolId) => {
-    if (tool === 'crop' && openTool !== 'crop' && composition) {
-      playback.pause();
-      setPendingCrop({ crop: composition.crop, aspect: composition.cropAspect });
-    }
-    popovers.toggle(toolPopoverId(tool));
-  };
+  // A new document starts at the beginning, with nothing selected.
+  const [shownDocument, setShownDocument] = useState(doc?.id);
+  if (shownDocument !== doc?.id) {
+    setShownDocument(doc?.id);
+    setSelection(null);
+    setPendingCrop(null);
+    setTimelineZoom(1);
+  }
+  useEffect(() => seek(0), [doc?.id, seek]);
 
   const change = editor.change;
-  const applyCrop = useCallback(() => {
-    if (!cropping || !pendingCrop || !composition) return;
-    change({ ...composition, crop: clampCrop(pendingCrop.crop, composition.source), cropAspect: pendingCrop.aspect });
-    popovers.close(toolPopoverId('crop'));
-  }, [cropping, pendingCrop, composition, change]);
+  const cropping = pendingCrop !== null;
+  useEscapeLayer(cropping, () => setPendingCrop(null));
 
-  // ⌘Z / ⇧⌘Z / ⌘Y outside text fields (their own undo stays native), and Enter applies a crop.
+  const startCrop = () => {
+    if (!composition) return;
+    if (cropping) return setPendingCrop(null);
+    pause();
+    popovers.closeAll();
+    setCropTime(clock.get());
+    setPendingCrop({ crop: composition.crop, aspect: composition.cropAspect });
+  };
+  const applyCrop = useCallback(() => {
+    if (!pendingCrop || !composition) return;
+    change({ ...composition, crop: clampCrop(pendingCrop.crop, composition.source), cropAspect: pendingCrop.aspect });
+    setPendingCrop(null);
+  }, [pendingCrop, composition, change]);
+
+  const changeVideo = useCallback(
+    (video: VideoSettings, gesture?: string) => {
+      if (composition) change({ ...composition, video }, gesture);
+    },
+    [composition, change],
+  );
+
+  const split = useCallback(() => {
+    if (!composition?.video || !videoInfo || !editable) return;
+    const next = splitAt(composition.video, clock.get(), videoInfo.durationMs);
+    if (next === composition.video) setNotice('Move the playhead further into the clip to split it.');
+    else changeVideo(next);
+  }, [composition, videoInfo, editable, clock, changeVideo, setNotice]);
+
+  const jumpClip = (direction: -1 | 1) => {
+    const video = composition?.video;
+    if (!video) return;
+    const now = clock.get();
+    const starts = video.clips.map((_, index) => clipStartTime(video, index)).concat(timelineDuration(video));
+    const target = direction < 0 ? [...starts].reverse().find((t) => t < now - 250) ?? 0 : (starts.find((t) => t > now + 1) ?? timelineDuration(video));
+    seek(target);
+  };
+
+  // Keys: ⌘Z / ⇧⌘Z undo and redo; Space plays; S splits; ⌘+ / ⌘− zoom the timeline; Enter applies a crop.
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.defaultPrevented || event.isComposing) return;
-      if (event.key === 'Enter' && cropping && !isTextField(event.target)) {
+      if (event.defaultPrevented || event.isComposing || isTextField(event.target)) return;
+      if (event.key === 'Enter' && cropping) {
         event.preventDefault();
         applyCrop();
         return;
       }
-      if (!(event.metaKey || event.ctrlKey) || event.altKey || isTextField(event.target) || !editable) return;
-      const key = event.key.toLowerCase();
-      if (key === 'z' && !event.shiftKey) editor.undo();
-      else if ((key === 'z' && event.shiftKey) || key === 'y') editor.redo();
-      else return;
-      event.preventDefault();
+      const command = event.metaKey || event.ctrlKey;
+      if (command && !event.altKey && editable) {
+        const key = event.key.toLowerCase();
+        if (key === 'z' && !event.shiftKey) editor.undo();
+        else if ((key === 'z' && event.shiftKey) || key === 'y') editor.redo();
+        else if (isVideo && (key === '=' || key === '+')) setTimelineZoom((z) => Math.min(12, z * 1.5));
+        else if (isVideo && key === '-') setTimelineZoom((z) => Math.max(1, z / 1.5));
+        else return;
+        event.preventDefault();
+        return;
+      }
+      if (command || event.altKey || !isVideo) return;
+      if (event.key === ' ' && !(event.target instanceof HTMLButtonElement)) {
+        event.preventDefault();
+        togglePlay();
+      } else if (event.key.toLowerCase() === 's' && editable) {
+        event.preventDefault();
+        split();
+      }
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [editor, editable, cropping, applyCrop]);
+  }, [editor, editable, cropping, applyCrop, isVideo, togglePlay, split]);
 
   const out = composition ? outputSize(composition) : null;
-  const fitScale = area && out ? (fit === 'fill' ? Math.max : Math.min)(area.width / out.width, area.height / out.height) : 0;
-  const displayScale = fit ? fitScale : zoomLevel / 100;
+  // Fitted, never above 100 %: a small screenshot previews pixel for pixel.
+  const displayScale = area && out ? Math.min(1, (area.width - 32) / out.width, (area.height - 32) / out.height) : 0;
 
   const pickBackground = async () => {
     if (!composition) return;
@@ -293,7 +268,7 @@ function Studio({ preview, settingsReady }: { preview: boolean; settingsReady: b
     if (result.data) editor.openSession(result.data);
   };
 
-  const dropActive = useFileDrop(!busy, (files) => {
+  const dropActive = useFileDrop(!busy && !exporting, (files) => {
     void window.xbot.studio.importFiles(files).then((result) => {
       if (!result.ok) return setError(result.error.message);
       editor.openSession(result.data.opened);
@@ -304,151 +279,145 @@ function Studio({ preview, settingsReady }: { preview: boolean; settingsReady: b
   const applyPreset = (preset: StudioPreset) => {
     if (!composition) return;
     if (preset.background) editor.addMedia(preset.background);
-    // A video can't be transparent: such a preset keeps the video's background.
     const style = composition.video && preset.style.background.type === 'transparent' ? { ...preset.style, background: composition.background } : preset.style;
     change(applyStyle(composition, style));
     popovers.close(PRESETS_POPOVER);
   };
 
-  const addImageToPost = async () => {
-    if (!doc || !composition) return;
-    const frozen = composition;
-    const assets: CompositionAssets = loaded.assets;
-    const result = await editor.afterSaves(async (documentId, revision): Promise<IpcResult<AddToPostResult>> => {
-      try {
-        const rendered = await renderComposition(frozen, assets, effectiveFormat(frozen, doc.gif));
-        return await window.xbot.studio.addToPost(documentId, revision, frozen, rendered.bytes);
-      } catch (err) {
-        if (err instanceof RenderError) return { ok: false, error: { code: err.code, message: err.message } };
-        throw err;
-      }
-    });
-    if (!result.ok) {
-      setError(result.error.message);
-      return;
-    }
-    await backToPost();
-  };
-
-  /** Queues the MP4 export over the frame layer; the job's events carry it from there. */
-  const exportVideo = async () => {
-    if (!composition) return;
-    playback.pause();
-    const frozen = composition;
-    const assets: CompositionAssets = loaded.assets;
-    const result = await editor.afterSaves(async (documentId, revision): Promise<IpcResult<ExportVideoResult>> => {
-      try {
-        const layer = await renderVideoLayer(frozen, assets);
-        return await window.xbot.studio.exportVideo(documentId, revision, frozen, layer.bytes);
-      } catch (err) {
-        if (err instanceof RenderError) return { ok: false, error: { code: err.code, message: err.message } };
-        throw err;
-      }
-    });
-    if (!result.ok) {
-      setError(result.error.message);
-      return;
-    }
-    const { job } = result.data;
-    setJobs((current) => new Map(current).set(job.documentId, job));
-  };
-
-  const addToPost = async () => {
-    if (!doc || !composition || busy || activeJob) return;
-    popovers.closeAll();
+  /** Streams `bytes` (or a video export) into a main-side export file and finishes it. */
+  const runExport = async () => {
+    if (!doc || !composition || busy || exporting) return;
+    pause();
     setBusy(true);
     setError(null);
+    const frozen = composition;
+    const assets = loaded.assets;
+    const { destination } = exportSettings;
+    let token: string | null = null;
     try {
-      await (isVideo ? exportVideo() : addImageToPost());
+      if (!isVideo && destination === 'post') {
+        const result = await editor.afterSaves(async (documentId, revision): Promise<IpcResult<AddToPostResult>> => {
+          const rendered = await renderComposition(frozen, assets, effectiveFormat(frozen, doc.gif));
+          return window.xbot.studio.addToPost(documentId, revision, frozen, rendered.bytes);
+        });
+        if (!result.ok) return setError(result.error.message);
+        popovers.closeAll();
+        await backToPost();
+        return;
+      }
+
+      const format = isVideo ? 'mp4' : effectiveFormat(frozen, doc.gif);
+      const begun = await editor.afterSaves((documentId, revision): Promise<IpcResult<BeginExportResult>> => window.xbot.studio.beginExport(documentId, revision, frozen, format));
+      if (!begun.ok) return setError(begun.error.message);
+      token = begun.data.token;
+      const exportToken = token;
+      const write = async (position: number, bytes: Uint8Array) => {
+        const written = await window.xbot.studio.writeExport(exportToken, position, bytes);
+        if (!written.ok) throw new RenderError('render_failed', written.error.message);
+      };
+
+      if (isVideo && sourceItem) {
+        const abort = new AbortController();
+        exportAbort.current = abort;
+        setExportProgress(0);
+        await exportVideo({
+          composition: frozen,
+          assets,
+          sourceUrl: sourceItem.url,
+          resolution: destination === 'post' && exportSettings.resolution === '4k' ? '1080p' : exportSettings.resolution,
+          fps: exportSettings.fps,
+          write,
+          onProgress: (value) => setExportProgress(value),
+          signal: abort.signal,
+        });
+      } else {
+        const rendered = await renderComposition(frozen, assets, effectiveFormat(frozen, doc.gif));
+        await write(0, rendered.bytes);
+      }
+
+      const finished = await window.xbot.studio.finishExport(exportToken, destination);
+      token = null;
+      if (!finished.ok) return setError(finished.error.message);
+      popovers.closeAll();
+      if (finished.data.destination === 'post') await backToPost();
+      else if (finished.data.path) setNotice(`Saved to ${finished.data.path.split('/').slice(-2).join('/')}`);
+    } catch (err) {
+      if (err instanceof RenderError) {
+        if (err.code === 'export_canceled') setNotice(err.message);
+        else setError(err.message);
+      } else throw err;
     } finally {
+      if (token) void window.xbot.studio.cancelExport(token);
+      exportAbort.current = null;
+      setExportProgress(null);
       setBusy(false);
     }
   };
 
-  const cancelExport = async () => {
-    if (!activeJob) return;
-    const result = await window.xbot.studio.cancelExport(activeJob.id);
-    if (!result.ok) setError(result.error.message);
-  };
-
-  const menuItems: MenuItem[] = [
-    { id: 'reset', label: 'Reset style', disabled: !editable, onSelect: () => composition && change(resetStyle(composition)) },
-    { id: 'presets', label: 'Presets…', disabled: !editable, onSelect: () => popovers.open(PRESETS_POPOVER) },
-    { id: 'open', label: 'Open image or video…', disabled: busy, onSelect: () => void openMedia() },
+  const deleteItems: MenuItem[] = [
     {
-      id: 'replace',
-      label: 'Replace source…',
-      detail: isVideo ? 'Images only' : undefined,
-      disabled: busy || status !== 'document' || isVideo,
-      onSelect: () => void replaceSourceImage(),
+      id: 'close',
+      label: 'Close this document',
+      detail: 'It stays on your post; reopen it with Edit in Studio',
+      onSelect: () => void window.xbot.studio.close().then((result) => (result.ok ? editor.clear() : setError(result.error.message))),
     },
+  ];
+  const moreItems: MenuItem[] = [
+    { id: 'open', label: 'Open image or video…', disabled: busy, onSelect: () => void openMedia() },
+    { id: 'replace', label: 'Replace source…', detail: isVideo ? 'Images only' : undefined, disabled: busy || status !== 'document' || isVideo, onSelect: () => void replaceSourceImage() },
   ];
 
   const canUndo = editable && (editor.history?.past.length ?? 0) > 0;
   const canRedo = editable && (editor.history?.future.length ?? 0) > 0;
-  const addDisabledReason = activeJob
-    ? 'Exporting…'
-    : (disabledReason ??
-      (isVideo && !ffmpegReady
-        ? ffmpeg.state === 'missing'
-          ? ffmpeg.message
-          : 'Looking for FFmpeg…'
-        : isVideo && composition?.background.type === 'transparent'
-          ? 'Video can’t have a transparent background'
-          : !loaded.ready
-            ? 'Loading the image…'
-            : undefined));
-  const progress = activeJob ? Math.round(activeJob.progress * 100) : 0;
-  const addLabel = activeJob ? (activeJob.status === 'queued' ? 'Queued…' : `Exporting… ${progress}%`) : busy ? 'Rendering…' : undefined;
+  const exportDisabledReason =
+    disabledReason && !exporting
+      ? disabledReason
+      : isVideo && ffmpeg.state !== 'ready' && ffmpeg.state !== 'checking'
+        ? ffmpeg.message
+        : !loaded.ready && !exporting
+          ? 'Loading the image…'
+          : undefined;
 
-  const cropControls = {
-    aspect: pendingCrop?.aspect ?? composition?.cropAspect ?? 'original',
-    onAspect: (aspect: CropAspect) => {
-      if (!pendingCrop || !composition) return;
-      setPendingCrop({ aspect, crop: fitAspect(pendingCrop.crop, cropAspectRatio(aspect, composition.source), composition.source) });
-    },
-    onReset: () => composition && setPendingCrop({ aspect: 'original', crop: { x: 0, y: 0, width: 1, height: 1 } }),
-    onCancel: () => popovers.close(toolPopoverId('crop')),
-    onApply: applyCrop,
-    overlay: cropOverlay,
+  const video = composition?.video;
+  const selectedZoom = selection?.kind === 'zoom' && video ? video.zooms.find((z) => z.id === selection.id) : undefined;
+  const selectedScene = selection?.kind === 'scene' && video ? video.scenes.find((s) => s.id === selection.id) : undefined;
+  const contentAspect = composition ? (composition.crop.width * composition.source.width) / (composition.crop.height * composition.source.height) : 16 / 9;
+  const focusFrame = useMemo(() => {
+    if (!selectedZoom || !video || filmstrip.length === 0 || !videoInfo) return undefined;
+    const { sourceMs } = sourceTimeAt(video, (selectedZoom.startMs + selectedZoom.endMs) / 2);
+    return filmstrip[Math.min(filmstrip.length - 1, Math.floor((sourceMs / videoInfo.durationMs) * filmstrip.length))];
+  }, [selectedZoom, video, filmstrip, videoInfo]);
+
+  const onSelect = (next: TimelineSelection, anchor?: HTMLElement) => {
+    setSelection(next);
+    if (next?.kind === 'zoom') {
+      if (anchor) zoomAnchor.current = anchor;
+      requestAnimationFrame(() => popovers.open(ZOOM_EDITOR));
+    } else if (next?.kind === 'scene') {
+      if (anchor) zoomAnchor.current = anchor;
+      requestAnimationFrame(() => popovers.open(SCENE_EDITOR));
+    }
   };
 
-  // The footer shows exactly the export's pixels at the chosen scale.
-  const exportSize = composition ? exportLayout(composition).canvas : null;
-
-  const durationMs = videoInfo?.durationMs ?? 0;
-  const trimVideo = ([start, end]: [number, number], edge: 'start' | 'end') => {
-    if (!composition?.video) return;
-    const next = clampTrim({ ...composition.video, trimStartMs: start * durationMs, trimEndMs: end * durationMs }, durationMs);
-    change({ ...composition, video: next }, `trim-${edge}`);
-    playback.seek((edge === 'start' ? next.trimStartMs : next.trimEndMs) / 1000);
+  const startResize = (event: React.PointerEvent<HTMLDivElement>) => {
+    const startY = event.clientY;
+    const start = timelineHeight;
+    const target = event.currentTarget;
+    target.setPointerCapture(event.pointerId);
+    const onMove = (e: PointerEvent) => setTimelineHeight(Math.min(window.innerHeight - 360, Math.max(MIN_TIMELINE, start - (e.clientY - startY))));
+    const stop = () => {
+      target.removeEventListener('pointermove', onMove);
+      target.removeEventListener('pointerup', stop);
+    };
+    target.addEventListener('pointermove', onMove);
+    target.addEventListener('pointerup', stop);
   };
 
-  return (
-    <GlassPanel className="studio" data-testid="studio-panel" data-document-id={doc?.id} data-revision={doc ? editor.revision : undefined}>
-      <StudioTopBar
-        onBack={() => void backToPost()}
-        onAdd={() => void addToPost()}
-        addDisabledReason={addDisabledReason}
-        addLabel={addLabel}
-        badge={preview ? 'Preview' : undefined}
-        actions={
-          <span className="studio-actions">
-            <IconButton label="Undo" size="sm" bare disabled={!canUndo} onClick={editor.undo} data-testid="studio-undo">
-              <UndoIcon size={20} />
-            </IconButton>
-            <IconButton label="Redo" size="sm" bare disabled={!canRedo} onClick={editor.redo} data-testid="studio-redo">
-              <RedoIcon size={20} />
-            </IconButton>
-            <IconButton ref={moreAnchor} label="More" size="sm" bare aria-haspopup="menu" onClick={() => popovers.toggle(MORE_MENU)} data-testid="studio-more">
-              <MoreIcon size={20} />
-            </IconButton>
-          </span>
-        }
-      />
-      <div ref={canvasArea} className={['studio-canvas', dropActive && 'studio-canvas-drop'].filter(Boolean).join(' ')} data-testid="studio-canvas">
-        {status === 'document' && composition && !sourceMissing && (
-          cropping && pendingCrop && sourceItem ? (
+  const stage = (
+    <div ref={stageArea} className={`stage${dropActive ? ' stage-drop' : ''}`} data-testid="studio-canvas">
+      {status === 'document' && composition && !sourceMissing && (
+        <>
+          {cropping && pendingCrop && sourceItem ? (
             <CropOverlay
               overlayRef={cropOverlay}
               url={sourceItem.url}
@@ -456,155 +425,237 @@ function Studio({ preview, settingsReady }: { preview: boolean; settingsReady: b
               crop={pendingCrop.crop}
               ratio={cropAspectRatio(pendingCrop.aspect, composition.source)}
               onChange={(crop) => setPendingCrop((current) => current && { ...current, crop })}
-              videoTime={isVideo ? playback.current : undefined}
+              videoTime={video ? sourceTimeAt(video, cropTime).sourceMs / 1000 : undefined}
             />
           ) : (
-            <StudioViewport displayScale={displayScale}>
-              {displayScale > 0 &&
-                (isVideo && sourceItem ? (
-                  <VideoStage
-                    composition={composition}
-                    assets={loaded.assets}
-                    ready={loaded.ready}
-                    displayScale={displayScale}
-                    url={sourceItem.url}
-                    videoRef={playback.ref}
-                    failed={playback.failed}
-                  />
-                ) : (
-                  <CompositionCanvas composition={composition} assets={loaded.assets} assetsReady={loaded.ready} displayScale={displayScale} testId="studio-preview-canvas" />
-                ))}
-            </StudioViewport>
-          )
-        )}
-        {status === 'document' && sourceMissing && (
-          <div className="studio-empty" data-testid="studio-source-missing">
-            <p>Source missing — {isVideo ? 'add the video again from Write Post.' : 'replace it to keep editing.'}</p>
-            {!isVideo && (
-              <GhostButton className="studio-empty-action" disabled={busy} onClick={() => void replaceSourceImage()}>
-                Replace…
-              </GhostButton>
-            )}
-          </div>
-        )}
-        {status === 'empty' && (
-          <div className="studio-empty" data-testid="studio-empty">
-            <p>Drop a screenshot or video here</p>
-            <FrostedButton className="studio-empty-action" onClick={() => void openMedia()} data-testid="studio-choose">
-              Choose image or video…
-            </FrostedButton>
-          </div>
-        )}
-        {status === 'view' && editor.view && (
-          <>
-            <video className="studio-target" src={editor.view.media.url} poster={editor.view.media.thumbUrl ?? undefined} controls muted playsInline data-testid="studio-target" />
-            {ffmpeg.state !== 'ready' && (
-              // At the top: the read-only video keeps its own controls at the bottom.
-              <div className="studio-ffmpeg">
-                <FfmpegCard status={ffmpeg} />
-              </div>
-            )}
-          </>
-        )}
-        {isVideo && ffmpeg.state === 'missing' && (
-          <div className="studio-ffmpeg">
-            <FfmpegCard status={ffmpeg} compact />
-          </div>
-        )}
-        {(error || notice || activeJob || videoInfo?.hdr) && (
-          <div
-            className="studio-toast"
-            role={error ? 'alert' : 'status'}
-            data-testid={error ? 'studio-error' : notice ? 'studio-notice' : activeJob ? 'studio-export-chip' : 'studio-hdr'}
-          >
-            {error || notice ? (
-              <StatusChip tone={error ? 'warning' : 'neutral'}>{error ?? notice}</StatusChip>
-            ) : activeJob ? (
-              <span className="studio-export-status">
-                <StatusChip tone="neutral">
-                  <span className="status-dot status-dot-busy" aria-hidden="true" />
-                  {activeJob.status === 'queued' ? 'Export queued' : `Export running · ${progress}%`}
-                </StatusChip>
-                <GhostButton className="studio-cancel" onClick={() => void cancelExport()} data-testid="studio-cancel-export">
-                  Cancel
-                </GhostButton>
-              </span>
-            ) : (
-              <StatusChip tone="neutral">HDR video: colours in the export will be off</StatusChip>
-            )}
-          </div>
-        )}
-      </div>
-      <div className="studio-toolbar-row">
-        <StudioToolbar items={tools} active={openTool} onSelect={selectTool} disabledReason={disabledReason} />
-      </div>
-      {isVideo && composition?.video && videoInfo && (
-        <Timeline
-          duration={durationMs / 1000}
-          current={playback.current}
-          trim={[composition.video.trimStartMs / durationMs, composition.video.trimEndMs / durationMs]}
-          frames={filmstrip}
-          playing={playback.playing}
-          onTogglePlay={playback.toggle}
-          onSeek={playback.seek}
-          onTrim={editable ? trimVideo : undefined}
-          onTrimEnd={editor.endGesture}
-          minTrim={minTrimMs(durationMs) / durationMs}
-          muted={composition.video.muted}
-          onToggleMute={editable ? () => change({ ...composition, video: { ...composition.video!, muted: !composition.video!.muted } }) : undefined}
-          muteDisabledReason={videoInfo.audioStream === null ? 'This video has no sound' : undefined}
-        />
-      )}
-      <StudioFooter
-        dimensions={exportSize}
-        fit={fit}
-        zoom={displayScale > 0 ? Math.round(displayScale * 100) : 100}
-        onFit={composition ? (mode) => setFit(mode) : undefined}
-        onZoom={
-          composition
-            ? (level) => {
-                setFit(null);
-                setZoomLevel(level);
-              }
-            : undefined
-        }
-        dimsAnchor={dimsAnchor}
-        onDimensions={editable ? () => popovers.toggle(OUTPUT_POPOVER) : undefined}
-        fullscreen={fullscreen}
-        onFullscreen={() => void window.xbot.studio.toggleFullscreen().then((result) => result.ok && setFullscreen(result.data))}
-      />
-
-      <Menu id={MORE_MENU} anchor={moreAnchor} label="More" placement="bottom-end" items={menuItems} testId="studio-more-menu" />
-      {composition && (
-        <>
-          <ToolPopovers
-            anchors={anchors}
-            composition={composition}
-            onChange={change}
-            onCommit={editor.endGesture}
-            onPickBackground={() => void pickBackground()}
-            crop={cropControls}
-          />
-          <OutputPopover anchor={dimsAnchor} composition={composition} gif={doc?.gif ?? false} video={videoInfo} onChange={(next) => change(next)} />
-          <PresetsPopover anchor={moreAnchor} onApply={applyPreset} onError={setError} currentStyle={styleOf(composition)} />
+            displayScale > 0 && (
+              <CompositionCanvas
+                composition={composition}
+                assets={loaded.assets}
+                assetsReady={loaded.ready}
+                displayScale={displayScale}
+                quality={quality === 'half' ? 0.5 : 1}
+                video={isVideo ? { element: videoElement, clock: clock } : undefined}
+                testId="studio-preview-canvas"
+              />
+            )
+          )}
+          {isVideo && sourceItem && (
+            <video ref={videoRef} className="stage-source" src={sourceItem.url} preload="auto" playsInline crossOrigin="anonymous" data-testid="studio-video" />
+          )}
         </>
       )}
-    </GlassPanel>
-  );
-}
-
-/** The canvas area: the composition at `displayScale`, centred, scrolling when it is larger than the area. */
-function StudioViewport({ displayScale, children }: { displayScale: number; children: React.ReactNode }) {
-  const viewport = useRef<HTMLDivElement>(null);
-  useLayoutEffect(() => {
-    const el = viewport.current;
-    if (!el) return;
-    el.scrollLeft = (el.scrollWidth - el.clientWidth) / 2;
-    el.scrollTop = (el.scrollHeight - el.clientHeight) / 2;
-  }, [displayScale]);
-  return (
-    <div ref={viewport} className="studio-viewport">
-      <div className="studio-viewport-inner">{children}</div>
+      {status === 'document' && sourceMissing && (
+        <div className="studio-empty" data-testid="studio-source-missing">
+          <p>Source missing — {isVideo ? 'add the video again from Write Post.' : 'replace it to keep editing.'}</p>
+          {!isVideo && (
+            <GhostButton className="studio-empty-action" disabled={busy} onClick={() => void replaceSourceImage()}>
+              Replace…
+            </GhostButton>
+          )}
+        </div>
+      )}
+      {status === 'empty' && (
+        <div className="studio-empty" data-testid="studio-empty">
+          <p>Drop a screenshot or video here</p>
+          <FrostedButton className="studio-empty-action" onClick={() => void openMedia()} data-testid="studio-choose">
+            Choose image or video…
+          </FrostedButton>
+        </div>
+      )}
+      {status === 'view' && editor.view && (
+        <>
+          <video className="studio-target" src={editor.view.media.url} poster={editor.view.media.thumbUrl ?? undefined} controls muted playsInline data-testid="studio-target" />
+          {ffmpeg.state !== 'ready' && (
+            <div className="studio-ffmpeg">
+              <FfmpegCard status={ffmpeg} />
+            </div>
+          )}
+        </>
+      )}
+      {(error || notice || videoInfo?.hdr) && (
+        <div className="studio-toast" role={error ? 'alert' : 'status'} data-testid={error ? 'studio-error' : notice ? 'studio-notice' : 'studio-hdr'}>
+          <StatusChip tone={error ? 'warning' : 'neutral'}>{error ?? notice ?? 'HDR video: colours in the export will be off'}</StatusChip>
+        </div>
+      )}
     </div>
+  );
+
+  const cropBar = composition && pendingCrop && (
+    <div className="crop-bar" data-testid="popover-crop">
+      <Segmented<CropAspect>
+        label="Aspect ratio"
+        options={[
+          { value: 'free', label: 'Free' },
+          { value: 'original', label: 'Original' },
+          { value: '16:9', label: '16:9' },
+          { value: '1:1', label: '1:1' },
+          { value: '4:5', label: '4:5' },
+        ]}
+        value={pendingCrop.aspect}
+        onChange={(aspect) => setPendingCrop({ aspect, crop: fitAspect(pendingCrop.crop, cropAspectRatio(aspect, composition.source), composition.source) })}
+        testId="crop-aspect"
+      />
+      <span className="preview-toolbar-spacer" />
+      <GhostButton onClick={() => setPendingCrop({ aspect: 'original', crop: { x: 0, y: 0, width: 1, height: 1 } })} data-testid="crop-reset">
+        Reset
+      </GhostButton>
+      <GhostButton onClick={() => setPendingCrop(null)} data-testid="crop-cancel">
+        Cancel
+      </GhostButton>
+      <FrostedButton onClick={applyCrop} data-testid="crop-apply">
+        Apply
+      </FrostedButton>
+    </div>
+  );
+
+  return (
+    <GlassPanel
+      className={`studio${isVideo ? ' studio-has-timeline' : ''}`}
+      data-testid="studio-panel"
+      data-document-id={doc?.id}
+      data-revision={doc ? editor.revision : undefined}
+      style={{ '--timeline-height': `${timelineHeight}px` } as React.CSSProperties}
+    >
+      <TopBar
+        name={doc?.source.name ?? null}
+        badge={preview ? 'Preview' : undefined}
+        onClose={() => void backToPost()}
+        onMinimize={() => void window.xbot.windows.minimize()}
+        onFullscreen={toggleFullscreen}
+        onDelete={doc ? () => popovers.toggle(DELETE_MENU) : undefined}
+        onReveal={doc ? () => void window.xbot.studio.reveal(doc.id) : undefined}
+        presetsAnchor={presetsAnchor}
+        exportAnchor={exportAnchor}
+        deleteAnchor={deleteAnchor}
+        nameAnchor={nameAnchor}
+        onName={() => popovers.toggle(FILE_MENU)}
+        onPresets={editable ? () => popovers.toggle(PRESETS_POPOVER) : undefined}
+        canUndo={canUndo}
+        canRedo={canRedo}
+        onUndo={editor.undo}
+        onRedo={editor.redo}
+        onBack={() => void backToPost()}
+        onExport={() => popovers.toggle(EXPORT_DIALOG)}
+        exportDisabledReason={exportDisabledReason}
+        exportLabel={exporting ? `Exporting ${Math.round((exportProgress ?? 0) * 100)}%` : busy ? 'Rendering…' : 'Export'}
+        disabledReason={disabledReason}
+      />
+
+      <div className="studio-main">
+        <PreviewPanel
+          aspect={composition?.canvas.ratio ?? 'original'}
+          onAspect={(ratio: CanvasRatio) => composition && change({ ...composition, canvas: { ...composition.canvas, ratio } })}
+          onCustom={() => {
+            if (composition) change({ ...composition, canvas: { ...composition.canvas, ratio: 'custom' } });
+            requestAnimationFrame(() => popovers.open(SIZE_POPOVER));
+          }}
+          aspectAnchor={aspectAnchor}
+          frameAnchor={frameAnchor}
+          qualityAnchor={qualityAnchor}
+          quality={quality}
+          onQuality={setQuality}
+          cropping={cropping}
+          onCrop={startCrop}
+          disabled={!editable}
+          stage={stage}
+          transport={
+            cropping
+              ? cropBar
+              : isVideo &&
+                video && (
+                  <Transport
+                    clock={clock}
+                    totalMs={timelineDuration(video)}
+                    playing={playing}
+                    onToggle={togglePlay}
+                    onPrevious={() => jumpClip(-1)}
+                    onNext={() => jumpClip(1)}
+                    onSplit={split}
+                    zoom={timelineZoom}
+                    onZoom={setTimelineZoom}
+                  />
+                )
+          }
+        />
+        <Sidebar
+          composition={composition ?? undefined}
+          onChange={change}
+          onCommit={editor.endGesture}
+          disabledReason={editable ? undefined : disabledReason}
+          hasAudio={hasAudio}
+          onPickImage={() => void pickBackground()}
+        />
+      </div>
+
+      {isVideo && video && videoInfo && (
+        <>
+          <div className="timeline-resize" role="separator" aria-orientation="horizontal" aria-label="Resize timeline" onPointerDown={startResize} />
+          <Timeline
+            video={video}
+            sourceDurationMs={videoInfo.durationMs}
+            clock={clock}
+            zoom={timelineZoom}
+            onSeek={seek}
+            onChange={changeVideo}
+            onCommit={editor.endGesture}
+            selection={selection}
+            onSelect={onSelect}
+            onSplit={split}
+            hasCamera={false}
+            zoomAnchor={zoomAnchor}
+          />
+        </>
+      )}
+
+      <Menu id={DELETE_MENU} anchor={deleteAnchor} label="Delete" placement="bottom-start" items={deleteItems} />
+      <Menu id={FILE_MENU} anchor={nameAnchor} label="File" placement="bottom-start" items={moreItems} testId="studio-more-menu" />
+      {composition && (
+        <>
+          <SizePopover anchor={aspectAnchor} composition={composition} onChange={(next) => change(next)} />
+          <FramePopover anchor={frameAnchor} composition={composition} onChange={change} onCommit={editor.endGesture} />
+          <PresetsPopover anchor={presetsAnchor} onApply={applyPreset} onError={setError} currentStyle={styleOf(composition)} />
+          <ExportDialog
+            anchor={exportAnchor}
+            composition={composition}
+            gif={doc?.gif ?? false}
+            settings={exportSettings}
+            onSettings={setExportSettings}
+            onChange={(next) => change(next)}
+            onExport={() => void runExport()}
+            progress={exportProgress}
+            onCancel={() => exportAbort.current?.abort()}
+          />
+        </>
+      )}
+      {selectedZoom && video && (
+        <ZoomEditor
+          anchor={zoomAnchor}
+          segment={selectedZoom}
+          aspect={contentAspect}
+          frameUrl={focusFrame}
+          autoAvailable={false}
+          onChange={(segment, gesture) => changeVideo({ ...video, zooms: video.zooms.map((z) => (z.id === segment.id ? segment : z)) }, gesture)}
+          onCommit={editor.endGesture}
+          onDelete={() => {
+            changeVideo({ ...video, zooms: video.zooms.filter((z) => z.id !== selectedZoom.id) });
+            setSelection(null);
+            popovers.close(ZOOM_EDITOR);
+          }}
+        />
+      )}
+      {selectedScene && video && (
+        <SceneEditor
+          anchor={zoomAnchor}
+          segment={selectedScene}
+          onChange={(segment) => changeVideo({ ...video, scenes: video.scenes.map((s) => (s.id === segment.id ? segment : s)) })}
+          onDelete={() => {
+            changeVideo({ ...video, scenes: video.scenes.filter((s) => s.id !== selectedScene.id) });
+            setSelection(null);
+            popovers.close(SCENE_EDITOR);
+          }}
+        />
+      )}
+    </GlassPanel>
   );
 }

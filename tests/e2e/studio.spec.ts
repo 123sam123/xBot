@@ -3,9 +3,9 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { _electron as electron, expect, test, type ElectronApplication, type Page } from '@playwright/test';
 
-// The Studio's settings popovers float over the page (portal + fixed
-// position), so opening one must never move or resize the canvas. Runs in
-// preview mode, where the toolbar has a sample to edit.
+// The Studio's popovers float over the page (portal + fixed position) and the
+// inspector swaps its tabs in place, so neither may move or resize the canvas.
+// Runs in preview mode, where there is a sample to edit.
 
 const root = resolve(__dirname, '../..');
 let userData: string;
@@ -30,7 +30,7 @@ async function studioPage(): Promise<Page> {
   return app.windows().find(isStudio) ?? app.waitForEvent('window', { predicate: isStudio });
 }
 
-test('opening the Background popover leaves the Studio canvas rect unchanged', async () => {
+test('the inspector and the popovers never move the Studio canvas, and one popover is open at a time', async () => {
   const page = await studioPage();
   await page.waitForSelector('html[data-ready]');
   await app.evaluate(() => (globalThis as unknown as { __xbotTest: { openStudio(): void } }).__xbotTest.openStudio());
@@ -39,16 +39,21 @@ test('opening the Background popover leaves the Studio canvas rect unchanged', a
   await expect(canvas).toBeVisible();
   const before = await canvas.boundingBox();
 
-  await page.getByTestId('tool-background').click();
-  const popover = page.getByTestId('popover-background');
-  await expect(popover).toBeVisible();
-  await expect(popover).toHaveAttribute('data-placed', 'true');
-
+  // The inspector's tabs swap in place.
+  await page.getByTestId('sidebar-tab-audio').click();
+  await page.getByTestId('sidebar-tab-background').click();
+  await expect(page.getByTestId('bg-kind-wallpaper')).toBeVisible();
   expect(await canvas.boundingBox()).toEqual(before);
 
-  // Opening another tool's popover closes this one: one at a time.
-  await page.getByTestId('tool-frame').click();
-  await expect(page.getByTestId('popover-frame')).toBeVisible();
-  await expect(popover).toHaveCount(0);
+  await page.getByTestId('preview-frame').click();
+  const frame = page.getByTestId('popover-frame');
+  await expect(frame).toBeVisible();
+  await expect(frame).toHaveAttribute('data-placed', 'true');
+  expect(await canvas.boundingBox()).toEqual(before);
+
+  // Opening another popover closes this one: one at a time.
+  await page.getByTestId('studio-export').click();
+  await expect(page.getByTestId('export-dialog')).toBeVisible();
+  await expect(frame).toHaveCount(0);
   expect(await canvas.boundingBox()).toEqual(before);
 });

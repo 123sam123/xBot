@@ -12,7 +12,6 @@ import { probeVideo } from '../../../src/main/services/ffmpeg/probe';
 import { createMediaService, type MediaService } from '../../../src/main/services/media/service';
 import { createStudioService, type StudioService } from '../../../src/main/services/studio/service';
 import type { ServiceContext } from '../../../src/main/services/types';
-import type { ExportJob } from '../../../src/shared/contracts/studio';
 import { silent } from './videoFixtures';
 
 // The real electron-free drafts, media and studio services on a migrated
@@ -32,7 +31,7 @@ export interface Harness {
 }
 
 /** The real drafts, media and studio services on a fresh, migrated userData; FFmpeg is `bins` (or missing for null). */
-export async function harness(bins: FfmpegBinaries | null, { realtime = false }: { realtime?: boolean } = {}): Promise<Harness> {
+export async function harness(bins: FfmpegBinaries | null): Promise<Harness> {
   const userData = mkdtempSync(join(tmpdir(), 'xbot-video-'));
   const paths = appPaths(userData);
   prepareUserData(paths);
@@ -57,7 +56,6 @@ export async function harness(bins: FfmpegBinaries | null, { realtime = false }:
     events,
     video: { binaries: async () => bins },
     serialize: createSerialQueue(),
-    realtime,
   });
   await studio.init(null);
   return {
@@ -74,18 +72,6 @@ export async function harness(bins: FfmpegBinaries | null, { realtime = false }:
       rmSync(userData, { recursive: true, force: true });
     },
   };
-}
-
-/** Resolves with the job once `done` holds for one of its `export:progress` events. */
-export function waitForJob(events: ServiceContext['events'], jobId: string, done: (job: ExportJob) => boolean = (job) => job.status !== 'queued' && job.status !== 'running'): Promise<ExportJob> {
-  return new Promise((resolve) => {
-    const listener = ({ job }: { job: ExportJob }) => {
-      if (job.id !== jobId || !done(job)) return;
-      events.off('export:progress', listener);
-      resolve(job);
-    };
-    events.on('export:progress', listener);
-  });
 }
 
 /** The file of the current draft's attachment that holds `documentId`'s export. */

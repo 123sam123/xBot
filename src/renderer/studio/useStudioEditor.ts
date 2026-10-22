@@ -40,6 +40,8 @@ export interface StudioEditor {
   /** Opens what a pick or a drop became: a document, or a read-only video (FFmpeg missing). */
   openSession(opened: { document: StudioDocument } | { view: StudioView }): void;
   addMedia(item: MediaItem): void;
+  /** Shows nothing (after saving): the empty state. */
+  clear(): void;
   error: string | null;
   setError(message: string | null): void;
   notice: string | null;
@@ -197,6 +199,16 @@ export function useStudioEditor(): StudioEditor {
     [open, showView],
   );
 
+  const clear = useCallback(() => {
+    void flush();
+    latest.current = { documentId: null, dirty: false };
+    historyRef.current = null;
+    setHistory(null);
+    setDocument(null);
+    setView(null);
+    setStatus('empty');
+  }, [flush]);
+
   // The document to show: main's session, kept current by `studio:opened`.
   useEffect(() => {
     let alive = true;
@@ -259,6 +271,7 @@ export function useStudioEditor(): StudioEditor {
     open,
     openSession,
     addMedia,
+    clear,
     error,
     setError,
     notice,

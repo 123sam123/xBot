@@ -1,12 +1,12 @@
 import { randomUUID } from 'node:crypto';
 import { existsSync } from 'node:fs';
-import { unlink, writeFile } from 'node:fs/promises';
+import { open, rm, unlink, writeFile, type FileHandle } from 'node:fs/promises';
 import { basename, extname, join } from 'node:path';
 import { exportLayout } from '../../../shared/composition/layout';
 import { defaultComposition, effectiveFormat, gradientBackground, MAX_EDIT_PIXELS, minTrimMs, type Composition, type Style } from '../../../shared/composition/model';
 import { compositionSchema, styleSchema } from '../../../shared/composition/schema';
 import type { MediaItem } from '../../../shared/contracts/media';
-import type { AddToPostResult, ExportJob, ExportVideoResult, SaveResult, StudioDocument, StudioPreset, StudioView, VideoInfo } from '../../../shared/contracts/studio';
+import type { AddToPostResult, BeginExportResult, ExportFileFormat, SaveResult, StudioDocument, StudioPreset, StudioView, VideoInfo } from '../../../shared/contracts/studio';
 import type { Db } from '../../db';
 import { IpcError } from '../../ipc/core';
 import type { Logger } from '../../log';
@@ -20,7 +20,6 @@ import { MediaRejected, type MediaService } from '../media/service';
 import { toMediaItem, type MediaRow } from '../media/rows';
 import { probe, sniff, SNIFF_BYTES } from '../media/sniff';
 import type { ServiceContext } from '../types';
-import { createExportRunner, type ExportRunner } from './exports';
 
 // Studio documents, exports and presets. No `electron` import: the IPC layer
 // supplies pickers and windows. A document is one source image or video plus
@@ -29,8 +28,9 @@ import { createExportRunner, type ExportRunner } from './exports';
 // checks the rendered bytes against the export layout before storing them as
 // media and putting them on the current draft, in place of the document's last
 // export. A video document (T5) also keeps what ffprobe read when it was
-// created, and its "Add to post" is an FFmpeg job (exports.ts) over the frame
-// layer the renderer drew.
+// created. A video's export is encoded in the renderer (the same draw routine
+// as the preview, through WebCodecs) and streamed here into an export file,
+// which is then attached to the draft or saved where the user picks.
 
 /** Unlinked documents untouched for this long are deleted at startup. */
 export const DOCUMENT_GC_AGE_MS = 30 * 24 * 60 * 60 * 1000;
@@ -48,12 +48,13 @@ export interface StudioServiceDeps {
   drafts: Pick<DraftsService, 'getCurrent'>;
   events: ServiceContext['events'];
   video: StudioVideoTools;
-  /** The drafts/media queue: a finished video export is imported and attached on it. */
+  /** The drafts/media queue: a finished export is imported and attached on it. */
   serialize: SerialQueue;
-  /** Test seam: video exports read their input at the native rate. */
-  realtime?: boolean;
   now?: () => Date;
 }
+
+/** The largest export file the renderer may stream (the media import caps video at 1 GB). */
+export const MAX_EXPORT_FILE_BYTES = 1024 * 1024 * 1024;
 
 export interface AddToPostInput {
   documentId: string;
@@ -64,13 +65,11 @@ export interface AddToPostInput {
   openedFromAttachmentId: string | null;
 }
 
-export interface ExportVideoInput {
+export interface BeginExportInput {
   documentId: string;
   baseRevision: number;
   composition: Composition;
-  /** The frame layer: a PNG at the export size, transparent where the video shows. */
-  layer: Uint8Array;
-  openedFromAttachmentId: string | null;
+  format: ExportFileFormat;
 }
 
 export type Opened = { document: StudioDocument } | { view: StudioView };
@@ -89,14 +88,21 @@ export interface StudioService {
   savePreset(name: string, style: Style): StudioPreset;
   deletePreset(id: string): void;
   addToPost(input: AddToPostInput): Promise<AddToPostResult>;
-  /** Saves a video document and queues its MP4 export. */
-  exportVideo(input: ExportVideoInput): Promise<ExportVideoResult>;
-  cancelExport(jobId: string): Promise<ExportJob>;
-  job(jobId: string): ExportJob;
-  exportActivity(): ReturnType<ExportRunner['activity']>;
+  /** Saves the document and opens an export file for the renderer to stream into. */
+  beginExport(input: BeginExportInput): Promise<BeginExportResult>;
+  /** Writes `bytes` at `position` of export `token`'s file. */
+  writeExport(token: string, position: number, bytes: Uint8Array): Promise<void>;
+  /** Closes export `token`'s file and returns its path and suggested name; the file stays until `discardExport`. */
+  closeExport(token: string): Promise<{ path: string; name: string; documentId: string; format: ExportFileFormat }>;
+  /** Imports the closed export `token` and puts it on the current draft. */
+  attachExportFile(token: string, openedFromAttachmentId: string | null): Promise<AddToPostResult>;
+  /** Deletes export `token`'s file, whatever state it is in. */
+  discardExport(token: string): Promise<void>;
+  /** The document's source file on disk. */
+  sourcePath(documentId: string): string;
   /** A video document's timeline frames (JPEG). */
   filmstrip(documentId: string, signal?: AbortSignal): Promise<Uint8Array[]>;
-  /** Quit: stops a running export at once. */
+  /** Quit: closes and deletes open export files. */
   dispose(): void;
 }
 
@@ -139,19 +145,28 @@ interface AttachInput {
 
 const STALE = 'This document changed elsewhere. Reloaded the latest version.';
 const SOURCE_MISSING = 'The video file is missing. Add it again from Write Post.';
-const FFMPEG_NEEDED = 'Video export needs FFmpeg. Install it with Homebrew: brew install ffmpeg';
+const FFMPEG_NEEDED = 'Video editing needs FFmpeg. Install it with Homebrew: brew install ffmpeg';
+const EXPORT_GONE = 'That export is no longer available. Export again.';
 
-/** A PNG's IHDR: size and colour type (6 is RGBA). */
-function pngHeader(bytes: Uint8Array): { width: number; height: number; colorType: number } | null {
-  if (bytes.byteLength < 26) return null;
-  const view = Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-  if (view.toString('latin1', 12, 16) !== 'IHDR') return null;
-  return { width: view.readUInt32BE(16), height: view.readUInt32BE(20), colorType: view[25]! };
+interface ExportFile {
+  documentId: string;
+  format: ExportFileFormat;
+  path: string;
+  name: string;
+  handle: FileHandle | null;
+  size: number;
 }
 
-export function createStudioService({ db, paths, log, media, drafts, events, video, serialize, realtime = false, now = () => new Date() }: StudioServiceDeps): StudioService {
+/** Every clip inside the source and at least the minimum long. */
+function clipsFit(video: NonNullable<Composition['video']>, info: VideoInfo): boolean {
+  const min = minTrimMs(info.durationMs);
+  return video.clips.every((clip) => clip.endMs <= info.durationMs && clip.endMs - clip.startMs >= min);
+}
+
+export function createStudioService({ db, paths, log, media, drafts, events, video, serialize, now = () => new Date() }: StudioServiceDeps): StudioService {
   const stamp = () => now().toISOString();
   const adding = new Set<string>();
+  const exportFiles = new Map<string, ExportFile>();
 
   const q = {
     document: db.prepare<[string], DocumentRow>('SELECT * FROM studio_documents WHERE id = ?'),
@@ -222,13 +237,7 @@ export function createStudioService({ db, paths, log, media, drafts, events, vid
   function fits(parsed: Composition, source: MediaRow, info: VideoInfo | null): boolean {
     if (parsed.source.mediaId !== source.id) return false;
     if (!info) return parsed.video === undefined && parsed.source.width === source.width && parsed.source.height === source.height;
-    return (
-      parsed.video !== undefined &&
-      parsed.source.width === info.width &&
-      parsed.source.height === info.height &&
-      parsed.video.trimEndMs <= info.durationMs &&
-      parsed.video.trimEndMs - parsed.video.trimStartMs >= minTrimMs(info.durationMs)
-    );
+    return parsed.video !== undefined && parsed.source.width === info.width && parsed.source.height === info.height && clipsFit(parsed.video, info);
   }
 
   /** The stored composition, or the defaults (keeping the unreadable JSON) when it is corrupt or no longer fits its source. */
@@ -269,7 +278,6 @@ export function createStudioService({ db, paths, log, media, drafts, events, vid
       background: background ? toMediaItem(background) : null,
       gif: source.mime === 'image/gif',
       video: info,
-      exportJob: runner.activeFor(row.id),
       updatedAt: row.updated_at,
     };
   }
@@ -345,36 +353,11 @@ export function createStudioService({ db, paths, log, media, drafts, events, vid
     return { attachmentId, exportId };
   }
 
-  const runner = createExportRunner({
-    db,
-    paths,
-    log,
-    events,
-    binaries: () => video.binaries(),
-    serialize,
-    realtime,
-    now,
-    async finish({ documentId, draftId, openedFromAttachmentId, output, sourceName }) {
-      const stem = basename(sourceName, extname(sourceName)) || 'video';
-      let item: MediaItem;
-      try {
-        item = await media.importLoose({ name: `${stem}-studio.mp4`, path: output });
-      } catch (err) {
-        if (err instanceof MediaRejected) throw new IpcError('media_rejected', err.message);
-        throw err;
-      }
-      // The draft the user asked from, unless it is gone.
-      const target = q.draftExists.get(draftId) ? draftId : drafts.getCurrent().id;
-      return attachExport({ documentId, item, format: 'mp4', scale: 1, draftId: target, openedFromAttachmentId }).exportId;
-    },
-  });
-
   const service: StudioService = {
     async init(keepId) {
       const cutoff = new Date(now().getTime() - DOCUMENT_GC_AGE_MS).toISOString();
       const { changes } = q.collect.run({ cutoff, keep: keepId ?? '' });
       if (changes > 0) log.info(`studio: removed ${changes} unused document(s)`);
-      await runner.init();
     },
 
     exists: (documentId) => q.document.get(documentId) !== undefined,
@@ -445,9 +428,8 @@ export function createStudioService({ db, paths, log, media, drafts, events, vid
           if (!source || source.id !== row.source_media_id || composition.source.width !== info.width || composition.source.height !== info.height || !composition.video) {
             throw new IpcError('invalid_source', 'A video document keeps its video.');
           }
-          const { trimStartMs, trimEndMs } = composition.video;
-          if (trimEndMs > info.durationMs || trimEndMs - trimStartMs < minTrimMs(info.durationMs)) {
-            throw new IpcError('invalid_trim', 'The trim must stay inside the video and last at least half a second.');
+          if (!clipsFit(composition.video, info)) {
+            throw new IpcError('invalid_trim', 'Every clip must stay inside the video and last at least half a second.');
           }
         } else if (!source || source.kind !== 'image' || source.width !== composition.source.width || source.height !== composition.source.height || composition.video) {
           throw new IpcError('invalid_source', 'That source image no longer matches. Replace it again.');
@@ -493,7 +475,7 @@ export function createStudioService({ db, paths, log, media, drafts, events, vid
     },
 
     async addToPost({ documentId, baseRevision, composition, bytes, openedFromAttachmentId }) {
-      if (videoOf(documentRow(documentId))) throw new IpcError('not_an_image', 'Videos are exported with FFmpeg. Try again.');
+      if (videoOf(documentRow(documentId))) throw new IpcError('not_an_image', 'Videos are exported as MP4. Try again.');
       if (adding.has(documentId)) throw new IpcError('add_in_progress', 'Already adding this image to your post.');
       adding.add(documentId);
       try {
@@ -530,44 +512,78 @@ export function createStudioService({ db, paths, log, media, drafts, events, vid
       }
     },
 
-    async exportVideo({ documentId, baseRevision, composition, layer, openedFromAttachmentId }) {
+    async beginExport({ documentId, baseRevision, composition, format }) {
       const row = documentRow(documentId);
       const info = videoOf(row);
-      if (!info) throw new IpcError('not_a_video', 'Only video documents export as MP4.');
-      if (runner.activeFor(documentId)) throw new IpcError('export_in_progress', 'This video is already exporting.');
-      if (!(await video.binaries())) throw new IpcError('ffmpeg_missing', FFMPEG_NEEDED);
-      if (composition.background.type === 'transparent') {
+      if ((format === 'mp4') !== (info !== null)) throw new IpcError('export_mismatch', 'That format doesn’t fit this document.');
+      if (info && composition.background.type === 'transparent') {
         throw new IpcError('transparent_video', 'Video can’t have a transparent background. Pick a background first.');
       }
       const { revision } = service.save(documentId, baseRevision, composition);
-
-      // The layer must be the RGBA PNG this composition's export layout asks for.
-      const type = sniff(Buffer.from(layer.buffer, layer.byteOffset, Math.min(layer.byteLength, SNIFF_BYTES)));
-      const header = type?.format === 'png' ? pngHeader(layer) : null;
-      const expected = exportLayout(composition).canvas;
-      if (!header || header.colorType !== 6 || header.width !== expected.width || header.height !== expected.height) {
-        throw new IpcError('export_mismatch', 'The rendered frame didn’t match the composition. Try again.');
-      }
       const source = mediaRow(row.source_media_id)!;
-      const sourcePath = join(paths.media, source.path);
-      if (!existsSync(sourcePath)) throw new IpcError('source_missing', SOURCE_MISSING);
-
-      const job = await runner.enqueue({
-        documentId,
-        draftId: drafts.getCurrent().id,
-        openedFromAttachmentId,
-        composition,
-        info,
-        sourcePath,
-        sourceName: source.original_name,
-        layer,
-      });
-      return { job, revision };
+      const token = randomUUID();
+      const path = join(paths.tmp, `${token}.export.${format === 'jpeg' ? 'jpg' : format}`);
+      const handle = await open(path, 'wx');
+      const stem = basename(source.original_name, extname(source.original_name)) || (info ? 'video' : 'image');
+      exportFiles.set(token, { documentId, format, path, name: `${stem}-studio.${format === 'jpeg' ? 'jpg' : format}`, handle, size: 0 });
+      return { token, revision };
     },
 
-    cancelExport: (jobId) => runner.cancel(jobId),
-    job: (jobId) => runner.get(jobId),
-    exportActivity: () => runner.activity(),
+    async writeExport(token, position, bytes) {
+      const file = exportFiles.get(token);
+      if (!file?.handle) throw new IpcError('export_gone', EXPORT_GONE);
+      const end = position + bytes.byteLength;
+      if (end > MAX_EXPORT_FILE_BYTES) {
+        await service.discardExport(token);
+        throw new IpcError('export_too_large', 'This export is over 1 GB. Try a lower resolution or a shorter clip.');
+      }
+      await file.handle.write(bytes, 0, bytes.byteLength, position);
+      file.size = Math.max(file.size, end);
+    },
+
+    async closeExport(token) {
+      const file = exportFiles.get(token);
+      if (!file) throw new IpcError('export_gone', EXPORT_GONE);
+      if (file.handle) {
+        await file.handle.close();
+        file.handle = null;
+      }
+      if (file.size === 0) throw new IpcError('export_failed', 'The export came out empty. Try again.');
+      return { path: file.path, name: file.name, documentId: file.documentId, format: file.format };
+    },
+
+    async attachExportFile(token, openedFromAttachmentId) {
+      const { path, name, documentId, format } = await service.closeExport(token);
+      const document = documentRow(documentId);
+      try {
+        return await serialize(async () => {
+          let item: MediaItem;
+          try {
+            item = await media.importLoose({ name, path });
+          } catch (err) {
+            if (err instanceof MediaRejected) throw new IpcError('media_rejected', err.message);
+            throw err;
+          }
+          const draftId = drafts.getCurrent().id;
+          const { attachmentId, exportId } = attachExport({ documentId, item, format, scale: 1, draftId, openedFromAttachmentId });
+          return { draftId, attachmentId, exportId, revision: document.revision };
+        });
+      } finally {
+        await service.discardExport(token);
+      }
+    },
+
+    async discardExport(token) {
+      const file = exportFiles.get(token);
+      if (!file) return;
+      exportFiles.delete(token);
+      await file.handle?.close().catch(() => {});
+      await rm(file.path, { force: true });
+    },
+
+    sourcePath(documentId) {
+      return join(paths.media, mediaRow(documentRow(documentId).source_media_id)!.path);
+    },
 
     async filmstrip(documentId, signal) {
       const row = documentRow(documentId);
@@ -586,7 +602,9 @@ export function createStudioService({ db, paths, log, media, drafts, events, vid
       }
     },
 
-    dispose: () => runner.dispose(),
+    dispose() {
+      for (const token of [...exportFiles.keys()]) void service.discardExport(token);
+    },
   };
   return service;
 }

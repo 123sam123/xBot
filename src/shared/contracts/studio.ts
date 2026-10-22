@@ -38,22 +38,20 @@ export interface VideoInfo {
   hdr: boolean;
 }
 
-export type ExportJobStatus = 'queued' | 'running' | 'succeeded' | 'failed' | 'canceled';
+/** What an export file holds: a video document's MP4, or an image document's PNG/JPEG. */
+export type ExportFileFormat = 'mp4' | 'png' | 'jpeg';
 
-/** One video export ("Add to post" on a video document). */
-export interface ExportJob {
-  id: string;
-  documentId: string;
-  status: ExportJobStatus;
-  /** 0–1, from FFmpeg's `out_time_us` over the trimmed length. */
-  progress: number;
-  /** The sentence the user sees when it failed or was canceled. */
-  error: string | null;
-  /** The stored export once it succeeded. */
-  exportId: string | null;
-  createdAt: string;
-  updatedAt: string;
+/** Where a finished export goes. */
+export type ExportDestination = 'post' | 'file';
+
+export interface BeginExportResult {
+  /** Names the export file for `writeExport` and `finishExport`. */
+  token: string;
+  revision: number;
 }
+
+/** A finished export: on the post, saved to `path`, or not saved (the save panel was cancelled). */
+export type FinishExportResult = { destination: 'post'; result: AddToPostResult } | { destination: 'file'; path: string | null };
 
 export type H264Encoder = 'libx264' | 'h264_videotoolbox';
 
@@ -80,8 +78,6 @@ export interface StudioDocument {
   gif: boolean;
   /** Set for a video document: what ffprobe read when the document was created. */
   video: VideoInfo | null;
-  /** The document's queued or running export, so a reopened Studio shows its progress. */
-  exportJob: ExportJob | null;
   updatedAt: string;
 }
 
@@ -125,11 +121,6 @@ export interface AddToPostResult {
   revision: number;
 }
 
-export interface ExportVideoResult {
-  job: ExportJob;
-  revision: number;
-}
-
 export const saveCompositionSchema = z.strictObject({
   documentId: z.uuid(),
   baseRevision: z.number().int().min(0),
@@ -159,17 +150,23 @@ export const addToPostSchema = z.strictObject({
     .refine((bytes) => bytes.byteLength > 0 && bytes.byteLength <= MAX_EXPORT_BYTES, 'The export must be 1 byte to 20 MB.'),
 });
 
-/** The frame layer is a PNG at the export size: everything but the video, with a hole where it shows. */
-export const exportVideoSchema = z.strictObject({
+export const beginExportSchema = z.strictObject({
   documentId: z.uuid(),
   baseRevision: z.number().int().min(0),
   composition: compositionSchema,
-  layer: z
-    .instanceof(Uint8Array)
-    .refine((bytes) => bytes.byteLength > 0 && bytes.byteLength <= MAX_EXPORT_BYTES, 'The frame layer must be 1 byte to 20 MB.'),
+  format: z.enum(['mp4', 'png', 'jpeg']),
 });
 
-export const jobIdSchema = z.strictObject({ jobId: z.uuid() });
+/** One streamed write of an export file; chunks are at most 64 MB. */
+export const writeExportSchema = z.strictObject({
+  token: z.uuid(),
+  position: z.number().int().min(0),
+  bytes: z.instanceof(Uint8Array).refine((bytes) => bytes.byteLength > 0 && bytes.byteLength <= 64 * 1024 * 1024, 'A chunk must be 1 byte to 64 MB.'),
+});
+
+export const finishExportSchema = z.strictObject({ token: z.uuid(), destination: z.enum(['post', 'file']) });
+
+export const exportTokenSchema = z.strictObject({ token: z.uuid() });
 
 export const documentIdSchema = z.strictObject({ documentId: z.uuid() });
 
@@ -182,8 +179,6 @@ export const studioSettings = {
 } satisfies SettingsShape;
 
 export interface StudioEvents {
-  /** A video export job moved: queued, progress, finished. */
-  'export:progress': { job: ExportJob };
   /** The Studio's document changed: "Edit in Studio ↗", a pick or a drop. */
   'studio:opened': StudioOpened;
   /** The app is quitting: save pending edits now, then call `studio.flushed()`. */
@@ -194,7 +189,6 @@ export interface StudioEvents {
 }
 
 export const studioForwardedEvents = [
-  'export:progress',
   'studio:opened',
   'studio:flush-requested',
   'studio:fullscreen',
@@ -215,10 +209,14 @@ export interface StudioApi {
   deletePreset(id: string): Promise<IpcResult<null>>;
   /** Saves `composition`, stores the rendered `bytes` and puts them on the current draft. */
   addToPost(documentId: string, baseRevision: number, composition: Composition, bytes: Uint8Array): Promise<IpcResult<AddToPostResult>>;
-  /** Saves a video document's `composition` and queues its MP4 export over the frame `layer` PNG. */
-  exportVideo(documentId: string, baseRevision: number, composition: Composition, layer: Uint8Array): Promise<IpcResult<ExportVideoResult>>;
-  /** Stops a queued or running export; resolves once FFmpeg has exited and its files are gone. */
-  cancelExport(jobId: string): Promise<IpcResult<ExportJob>>;
+  /** Saves `composition` and opens an export file of `format` to stream into. */
+  beginExport(documentId: string, baseRevision: number, composition: Composition, format: ExportFileFormat): Promise<IpcResult<BeginExportResult>>;
+  /** Writes `bytes` at `position` of the export file. */
+  writeExport(token: string, position: number, bytes: Uint8Array): Promise<IpcResult<null>>;
+  /** Closes the export file and puts it on the post, or offers a save panel for it. */
+  finishExport(token: string, destination: ExportDestination): Promise<IpcResult<FinishExportResult>>;
+  /** Abandons an export and deletes its file. */
+  cancelExport(token: string): Promise<IpcResult<null>>;
   /** The video's filmstrip: JPEG frames evenly spaced over its duration. */
   filmstrip(documentId: string): Promise<IpcResult<Uint8Array[]>>;
   ffmpegStatus(): Promise<IpcResult<FfmpegStatus>>;
@@ -226,6 +224,10 @@ export interface StudioApi {
   checkFfmpeg(): Promise<IpcResult<FfmpegStatus>>;
   /** Lets the user pick the ffmpeg program; null when cancelled. */
   locateFfmpeg(): Promise<IpcResult<FfmpegStatus | null>>;
+  /** Shows the document's source file in Finder. */
+  reveal(documentId: string): Promise<IpcResult<null>>;
+  /** Closes the open document: the Studio shows its empty state. */
+  close(): Promise<IpcResult<null>>;
   /** Returns whether the Studio is now full screen. */
   toggleFullscreen(): Promise<IpcResult<boolean>>;
   /** Acknowledges `studio:flush-requested`. */

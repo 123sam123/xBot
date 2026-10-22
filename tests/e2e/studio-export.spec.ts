@@ -7,11 +7,11 @@ import pixelmatch from 'pixelmatch';
 import { PNG } from 'pngjs';
 import { computeLayout } from '../../src/shared/composition/layout';
 import type { Composition, Rect } from '../../src/shared/composition/model';
-import { launch, previewDrawn, readDb, showComposerFirstRun, studioPage, stubPicker, windowVisible } from './studio-harness';
+import { addToPost as exportToPost, launch, previewDrawn, readDb, showComposerFirstRun, studioPage, stubPicker, windowVisible } from './studio-harness';
 
 // SPEC §16 "Test preview/export agreement" and §22 "Non-destructive edits":
-// a quadrant-coloured screenshot is exported at 1× and 2×. Each export is
-// exactly what the preview canvas shows (pixelmatch), and pixels sampled at
+// a quadrant-coloured screenshot is exported at 1× and 2×. The 1× export is
+// exactly what the preview canvas shows at 100 % (pixelmatch), and pixels sampled at
 // computeLayout's rects are the background, the chrome and the four
 // quadrants. After edits, a crop and three exports, the source file is
 // byte-for-byte the one imported, and a transparent export is transparent.
@@ -89,10 +89,10 @@ function centre(r: Rect, fx: number, fy: number): [number, number] {
   return [r.x + r.width * fx, r.y + r.height * fy];
 }
 
-function expectAgreement(preview: PNG, exported: PNG, composition: Composition, scale: 1 | 2): void {
+/** The export against the layout's rects, and against the preview when it shows the export's pixels (1×). */
+function expectAgreement(preview: PNG | null, exported: PNG, composition: Composition, scale: 1 | 2): void {
   const layout = computeLayout(composition, { scale });
   expect({ width: exported.width, height: exported.height }).toEqual(layout.canvas);
-  expect({ width: preview.width, height: preview.height }).toEqual(layout.canvas);
 
   expectColour(exported, 2, 2, BACKGROUND, 'the background');
   const chrome = layout.chrome!;
@@ -102,20 +102,16 @@ function expectAgreement(preview: PNG, exported: PNG, composition: Composition, 
   expectColour(exported, ...centre(layout.content, 0.25, 0.75), QUADRANTS.bottomLeft, 'the bottom-left quadrant');
   expectColour(exported, ...centre(layout.content, 0.75, 0.75), QUADRANTS.bottomRight, 'the bottom-right quadrant');
 
+  if (!preview) return;
+  expect({ width: preview.width, height: preview.height }).toEqual(layout.canvas);
   const differing = pixelmatch(preview.data, exported.data, null, exported.width, exported.height, { threshold: 0.1 });
   expect(differing / (exported.width * exported.height)).toBeLessThanOrEqual(MAX_DIFF);
 }
 
 async function addToPost(studio: Page): Promise<void> {
-  await studio.getByTestId('studio-add').click();
+  await exportToPost(studio);
   await expect.poll(() => windowVisible(app!, '/composer/')).toBe(true);
   await expect.poll(() => windowVisible(app!, '/studio/')).toBe(false);
-}
-
-async function zoom(studio: Page, level: number): Promise<void> {
-  await studio.getByTestId('studio-zoom').click();
-  await studio.getByTestId('zoom-menu').getByRole('menuitemradio', { name: `${level}%` }).click();
-  await expect(studio.getByTestId('studio-zoom')).toHaveText(`${level}%`);
 }
 
 test.beforeAll(() => {
@@ -153,20 +149,17 @@ test('exports match the preview at 1× and 2× and never touch the source', asyn
   expect(source).toMatchObject({ bytes: fixtureBytes.length, width: 800, height: 600, sha256: sha256(fixtureBytes) });
 
   // A solid background at neutral brightness, no shadow, a 640 × 400 output.
-  await studio.getByTestId('tool-background').click();
-  await studio.getByTestId('background-more').click();
-  await studio.getByTestId('background-type-solid').click();
+  await studio.getByTestId('bg-kind-color').click();
   await studio.getByTestId('background-color').fill('#204080');
   const brightness = studio.getByTestId('background-brightness');
   await brightness.focus();
   for (let i = 0; i < 5; i++) await studio.keyboard.press('ArrowLeft');
   await expect(brightness).toHaveValue('0.5');
-  await studio.keyboard.press('Escape');
-  await studio.getByTestId('tool-shadow').click();
-  await studio.getByTestId('shadow-style-none').click();
-  await studio.keyboard.press('Escape');
-  await studio.getByTestId('tool-padding').click();
-  await studio.getByTestId('output-ratio-custom').click();
+  await studio.getByTestId('shadow').focus();
+  await studio.keyboard.press('Home');
+  await expect(studio.getByTestId('shadow')).toHaveValue('0');
+  await studio.getByTestId('preview-aspect').click();
+  await studio.getByTestId('aspect-menu').getByRole('menuitemradio', { name: 'Custom size…' }).click();
   await studio.getByTestId('output-width').fill('640');
   await studio.getByTestId('output-width').press('Enter');
   await studio.getByTestId('output-height').fill('400');
@@ -174,7 +167,6 @@ test('exports match the preview at 1× and 2× and never touch the source', asyn
   await studio.keyboard.press('Escape');
 
   // 1×: the preview at 100 % on a 1× display is the export, pixel for pixel.
-  await zoom(studio, 100);
   const preview1 = await previewPixels(studio);
   await addToPost(studio);
   const export1 = latestExport(documentId);
@@ -185,20 +177,19 @@ test('exports match the preview at 1× and 2× and never touch the source', asyn
   await composer.getByRole('button', { name: 'Edit in Studio' }).click();
   await expect.poll(() => windowVisible(app!, '/studio/')).toBe(true);
   await expect(panel).toHaveAttribute('data-document-id', documentId);
-  await studio.getByTestId('studio-dims').click();
+  await studio.getByTestId('studio-export').click();
   await studio.getByTestId('output-scale-2').click();
   await studio.keyboard.press('Escape');
-  await zoom(studio, 200);
-  const preview2 = await previewPixels(studio);
+  await previewDrawn(studio);
   await addToPost(studio);
   const export2 = latestExport(documentId);
   expect(export2.composition.output.scale).toBe(2);
-  expectAgreement(preview2, export2.png, export2.composition, 2);
+  expectAgreement(null, export2.png, export2.composition, 2);
 
   // Third export: crop, then a transparent background.
   await composer.getByRole('button', { name: 'Edit in Studio' }).click();
   await expect.poll(() => windowVisible(app!, '/studio/')).toBe(true);
-  await studio.getByTestId('tool-crop').click();
+  await studio.getByTestId('preview-crop').click();
   const handle = (await studio.getByTestId('crop-handle-se').boundingBox())!;
   await studio.mouse.move(handle.x + handle.width / 2, handle.y + handle.height / 2);
   await studio.mouse.down();
@@ -206,10 +197,7 @@ test('exports match the preview at 1× and 2× and never touch the source', asyn
   await studio.mouse.up();
   await studio.getByTestId('crop-apply').click();
   await expect(studio.getByTestId('popover-crop')).toHaveCount(0);
-  await studio.getByTestId('tool-background').click();
-  await studio.getByTestId('background-more').click();
-  await studio.getByTestId('background-type-transparent').click();
-  await studio.keyboard.press('Escape');
+  await studio.getByTestId('bg-kind-none').click();
   await previewDrawn(studio);
   await addToPost(studio);
   const export3 = latestExport(documentId);

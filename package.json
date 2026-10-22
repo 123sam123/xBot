@@ -25,7 +25,8 @@
     "preview:ui": "pnpm build && node scripts/preview-ui.mjs",
     "capture": "pnpm build && node --experimental-strip-types --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/capture-ui.ts",
     "capture:glass": "pnpm build && node scripts/capture-glass.mjs",
-    "glass": "node scripts/build-glass.mjs"
+    "glass": "node scripts/build-glass.mjs",
+    "wallpapers": "node scripts/render-wallpapers.mjs"
   },
   "dependencies": {
     "better-sqlite3": "^13.0.3"
@@ -48,6 +49,7 @@
     "eslint-plugin-react-hooks": "^7.1.1",
     "globals": "^17.13.0",
     "ignore": "7.0.13",
+    "mediabunny": "1.61.3",
     "node-api-headers": "1.9.0",
     "pixelmatch": "^8.0.0",
     "pngjs": "^7.0.0",

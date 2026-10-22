@@ -1,0 +1,127 @@
+[
+  {
+    "id": "macos-tide",
+    "name": "Tide",
+    "category": "macOS"
+  },
+  {
+    "id": "macos-bloom",
+    "name": "Bloom",
+    "category": "macOS"
+  },
+  {
+    "id": "macos-meadow",
+    "name": "Meadow",
+    "category": "macOS"
+  },
+  {
+    "id": "macos-sunrise",
+    "name": "Sunrise",
+    "category": "macOS"
+  },
+  {
+    "id": "macos-glow",
+    "name": "Glow",
+    "category": "macOS"
+  },
+  {
+    "id": "dark-carbon",
+    "name": "Carbon",
+    "category": "Dark"
+  },
+  {
+    "id": "dark-ember",
+    "name": "Ember",
+    "category": "Dark"
+  },
+  {
+    "id": "dark-midnight",
+    "name": "Midnight",
+    "category": "Dark"
+  },
+  {
+    "id": "dark-onyx",
+    "name": "Onyx",
+    "category": "Dark"
+  },
+  {
+    "id": "dark-ridge",
+    "name": "Ridge",
+    "category": "Dark"
+  },
+  {
+    "id": "blue-lagoon",
+    "name": "Lagoon",
+    "category": "Blue"
+  },
+  {
+    "id": "blue-arc",
+    "name": "Arc",
+    "category": "Blue"
+  },
+  {
+    "id": "blue-frost",
+    "name": "Frost",
+    "category": "Blue"
+  },
+  {
+    "id": "blue-iris",
+    "name": "Iris",
+    "category": "Blue"
+  },
+  {
+    "id": "blue-depths",
+    "name": "Depths",
+    "category": "Blue"
+  },
+  {
+    "id": "purple-nebula",
+    "name": "Nebula",
+    "category": "Purple"
+  },
+  {
+    "id": "purple-orchid",
+    "name": "Orchid",
+    "category": "Purple"
+  },
+  {
+    "id": "purple-velvet",
+    "name": "Velvet",
+    "category": "Purple"
+  },
+  {
+    "id": "purple-prism",
+    "name": "Prism",
+    "category": "Purple"
+  },
+  {
+    "id": "purple-dusk",
+    "name": "Dusk",
+    "category": "Purple"
+  },
+  {
+    "id": "warm-desert",
+    "name": "Desert",
+    "category": "Warm"
+  },
+  {
+    "id": "warm-coral",
+    "name": "Coral",
+    "category": "Warm"
+  },
+  {
+    "id": "warm-marigold",
+    "name": "Marigold",
+    "category": "Warm"
+  },
+  {
+    "id": "warm-solar",
+    "name": "Solar",
+    "category": "Warm"
+  },
+  {
+    "id": "warm-copper",
+    "name": "Copper",
+    "category": "Warm"
+  }
+]

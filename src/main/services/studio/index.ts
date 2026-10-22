@@ -1,9 +1,7 @@
 // Owned by T4/T5 (XBOT-1N58PP, XBOT-G66JJK). Already wired into services/index.ts (after media).
-import { app } from 'electron';
 import type { StudioTarget } from '../../../shared/contracts/drafts';
 import type { StudioOpened, StudioSession, StudioView } from '../../../shared/contracts/studio';
 import { IpcError } from '../../ipc/core';
-import { registerStatusProvider } from '../../status';
 import { drafts } from '../drafts';
 import { draftsQueue } from '../drafts/queue';
 import { ffmpeg } from '../ffmpeg';
@@ -27,7 +25,6 @@ let session: Session = null;
 let opens = 0;
 let offTarget: (() => void) | null = null;
 let offFfmpeg: (() => void) | null = null;
-let unregisterStatus: (() => void) | null = null;
 
 export function studio(): StudioService {
   if (!instance) throw new Error('studio service used before initServices()');
@@ -64,6 +61,12 @@ export function isLatestOpen(ticket: number): boolean {
 /** The attachment that opened `documentId`, if that document is still the one shown. */
 export function openedFromAttachment(documentId: string): string | null {
   return session && 'documentId' in session && session.documentId === documentId ? session.openedFromAttachmentId : null;
+}
+
+/** Shows nothing: the Studio's empty state, until something opens. */
+export function closeStudioSession(): void {
+  session = null;
+  settings().set('studio.currentDocumentId', null);
 }
 
 export function currentSession(): StudioSession {
@@ -124,8 +127,6 @@ export const studioModule: ServiceModule = {
       events: context.events,
       video: { binaries: () => ffmpeg().binaries() },
       serialize: draftsQueue,
-      // Test seam: e2e runs make an export take as long as its clip. Unpackaged builds only.
-      realtime: !app.isPackaged && process.env.XBOT_E2E_FFMPEG_REALTIME === '1',
     });
     try {
       await instance.init(settings().get('studio.currentDocumentId'));
@@ -138,26 +139,14 @@ export const studioModule: ServiceModule = {
     const onFfmpeg = () => void reopenView().catch((err: unknown) => context.log.error('studio: reopen failed', err));
     context.events.on('studio:ffmpeg', onFfmpeg);
     offFfmpeg = () => context.events.off('studio:ffmpeg', onFfmpeg);
-    unregisterStatus = registerStatusProvider({
-      id: 'studio-export',
-      order: 91,
-      get: () => {
-        const activity = instance?.exportActivity();
-        if (!activity || (!activity.running && activity.queued === 0)) return null;
-        const detail = activity.running ? `Video · ${Math.round(activity.running.progress * 100)}%` : 'Video · queued';
-        return { id: 'studio-export', label: 'Export running', tone: 'busy', detail };
-      },
-    });
   },
   dispose() {
     offTarget?.();
     offFfmpeg?.();
-    unregisterStatus?.();
-    // Kills a running FFmpeg and records the job before the database closes.
+    // Deletes unfinished export files.
     instance?.dispose();
     offTarget = null;
     offFfmpeg = null;
-    unregisterStatus = null;
     instance = null;
     ctx = null;
     session = null;

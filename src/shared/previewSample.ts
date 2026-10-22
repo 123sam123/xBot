@@ -40,7 +40,7 @@ export function previewStudioComposition(source: SourceRef, video?: { durationMs
     canvas: { ratio: 'custom', width: 1920, height: 1080 },
     padding: { x: 0.04, y: 0.04, linked: true },
     ...(base.video && video
-      ? { video: { ...base.video, trimStartMs: Math.min(PREVIEW_VIDEO_TRIM.trimStartMs, video.durationMs), trimEndMs: Math.min(PREVIEW_VIDEO_TRIM.trimEndMs, video.durationMs) } }
+      ? { video: { ...base.video, clips: [{ startMs: Math.min(PREVIEW_VIDEO_TRIM.trimStartMs, video.durationMs - 1), endMs: Math.min(PREVIEW_VIDEO_TRIM.trimEndMs, video.durationMs) }] } }
       : {}),
   };
 }

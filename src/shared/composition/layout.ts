@@ -1,4 +1,4 @@
-import { CHROME, frameSize, MAX_OUTPUT_SIDE, MAX_VIDEO_OUTPUT, outputSize, paddedSize, SHADOWS, type Composition, type Rect } from './model';
+import { CHROME, frameSize, MAX_OUTPUT_SIDE, MAX_VIDEO_OUTPUT, outputSize, paddedSize, SHADOWS, VIDEO_RESOLUTIONS, type Composition, type Rect, type VideoResolution } from './model';
 
 // The one geometry the preview and the export share. Pure and zod-free: the
 // renderer draws with it and main checks an export's size against it.
@@ -164,7 +164,7 @@ export function computeLayout(comp: Composition, { scale, maxSide = MAX_OUTPUT_S
     radius: Math.min(comp.frame.radius * w, frame.width / 2, frame.height / 2),
     border: comp.frame.border ? effective : 0,
     shadows,
-    backgroundBlur: comp.background.type === 'image' ? comp.background.blur * Math.min(canvas.width, canvas.height) : 0,
+    backgroundBlur: comp.background.type === 'image' || comp.background.type === 'wallpaper' ? comp.background.blur * Math.min(canvas.width, canvas.height) : 0,
   };
 }
 
@@ -176,6 +176,32 @@ export function computeLayout(comp: Composition, { scale, maxSide = MAX_OUTPUT_S
 export function exportLayout(comp: Composition): Layout {
   if (comp.video) return computeLayout(comp, { scale: 1, maxSide: MAX_VIDEO_OUTPUT.long, maxShortSide: MAX_VIDEO_OUTPUT.short });
   return computeLayout(comp, { scale: comp.output.scale });
+}
+
+/**
+ * The part of the source shown under a zoom: `sourceCrop` shrunk by `scale`
+ * around the focus (fractions of the crop), kept inside the crop.
+ */
+export function zoomedSourceCrop(sourceCrop: Rect, zoom: { scale: number; x: number; y: number }): Rect {
+  if (zoom.scale <= 1) return sourceCrop;
+  const width = sourceCrop.width / zoom.scale;
+  const height = sourceCrop.height / zoom.scale;
+  const cx = sourceCrop.x + zoom.x * sourceCrop.width;
+  const cy = sourceCrop.y + zoom.y * sourceCrop.height;
+  return {
+    x: Math.min(sourceCrop.x + sourceCrop.width - width, Math.max(sourceCrop.x, cx - width / 2)),
+    y: Math.min(sourceCrop.y + sourceCrop.height - height, Math.max(sourceCrop.y, cy - height / 2)),
+    width,
+    height,
+  };
+}
+
+/** A video export at `resolution`: the canvas scaled (up or down) to fill that box, even sides. */
+export function videoExportLayout(comp: Composition, resolution: VideoResolution): Layout {
+  const box = VIDEO_RESOLUTIONS[resolution];
+  const out = outputSize(comp);
+  const scale = Math.min(box.long / Math.max(out.width, out.height), box.short / Math.min(out.width, out.height));
+  return computeLayout(comp, { scale, maxSide: box.long, maxShortSide: box.short });
 }
 
 export interface VideoPlacement {

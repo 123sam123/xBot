@@ -23,8 +23,9 @@ files:
 asarUnpack:
   - "**/*.node"
 extraResources:
-  # Contents/Resources/: the tray's template PNGs, and preview mode's sample
-  # media (Contents/Resources/fixtures/, for `--preview`).
+  # Contents/Resources/: the tray's template PNGs, preview mode's sample
+  # media (Contents/Resources/fixtures/, for `--preview`) and the Studio's
+  # wallpapers (Contents/Resources/wallpapers/).
   - from: resources
     to: .
     filter:
@@ -32,6 +33,8 @@ extraResources:
       - fixtures/my-tiny-tool.png
       - fixtures/my-tiny-tool-framed.png
       - fixtures/my-tiny-tool.mp4
+      # The Studio's bundled wallpapers (scripts/render-wallpapers.mjs).
+      - wallpapers/**
 # N-API prebuilds are ABI-stable across Electron versions: nothing to rebuild.
 npmRebuild: false
 electronFuses:

@@ -5,7 +5,7 @@ import { expect, test, type ElectronApplication, type Page } from '@playwright/t
 import type { Composition } from '../../src/shared/composition/model';
 import { PREVIEW_DRAFT_TEXT, PREVIEW_VIDEO_DRAFT_TEXT } from '../../src/shared/previewSample';
 import { findFfmpeg, quadrantPng } from '../unit/helpers/videoFixtures';
-import { composerPage, launch, previewDrawn, readDb, studioPage, stubPicker, windowVisible } from './studio-harness';
+import { addToPost, composerPage, launch, previewDrawn, readDb, studioPage, stubPicker, windowVisible } from './studio-harness';
 
 // The whole user journey (SPEC §21–§23), in preview mode's seeded userData:
 // write and attach, polish a screenshot in Media Studio and add it to the
@@ -87,8 +87,8 @@ async function start(): Promise<{ composer: Page; studio: Page }> {
 }
 
 async function addToPostAndReturn(studio: Page, composer: Page): Promise<void> {
-  await expect(studio.getByTestId('studio-add')).not.toHaveAttribute('aria-disabled', 'true');
-  await studio.getByTestId('studio-add').click();
+  await expect(studio.getByTestId('studio-export')).not.toHaveAttribute('aria-disabled', 'true');
+  await addToPost(studio);
   await expect.poll(() => windowVisible(app!, '/studio/'), { timeout: 60_000 }).toBe(false);
   await expect.poll(() => windowVisible(app!, '/composer/')).toBe(true);
   await expect(composer.getByTestId('composer-panel')).toBeVisible();
@@ -143,14 +143,12 @@ test('the full journey works in preview mode, and nothing is posted', async () =
   await expect(panel).toHaveAttribute('data-document-id', imageDocument);
   await previewDrawn(studio);
 
-  await studio.getByTestId('tool-background').click();
-  await studio.getByTestId('popover-background').getByRole('radio', { name: 'Violet' }).click();
-  await studio.keyboard.press('Escape');
-  await studio.getByTestId('tool-frame').click();
+  await studio.getByTestId('studio-sidebar').getByRole('radio', { name: 'Violet' }).click();
+  await studio.getByTestId('preview-frame').click();
   await studio.getByTestId('frame-style-minimal').click();
   await studio.getByTestId('frame-theme-light').click();
   await studio.keyboard.press('Escape');
-  await studio.getByTestId('tool-crop').click();
+  await studio.getByTestId('preview-crop').click();
   await studio.getByTestId('crop-aspect-1:1').click();
   await studio.getByTestId('crop-apply').click();
   await previewDrawn(studio);
@@ -195,8 +193,6 @@ test('the full journey works in preview mode, and nothing is posted', async () =
   await expect(studio.getByTestId('studio-video')).toBeVisible();
   await previewDrawn(studio);
   await addToPostAndReturn(studio, composer);
-  const job = readDb(userData, (db) => db.prepare('SELECT status FROM export_jobs WHERE document_id = ?').pluck().get(videoDocument)) as string;
-  expect(job).toBe('succeeded');
   const exportedVideo = attachments(videoDraft.id);
   expect(exportedVideo).toHaveLength(1);
   expect(exportedVideo[0]).toMatchObject({ id: videoAttachment!.id, mime: 'video/mp4', exported: 1, studio_document_id: videoDocument });

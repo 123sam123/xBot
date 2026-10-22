@@ -15,8 +15,10 @@ export const studioChannels = {
   deletePreset: 'studio:delete-preset',
   /** Store a rendered export and put it on the current draft. */
   addToPost: 'studio:add-to-post',
-  /** Queue a video document's MP4 export (T5). */
-  exportVideo: 'studio:export-video',
+  /** Stream an export file (an MP4 the renderer encodes, or an image) and finish it into the post or a file. */
+  beginExport: 'studio:begin-export',
+  writeExport: 'studio:write-export',
+  finishExport: 'studio:finish-export',
   cancelExport: 'studio:cancel-export',
   /** A video document's timeline thumbnails. */
   filmstrip: 'studio:filmstrip',
@@ -26,6 +28,10 @@ export const studioChannels = {
   /** Pick the ffmpeg program by hand. */
   locateFfmpeg: 'studio:locate-ffmpeg',
   toggleFullscreen: 'studio:toggle-fullscreen',
+  /** Show the open document's source file in Finder. */
+  reveal: 'studio:reveal',
+  /** Stop showing the open document (it stays saved). */
+  close: 'studio:close',
   /** The Studio's answer to `studio:flush-requested`: its pending save has landed. */
   flushed: 'studio:flushed',
 } as const;

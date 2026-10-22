@@ -71,3 +71,10 @@ export async function previewDrawn(studio: Page): Promise<void> {
     .poll(() => canvas.evaluate((el) => (el as unknown as { dataset: Record<string, string> }).dataset).then((d) => d.drawnKey === d.wantKey))
     .toBe(true);
 }
+
+/** Export → Add to post, as the user does it. */
+export async function addToPost(studio: Page): Promise<void> {
+  if ((await studio.getByTestId('export-dialog').count()) === 0) await studio.getByTestId('studio-export').click();
+  await studio.getByTestId('export-destination-post').click();
+  await studio.getByTestId('export-go').click();
+}

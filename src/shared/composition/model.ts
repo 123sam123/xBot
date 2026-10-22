@@ -10,7 +10,7 @@
 
 export type FrameStyle = 'browser' | 'minimal' | 'none';
 export type FrameTheme = 'dark' | 'light';
-export type CanvasRatio = 'original' | '16:9' | '1:1' | '4:5' | 'custom';
+export type CanvasRatio = 'original' | '16:9' | '4:3' | '1:1' | '4:5' | '9:16' | 'custom';
 export type CropAspect = 'free' | 'original' | '16:9' | '1:1' | '4:5';
 export type ShadowStyle = 'none' | 'soft' | 'elevated';
 export type GradientPreset = 'blue' | 'violet' | 'lilac' | 'cream' | 'black' | 'sequoia' | 'sonoma' | 'ventura' | 'monterey' | 'aurora' | 'desert';
@@ -33,6 +33,7 @@ export type Background =
   | { type: 'gradient'; preset: GradientPreset | null; from: string; to: string; angle: number; brightness: number }
   | { type: 'solid'; color: string; brightness: number }
   | { type: 'image'; mediaId: string; blur: number; brightness: number }
+  | { type: 'wallpaper'; id: string; blur: number; brightness: number }
   | { type: 'transparent' };
 
 export interface Frame {
@@ -75,17 +76,46 @@ export interface Output {
   scale: 1 | 2;
 }
 
-/** A video source's trim and sound (T5). Present exactly when the source is a video. */
+/** One stretch of the source on the timeline, source ms. Clips play back to back. */
+export interface Clip {
+  startMs: number;
+  endMs: number;
+}
+
+export type ZoomMode = 'auto' | 'manual';
+
+/** A zoom on the timeline, output ms. `x`/`y` are the focus, fractions of the content. */
+export interface ZoomSegment {
+  id: string;
+  startMs: number;
+  endMs: number;
+  scale: number;
+  mode: ZoomMode;
+  x: number;
+  y: number;
+}
+
+export type SceneMode = 'cameraFull' | 'hideCamera';
+
+/** A camera scene on the timeline, output ms. */
+export interface SceneSegment {
+  id: string;
+  startMs: number;
+  endMs: number;
+  mode: SceneMode;
+}
+
+/** A video source's edit. Present exactly when the source is a video. */
 export interface VideoSettings {
-  /** The part of the source exported, ms from its start. */
-  trimStartMs: number;
-  trimEndMs: number;
+  clips: Clip[];
+  zooms: ZoomSegment[];
+  scenes: SceneSegment[];
   /** Drop the audio from the export (and the preview). */
   muted: boolean;
 }
 
 export interface Composition {
-  v: 1;
+  v: 2;
   source: SourceRef;
   /** Fractions of the source. */
   crop: Rect;
@@ -124,13 +154,24 @@ export const MAX_EXPORT_BYTES = 20 * 1024 * 1024;
  * upload (T9 reports its answer).
  */
 export const MAX_VIDEO_OUTPUT = { long: 1920, short: 1080 } as const;
-/** The shortest trim, or the whole clip when it is shorter. */
+export type VideoResolution = '720p' | '1080p' | '4k';
+/** The boxes a video export fits (landscape; an upright canvas swaps them). 1080p is what X plays back. */
+export const VIDEO_RESOLUTIONS: Record<VideoResolution, { long: number; short: number; label: string }> = {
+  '720p': { long: 1280, short: 720, label: '720p' },
+  '1080p': { long: 1920, short: 1080, label: '1080p' },
+  '4k': { long: 3840, short: 2160, label: '4K' },
+};
+/** The shortest clip, or the whole source when it is shorter. */
 export const MIN_TRIM_MS = 500;
+/** The zoom slider's range. */
+export const ZOOM_LIMITS = { min: 1.1, max: 4.5 } as const;
 
 export const RATIOS: Record<Exclude<CanvasRatio, 'original' | 'custom'>, number> = {
   '16:9': 16 / 9,
+  '4:3': 4 / 3,
   '1:1': 1,
   '4:5': 4 / 5,
+  '9:16': 9 / 16,
 };
 
 // ---------------------------------------------------------------- backgrounds
@@ -363,27 +404,30 @@ export function defaultStyle(): Style {
 /** A new document's composition; a video source (with its duration) also gets the whole clip, with sound. */
 export function defaultComposition(source: SourceRef, video?: { durationMs: number }): Composition {
   return {
-    v: 1,
+    v: 2,
     source: { ...source },
     crop: { x: 0, y: 0, width: 1, height: 1 },
     cropAspect: 'original',
     ...defaultStyle(),
     output: { format: 'png', scale: 1 },
-    ...(video ? { video: { trimStartMs: 0, trimEndMs: video.durationMs, muted: false } } : {}),
+    ...(video ? { video: { clips: [{ startMs: 0, endMs: video.durationMs }], zooms: [], scenes: [], muted: false } } : {}),
   };
 }
 
-/** The shortest trim a clip of `durationMs` allows. */
+/** The shortest clip a source of `durationMs` allows. */
 export function minTrimMs(durationMs: number): number {
   return Math.min(MIN_TRIM_MS, durationMs);
 }
 
-/** Keeps a trim inside the clip and at least `minTrimMs` long; whole milliseconds. */
-export function clampTrim(video: VideoSettings, durationMs: number): VideoSettings {
-  const min = minTrimMs(durationMs);
-  const start = Math.round(Math.min(Math.max(0, video.trimStartMs), durationMs - min));
-  const end = Math.round(Math.min(durationMs, Math.max(start + min, video.trimEndMs)));
-  return { ...video, trimStartMs: start, trimEndMs: end };
+/** A stored composition in the current shape: v1's single trim becomes one clip. Anything else passes through for validation. */
+export function upgradeComposition(raw: unknown): unknown {
+  if (typeof raw !== 'object' || raw === null || (raw as { v?: unknown }).v !== 1) return raw;
+  const { video, ...rest } = raw as Record<string, unknown> & { video?: { trimStartMs: number; trimEndMs: number; muted: boolean } };
+  return {
+    ...rest,
+    v: 2,
+    ...(video ? { video: { clips: [{ startMs: video.trimStartMs, endMs: video.trimEndMs }], zooms: [], scenes: [], muted: video.muted } } : {}),
+  };
 }
 
 /** Just the style fields (a Composition is a Style plus source, crop, output and video). */

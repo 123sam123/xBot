@@ -4,9 +4,12 @@ import { applyGlass, loadPage, manageGlass, manageWindow, materialOptions, secur
 
 // Media Studio: a separate resizable window, centred on the display under the
 // cursor the first time it opens; afterwards it keeps wherever the user put it.
+// It is the size of a video editor, and never larger than the display.
 
-const WIDTH = 790;
-const HEIGHT = 635;
+const WIDTH = 1280;
+const HEIGHT = 820;
+const MIN_WIDTH = 980;
+const MIN_HEIGHT = 660;
 
 let win: BrowserWindow | null = null;
 let placed = false;
@@ -15,8 +18,8 @@ export function createStudioWindow(): BrowserWindow {
   win = new BrowserWindow({
     width: WIDTH,
     height: HEIGHT,
-    minWidth: 720,
-    minHeight: 560,
+    minWidth: MIN_WIDTH,
+    minHeight: MIN_HEIGHT,
     show: false,
     frame: false,
     resizable: true,
@@ -59,7 +62,9 @@ export function openStudio(): void {
   if (!win) return;
   if (!placed) {
     const { workArea } = screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
-    const [width, height] = win.getSize() as [number, number];
+    const [wanted, tall] = win.getSize() as [number, number];
+    const width = Math.min(wanted, workArea.width - 40);
+    const height = Math.min(tall, workArea.height - 40);
     win.setBounds({
       x: Math.round(workArea.x + (workArea.width - width) / 2),
       y: Math.round(workArea.y + (workArea.height - height) / 2),

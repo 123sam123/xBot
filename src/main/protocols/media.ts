@@ -6,8 +6,9 @@ import { protocol } from 'electron';
 import { log } from '../log';
 
 // `xbot-media://media/<path relative to userData/media>` — the only way a page
-// loads user media. Serves real files whose realpath stays inside the media
-// folder (no traversal, no symlink escapes); everything else is a 404.
+// loads user media — and `xbot-media://wallpapers/<file>` for the Studio's
+// bundled wallpapers. Serves real files whose realpath stays inside that
+// host's folder (no traversal, no symlink escapes); everything else is a 404.
 // Single byte ranges get a proper 206, so <video> can seek.
 
 export const MEDIA_SCHEME = 'xbot-media';
@@ -36,14 +37,24 @@ export function registerMediaScheme(): void {
   ]);
 }
 
-export async function resolveMediaPath(mediaRoot: string, rawUrl: string): Promise<string | null> {
+export interface MediaRoots {
+  /** userData/media. */
+  media: string;
+  /** The bundled wallpapers (resources/wallpapers). */
+  wallpapers: string;
+}
+
+export async function resolveMediaPath(roots: MediaRoots | string, rawUrl: string): Promise<string | null> {
   let url: URL;
   try {
     url = new URL(rawUrl);
   } catch {
     return null;
   }
-  if (url.protocol !== `${MEDIA_SCHEME}:` || url.hostname !== 'media') return null;
+  if (url.protocol !== `${MEDIA_SCHEME}:`) return null;
+  const { media, wallpapers } = typeof roots === 'string' ? { media: roots, wallpapers: null } : roots;
+  const mediaRoot = url.hostname === 'media' ? media : url.hostname === 'wallpapers' ? wallpapers : null;
+  if (!mediaRoot) return null;
 
   let candidate: string;
   try {
@@ -81,9 +92,9 @@ export function parseRange(header: string | null, size: number): { start: number
   return { start, end };
 }
 
-export function handleMediaProtocol(mediaRoot: string): void {
+export function handleMediaProtocol(roots: MediaRoots): void {
   protocol.handle(MEDIA_SCHEME, async (request) => {
-    const file = await resolveMediaPath(mediaRoot, request.url);
+    const file = await resolveMediaPath(roots, request.url);
     if (!file) {
       log.warn('media: 404', request.url);
       return new Response('Not found', { status: 404 });

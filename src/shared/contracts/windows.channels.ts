@@ -1,6 +1,8 @@
 export const windowsChannels = {
   /** Hide the sender's own window. */
   hide: 'windows:hide',
+  /** Minimize the sender's own window. */
+  minimize: 'windows:minimize',
   /** Keep the sender's window open on blur (popover or picker open). */
   hold: 'windows:hold',
   release: 'windows:release',

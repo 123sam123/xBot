@@ -32,6 +32,11 @@ const QUIT_FLUSH_MS = 1000;
 /** How long quitting waits for X to answer a create-post request already sent. */
 const QUIT_X_MS = 10_000;
 
+/** The Studio's bundled wallpapers: `<resources>/wallpapers` when packaged, `<app>/resources/wallpapers` otherwise. */
+function wallpapersDir(): string {
+  return app.isPackaged ? join(process.resourcesPath, 'wallpapers') : join(app.getAppPath(), 'resources', 'wallpapers');
+}
+
 function openAndMigrate(paths: AppPaths): Db | null {
   let opened: Db | null = null;
   try {
@@ -89,7 +94,7 @@ export async function startApp(paths: AppPaths): Promise<void> {
   await initServices({ db, paths, events: appEvents, log });
 
   installSecurityHandlers();
-  handleMediaProtocol(paths.media);
+  handleMediaProtocol({ media: paths.media, wallpapers: wallpapersDir() });
   registerIpc();
   forwardEventsToRenderers();
   onStatusChanged((statuses) => appEvents.emit('status:changed', { statuses }));

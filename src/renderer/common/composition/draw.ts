@@ -1,25 +1,27 @@
-import type { Layout } from '../../../shared/composition/layout';
+import { zoomedSourceCrop, type Layout } from '../../../shared/composition/layout';
 import { brightnessWash, CHROME, GRADIENTS, SHADOW_COLOR, type Composition, type GradientDef, type Rect } from '../../../shared/composition/model';
+import type { ZoomState } from '../../../shared/composition/timeline';
 
-// The one draw routine behind the Studio preview and the exported PNG/JPEG.
-// It draws only the composition, in output px straight from `computeLayout`:
-// no transform is ever applied while a shadow is set (canvas shadows ignore
-// the transform), and the source is drawn with one uniform scale. For a video
-// (T5) it draws the frame layer instead: everything but the source, with a
-// transparent hole where the video shows through, both in the preview (the
-// <video> sits under the canvas) and in the PNG FFmpeg lays over the video.
+// The one draw routine behind the Studio preview and every export: images,
+// and each frame of a video (the preview draws the playing <video>, the MP4
+// export each decoded frame). It draws only the composition, in output px
+// straight from `computeLayout`: no transform is ever applied while a shadow
+// is set (canvas shadows ignore the transform), and the source is drawn with
+// one uniform scale, through the zoom at that moment.
 
 export type Ctx2D = CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D;
 
 export interface DrawOptions {
-  /** Cut the content out (after the chrome, before the border): the video frame layer. */
-  hole?: boolean;
+  /** A video's current frame; images draw `assets.source`. */
+  frame?: CanvasImageSource | null;
+  /** The zoom at this moment (none by default). */
+  zoom?: ZoomState;
 }
 
 export interface CompositionAssets {
-  /** The decoded source; until it loads, the frame is drawn empty. */
+  /** The decoded source image; until it loads, the frame is drawn empty. A video's frames come through `DrawOptions.frame`. */
   source: ImageBitmap | null;
-  /** The decoded background image; without it an image background falls back to the default gradient. */
+  /** The decoded background image or wallpaper; without it the background falls back to the default gradient. */
   background: ImageBitmap | null;
 }
 
@@ -116,7 +118,7 @@ function drawBackground(ctx: Ctx2D, comp: Composition, layout: Layout, assets: C
   if (bg.type === 'solid') {
     ctx.fillStyle = bg.color;
     ctx.fillRect(0, 0, width, height);
-  } else if (bg.type === 'image' && assets.background) {
+  } else if ((bg.type === 'image' || bg.type === 'wallpaper') && assets.background) {
     // An opaque base, so an image with alpha never turns black in a JPEG.
     ctx.fillStyle = '#fff';
     ctx.fillRect(0, 0, width, height);
@@ -178,14 +180,10 @@ function drawFrame(ctx: Ctx2D, comp: Composition, layout: Layout, assets: Compos
   ctx.fillStyle = '#fff';
   ctx.fillRect(frame.x, frame.y, frame.width, frame.height);
   drawChrome(ctx, comp, layout);
-  if (options.hole) {
-    // Still inside the frame's clip, so the hole has the frame's rounded corners.
-    ctx.globalCompositeOperation = 'destination-out';
-    ctx.fillStyle = '#000';
-    ctx.fillRect(content.x, content.y, content.width, content.height);
-    ctx.globalCompositeOperation = 'source-over';
-  } else if (assets.source) {
-    ctx.drawImage(assets.source, sourceCrop.x, sourceCrop.y, sourceCrop.width, sourceCrop.height, content.x, content.y, content.width, content.height);
+  const image = options.frame ?? assets.source;
+  if (image) {
+    const shown = options.zoom ? zoomedSourceCrop(sourceCrop, options.zoom) : sourceCrop;
+    ctx.drawImage(image, shown.x, shown.y, shown.width, shown.height, content.x, content.y, content.width, content.height);
   }
   ctx.restore();
 

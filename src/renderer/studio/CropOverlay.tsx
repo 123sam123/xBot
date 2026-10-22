@@ -4,8 +4,6 @@ import { CROP_HANDLES, dragCrop, type CropHandle } from './crop';
 
 /** Room around the source inside the canvas area, CSS px. */
 const INSET = 24;
-/** Kept clear at the bottom for the one-row Crop popover over the canvas, so no handle sits under it. */
-const CONTROLS_CLEARANCE = 64;
 
 /**
  * Crop mode: the whole source, fitted to the canvas area, dimmed outside the
@@ -45,7 +43,7 @@ export function CropOverlay({
   }, [overlayRef]);
 
   const scale = area
-    ? Math.max(0.0001, Math.min((area.width - 2 * INSET) / source.width, (area.height - 2 * INSET - CONTROLS_CLEARANCE) / source.height))
+    ? Math.max(0.0001, Math.min((area.width - 2 * INSET) / source.width, (area.height - 2 * INSET) / source.height))
     : 0;
   const image = { width: source.width * scale, height: source.height * scale };
 

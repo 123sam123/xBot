@@ -37,6 +37,7 @@ export const windowsForwardedEvents = ['ui:open-settings'] as const satisfies re
 
 export interface WindowsApi {
   hide(): Promise<IpcResult<null>>;
+  minimize(): Promise<IpcResult<null>>;
   hold(): Promise<IpcResult<null>>;
   release(): Promise<IpcResult<null>>;
   resizeComposer(height: number): Promise<IpcResult<null>>;

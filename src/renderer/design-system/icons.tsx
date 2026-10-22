@@ -177,6 +177,132 @@ export const SmileIcon = icon(
   </>,
 );
 
+export const RecordIcon = icon(
+  'RecordIcon',
+  <>
+    <circle cx="12" cy="12" r="8.5" />
+    <circle cx="12" cy="12" r="4.25" fill="currentColor" stroke="none" />
+  </>,
+);
+
+export const CameraIcon = icon(
+  'CameraIcon',
+  <>
+    <rect x="3" y="6.5" width="12.5" height="11" rx="2.5" />
+    <path d="M15.5 10.5l5-3v9l-5-3" />
+  </>,
+);
+
+export const MicIcon = icon(
+  'MicIcon',
+  <>
+    <rect x="9" y="3" width="6" height="11" rx="3" />
+    <path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21" />
+  </>,
+);
+
+export const CursorIcon = icon('CursorIcon', <path d="M5.5 3.5l13 7.2-5.6 1.7-2.3 5.6z" />);
+
+export const SearchIcon = icon(
+  'SearchIcon',
+  <>
+    <circle cx="10.5" cy="10.5" r="6" />
+    <path d="M15 15l5 5" />
+  </>,
+);
+
+export const ZoomInIcon = icon(
+  'ZoomInIcon',
+  <>
+    <circle cx="10.5" cy="10.5" r="6.5" />
+    <path d="M15.3 15.3L20 20M8 10.5h5M10.5 8v5" />
+  </>,
+);
+
+export const ZoomOutIcon = icon(
+  'ZoomOutIcon',
+  <>
+    <circle cx="10.5" cy="10.5" r="6.5" />
+    <path d="M15.3 15.3L20 20M8 10.5h5" />
+  </>,
+);
+
+export const ScissorsIcon = icon(
+  'ScissorsIcon',
+  <>
+    <circle cx="6.5" cy="7" r="2.75" />
+    <circle cx="6.5" cy="17" r="2.75" />
+    <path d="M8.8 8.6L20 17.5M8.8 15.4L20 6.5" />
+  </>,
+);
+
+export const TrashIcon = icon('TrashIcon', <path d="M4.5 6.5h15M9.5 6.5V4.5h5v2M6.5 6.5l.9 12.1a1.5 1.5 0 0 0 1.5 1.4h6.2a1.5 1.5 0 0 0 1.5-1.4l.9-12.1M10 10.5v6M14 10.5v6" />);
+
+export const FolderIcon = icon('FolderIcon', <path d="M3.5 7A1.5 1.5 0 0 1 5 5.5h4.2l2 2H19A1.5 1.5 0 0 1 20.5 9v8.5A1.5 1.5 0 0 1 19 19H5a1.5 1.5 0 0 1-1.5-1.5z" />);
+
+export const UploadIcon = icon('UploadIcon', <path d="M12 15V4M7.5 8.5L12 4l4.5 4.5M4.5 14.5v3A2.5 2.5 0 0 0 7 20h10a2.5 2.5 0 0 0 2.5-2.5v-3" />);
+
+export const FilmIcon = icon(
+  'FilmIcon',
+  <>
+    <rect x="3.5" y="5" width="17" height="14" rx="2.5" />
+    <path d="M3.5 9.5h17M8 5v4.5M12 5v4.5M16 5v4.5" />
+  </>,
+);
+
+export const WandIcon = icon('WandIcon', <path d="M4.5 19.5l10-10M13 5l1.5-1.5M18.5 9.5L20 8M16.5 3.5v2M20.5 5.5h-2M13 8l3 3" />);
+
+export const SkipBackIcon = icon('SkipBackIcon', <path d="M6 5.5v13M18.5 6.2v11.6L9 12z" fill="currentColor" strokeWidth={1.25} />);
+
+export const SkipForwardIcon = icon('SkipForwardIcon', <path d="M18 5.5v13M5.5 6.2v11.6L15 12z" fill="currentColor" strokeWidth={1.25} />);
+
+export const ClockIcon = icon(
+  'ClockIcon',
+  <>
+    <circle cx="12" cy="12" r="8.5" />
+    <path d="M12 7.5V12l3 2" />
+  </>,
+);
+
+export const MonitorIcon = icon(
+  'MonitorIcon',
+  <>
+    <rect x="3" y="4.5" width="18" height="12" rx="2" />
+    <path d="M9 20h6M12 16.5V20" />
+  </>,
+);
+
+export const KeyboardIcon = icon(
+  'KeyboardIcon',
+  <>
+    <rect x="2.5" y="6" width="19" height="12" rx="2.5" />
+    <path d="M6 9.5h.01M9.5 9.5h.01M13 9.5h.01M16.5 9.5h.01M18 13h.01M6 13h.01M8 15.5h8" strokeWidth={2} />
+  </>,
+);
+
+export const CaptionsIcon = icon(
+  'CaptionsIcon',
+  <>
+    <path d="M4.5 5.5h15a1.5 1.5 0 0 1 1.5 1.5v9a1.5 1.5 0 0 1-1.5 1.5H10l-4 3v-3H4.5A1.5 1.5 0 0 1 3 16V7a1.5 1.5 0 0 1 1.5-1.5z" />
+    <path d="M7.5 10h9M7.5 13.5h6" />
+  </>,
+);
+
+export const NoImageIcon = icon(
+  'NoImageIcon',
+  <>
+    <rect x="3.5" y="4.5" width="17" height="15" rx="2.5" />
+    <path d="M4 5l16 14M20.5 16l-4.5-4.5" />
+  </>,
+);
+
+export const CheckerIcon = icon(
+  'CheckerIcon',
+  <path d="M4 4h4v4H4zM12 4h4v4h-4zM8 8h4v4H8zM16 8h4v4h-4zM4 12h4v4H4zM12 12h4v4h-4zM8 16h4v4H8zM16 16h4v4h-4z" fill="currentColor" stroke="none" opacity="0.8" />,
+);
+
+export const DragHandleIcon = icon('DragHandleIcon', <path d="M5 9.5h14M5 14.5h14" />);
+
 /** The xBot mark: blue "audio bars" on a white rounded square. */
 export function AppMark({ size = 30 }: { size?: number }) {
   return (
