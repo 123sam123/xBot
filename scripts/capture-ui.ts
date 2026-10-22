@@ -6,6 +6,9 @@
 //    so the page draws the macOS layers on a transparent window, and captures
 //    each window with its alpha channel. Variants: reduced transparency,
 //    increase contrast, the CSS-only material, and normal (non-preview) mode.
+//    Each preview launch is seeded (src/main/preview/seed.ts): the composer
+//    shows the framed screenshot, and the Studio the sample video with its
+//    real filmstrip, so FFmpeg is required.
 // 2. Asserts geometry, honesty (sample data only in labelled preview mode),
 //    the glass (neutral, takes its colour from the backdrop), contrast, the
 //    Studio at its minimum size, Escape, live fallbacks and the CSP.
@@ -50,6 +53,9 @@ const SIM_BLUR = 24;
 const SIM_SATURATE = 1.3;
 const SIM_TINT = 'rgb(30 30 34 / 0.35)';
 const NATIVE_RADIUS = 10;
+
+/** Where the reference's playhead sits on its 12 s clip, seconds (just past 4, so the clock reads 00:04 as it does there). */
+const REF_PLAYHEAD_S = 4.2;
 
 /** The composer's empty left gutter, CSS px: where the glass is sampled. */
 const GUTTER = { x: 6, y: 140, width: 24, height: 280 };
@@ -190,9 +196,48 @@ async function showComposer(run: AppRun): Promise<void> {
   await run.composer.waitForTimeout(300);
 }
 
+/** Waits until the seeded draft's framed screenshot has loaded in the composer card. */
+async function waitForThumbnail(composer: Page): Promise<void> {
+  await composer.waitForFunction(() => {
+    const img = document.querySelector<HTMLImageElement>('[data-testid="attachment-thumbnail"]');
+    return img !== null && img.complete && img.naturalWidth > 0;
+  });
+}
+
 async function showStudio(run: AppRun): Promise<void> {
   await run.app.evaluate(() => (globalThis as unknown as { __xbotTest: { openStudio(): void } }).__xbotTest.openStudio());
   await run.studio.waitForFunction(() => document.visibilityState === 'visible');
+  // Preview mode opens the seeded video: its first frame, the frame layer drawn over it, and the filmstrip.
+  if ((await run.studio.getByTestId('studio-video').count()) > 0) {
+    await run.studio.waitForFunction(
+      () => {
+        const video = document.querySelector<HTMLVideoElement>('[data-testid="studio-video"]');
+        const canvas = document.querySelector<HTMLElement>('[data-testid="studio-preview-canvas"]');
+        const frames = [...document.querySelectorAll<HTMLImageElement>('.timeline-frames img')];
+        return (
+          video !== null &&
+          video.readyState >= 2 &&
+          canvas?.dataset.assetsReady === 'true' &&
+          canvas.dataset.drawnKey === canvas.dataset.wantKey &&
+          frames.length > 0 &&
+          frames.every((img) => img.complete && img.naturalWidth > 0)
+        );
+      },
+      undefined,
+      { timeout: 20_000 },
+    );
+    // Scrub to the reference's playhead (inside the trim, clear of its handles), through the real timeline.
+    const strip = await box(run.studio, 'timeline-strip');
+    await run.studio.mouse.click(strip.x + (strip.width * REF_PLAYHEAD_S) / 12, strip.y + strip.height / 2);
+    await run.studio.waitForFunction(
+      (seconds) => {
+        const video = document.querySelector<HTMLVideoElement>('[data-testid="studio-video"]');
+        return video !== null && !video.seeking && video.readyState >= 2 && Math.abs(video.currentTime - seconds) < 0.2;
+      },
+      REF_PLAYHEAD_S,
+      { timeout: 10_000 },
+    );
+  }
   await run.studio.waitForTimeout(300);
 }
 
@@ -390,6 +435,8 @@ async function capturePreview(): Promise<PreviewResults> {
 
     // Composer.
     await showComposer(run);
+    await waitForThumbnail(composer);
+    check((await composer.getByTestId('attachment-thumbnail').getAttribute('src'))?.startsWith('xbot-media://') === true, 'composer: the sample attachment is a stored export (xbot-media://)');
     const composerWindow = await windowState(app, 'composer');
     check(composerWindow?.bounds.width === 420, `composer window is 420 wide (got ${composerWindow?.bounds.width})`);
     const panel = await box(composer, 'composer-panel');
@@ -426,6 +473,8 @@ async function capturePreview(): Promise<PreviewResults> {
 
     // Studio.
     await showStudio(run);
+    check((await studio.getByTestId('studio-video').count()) === 1, 'studio: preview mode shows the seeded sample video');
+    check((await studio.locator('.timeline-frames img').count()) > 0, 'studio: the timeline shows the video\'s own filmstrip');
     const studioWindow = await windowState(app, 'studio');
     check(studioWindow?.bounds.width === 790 && studioWindow.bounds.height === 635, `studio window is 790×635 (got ${studioWindow?.bounds.width}×${studioWindow?.bounds.height})`);
     check(await studio.locator('.badge', { hasText: 'Preview' }).isVisible(), 'studio: the sample media carries a visible "Preview" label');
@@ -498,6 +547,7 @@ async function captureCssMaterial(): Promise<{ composer: string; studio: string 
   try {
     check((await run.composer.evaluate(() => document.documentElement.dataset.material)) === 'css', 'XBOT_MATERIAL=css reaches the page');
     await showComposer(run);
+    await waitForThumbnail(run.composer);
     const composer = await shoot(run.composer, 'composer-css.png');
     await showStudio(run);
     await openBackgroundPopover(run.studio);
@@ -692,8 +742,10 @@ async function desktopCaptures(stage: Stage): Promise<void> {
       for (const surface of ['composer', 'studio'] as const) {
         const run = await launch({ XBOT_PREVIEW: '1', XBOT_VIBRANCY: material });
         try {
-          if (surface === 'composer') await showComposer(run);
-          else {
+          if (surface === 'composer') {
+            await showComposer(run);
+            await waitForThumbnail(run.composer);
+          } else {
             await showStudio(run);
             await openBackgroundPopover(run.studio);
           }
@@ -724,6 +776,10 @@ async function desktopCaptures(stage: Stage): Promise<void> {
 // ---------------------------------------------------------------- main
 
 ensureDisplay();
+if (spawnSync('ffmpeg', ['-version']).status !== 0) {
+  console.error('capture: FFmpeg is required: preview mode seeds a sample video, and the Studio capture shows it (macOS: brew install ffmpeg)');
+  process.exit(1);
+}
 mkdirSync(OUT, { recursive: true });
 const desktop = process.argv.includes('--desktop');
 if (desktop && process.platform !== 'darwin') {

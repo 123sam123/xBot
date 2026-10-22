@@ -12,8 +12,8 @@ function size(bytes: number): string {
 }
 
 function summary({ folderName, mediaFiles, bytes, missing }: BackupResult): string {
-  const files = mediaFiles === 1 ? '1 media file' : `${mediaFiles} media files`;
-  return `Saved “${folderName}”: your data and ${files} (${size(bytes)})${missing > 0 ? `. ${missing} missing file${missing === 1 ? ' was' : 's were'} skipped` : ''}.`;
+  const files = mediaFiles === 0 ? 'no media yet' : `${mediaFiles === 1 ? '1 media file' : `${mediaFiles} media files`} (${size(bytes)})`;
+  return `Saved “${folderName}”: your data and ${files}${missing > 0 ? `. ${missing} missing file${missing === 1 ? ' was' : 's were'} skipped` : ''}.`;
 }
 
 /** Settings → Data (T10): a timestamped backup of the database and media, in a folder the user picks. */
