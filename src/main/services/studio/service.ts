@@ -7,6 +7,8 @@ import { defaultComposition, effectiveFormat, gradientBackground, MAX_EDIT_PIXEL
 import { compositionSchema, styleSchema } from '../../../shared/composition/schema';
 import type { MediaItem } from '../../../shared/contracts/media';
 import type { AddToPostResult, BeginExportResult, ExportFileFormat, SaveResult, StudioDocument, StudioPreset, StudioRecording, StudioView, VideoInfo } from '../../../shared/contracts/studio';
+import { autoZooms } from '../../../shared/recording/autoZoom';
+import type { CursorTrack } from '../../../shared/recording/track';
 import type { Db } from '../../db';
 import { IpcError } from '../../ipc/core';
 import type { Logger } from '../../log';
@@ -84,7 +86,7 @@ export interface StudioService {
   /** The newest document for this media (or for the document it was exported from), else a new one. */
   openForMedia(item: MediaItem): Promise<Opened>;
   /** A new document for a screen recording whose video was imported as `item`. */
-  createForRecording(item: MediaItem, recordingId: string, has: { camera: boolean; cursor: boolean }): Promise<StudioDocument>;
+  createForRecording(item: MediaItem, recordingId: string, has: { camera: boolean; cursor: CursorTrack | null }): Promise<StudioDocument>;
   save(documentId: string, baseRevision: number, composition: Composition): SaveResult;
   listPresets(): StudioPreset[];
   savePreset(name: string, style: Style): StudioPreset;
@@ -452,7 +454,8 @@ export function createStudioService({ db, paths, log, media, drafts, events, vid
       if (!source || source.kind !== 'video') throw new IpcError('media_rejected', 'The recording couldn’t be read as a video.');
       const info = await probeSource(source);
       if (!info) throw new IpcError('ffmpeg_missing', FFMPEG_NEEDED);
-      const composition = recordingComposition({ mediaId: source.id, width: info.width, height: info.height }, info.durationMs, has);
+      const zooms = has.cursor ? autoZooms(has.cursor, info.durationMs, randomUUID) : [];
+      const composition = recordingComposition({ mediaId: source.id, width: info.width, height: info.height }, info.durationMs, { camera: has.camera, cursor: has.cursor !== null }, zooms);
       return toDocument(create(source, info, info, composition, recordingId));
     },
 

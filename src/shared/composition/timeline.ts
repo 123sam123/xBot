@@ -152,6 +152,8 @@ const easeInOut = (x: number) => (x < 0.5 ? 4 * x * x * x : 1 - (-2 * x + 2) ** 
 export interface ZoomState {
   /** 1 is no zoom. */
   scale: number;
+  /** An automatic zoom's focus follows the cursor; `x`/`y` are where it started. */
+  mode?: 'auto' | 'manual';
   /** The focus, fractions of the content. */
   x: number;
   y: number;
@@ -163,7 +165,7 @@ export function zoomAt(zooms: readonly ZoomSegment[], tMs: number): ZoomState {
     if (tMs < zoom.startMs || tMs > zoom.endMs) continue;
     const ramp = Math.min(ZOOM_RAMP_MS, (zoom.endMs - zoom.startMs) / 2);
     const amount = easeInOut(Math.min(1, (tMs - zoom.startMs) / ramp, (zoom.endMs - tMs) / ramp));
-    return { scale: 1 + (zoom.scale - 1) * amount, x: zoom.x, y: zoom.y };
+    return { scale: 1 + (zoom.scale - 1) * amount, x: zoom.x, y: zoom.y, mode: zoom.mode };
   }
   return { scale: 1, x: 0.5, y: 0.5 };
 }
@@ -172,4 +174,26 @@ export function zoomAt(zooms: readonly ZoomSegment[], tMs: number): ZoomState {
 export function sceneAt(scenes: readonly SceneSegment[], tMs: number): SceneMode | null {
   for (const scene of scenes) if (tMs >= scene.startMs && tMs < scene.endMs) return scene.mode;
   return null;
+}
+
+/** Where source time `sourceMs` plays on the timeline (its first clip), or null when no clip keeps it. */
+export function timelineTimeOf(video: Pick<VideoSettings, 'clips'>, sourceMs: number): number | null {
+  let start = 0;
+  for (const clip of video.clips) {
+    if (sourceMs >= clip.startMs && sourceMs <= clip.endMs) return start + (sourceMs - clip.startMs);
+    start += clipLength(clip);
+  }
+  return null;
+}
+
+/** Recording-time segments placed on the timeline; a segment that a cut splits or removes is dropped. */
+export function segmentsOnTimeline<T extends { startMs: number; endMs: number }>(video: VideoSettings, segments: readonly T[]): T[] {
+  const placed: T[] = [];
+  for (const segment of segments) {
+    const start = timelineTimeOf(video, segment.startMs);
+    const end = timelineTimeOf(video, segment.endMs);
+    if (start === null || end === null || end - start < MIN_SEGMENT_MS || Math.abs(end - start - (segment.endMs - segment.startMs)) > 1) continue;
+    placed.push({ ...segment, startMs: Math.round(start), endMs: Math.round(end) });
+  }
+  return placed;
 }

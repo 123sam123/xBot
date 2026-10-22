@@ -1,7 +1,8 @@
 import { zoomedSourceCrop, type Layout } from '../../../shared/composition/layout';
 import { brightnessWash, CHROME, GRADIENTS, SHADOW_COLOR, type Composition, type GradientDef, type Rect, type SceneMode } from '../../../shared/composition/model';
 import type { ZoomState } from '../../../shared/composition/timeline';
-import { cursorAt, type LoadedCursor } from './cursor';
+import { cursorFrame, focusAt } from '../../../shared/recording/motion';
+import type { LoadedCursor } from './cursor';
 
 // The one draw routine behind the Studio preview and every export: images,
 // and each frame of a video (the preview draws the playing <video>, the MP4
@@ -219,7 +220,13 @@ function drawFrame(ctx: Ctx2D, comp: Composition, layout: Layout, assets: Compos
   ctx.fillRect(frame.x, frame.y, frame.width, frame.height);
   drawChrome(ctx, comp, layout);
   const image = options.frame ?? assets.source;
-  const shown = options.zoom ? zoomedSourceCrop(sourceCrop, options.zoom) : sourceCrop;
+  let zoom = options.zoom;
+  // An automatic zoom looks where the cursor is (through a slow spring), in fractions of the crop.
+  if (zoom && zoom.mode === 'auto' && zoom.scale > 1 && assets.cursor && options.sourceMs !== undefined) {
+    const focus = focusAt(assets.cursor.motion, options.sourceMs);
+    zoom = { ...zoom, x: (focus.x - comp.crop.x) / comp.crop.width, y: (focus.y - comp.crop.y) / comp.crop.height };
+  }
+  const shown = zoom ? zoomedSourceCrop(sourceCrop, zoom) : sourceCrop;
   if (image) ctx.drawImage(image, shown.x, shown.y, shown.width, shown.height, content.x, content.y, content.width, content.height);
   if (assets.cursor && comp.cursor?.show && options.sourceMs !== undefined) {
     ctx.save();
@@ -242,33 +249,60 @@ function drawFrame(ctx: Ctx2D, comp: Composition, layout: Layout, assets: Compos
   }
 }
 
-/** The recorded cursor where it was, through the same crop and zoom as the picture. */
+/** The recorded cursor, as the cursor settings draw it, through the same crop and zoom as the picture. */
 function drawCursor(ctx: Ctx2D, comp: Composition, layout: Layout, cursor: LoadedCursor, shown: Rect, ms: number): void {
-  const point = cursorAt(cursor.track, ms);
-  if (!point) return;
-  const image = cursor.images.get(point.cursor) ?? cursor.images.values().next().value;
+  const settings = comp.cursor;
+  if (!settings) return;
+  const frame = cursorFrame(cursor.motion, ms, settings);
+  if (!frame) return;
+  const image = cursor.images.get(frame.cursor) ?? cursor.images.values().next().value;
   if (!image) return;
   const { content } = layout;
   const k = content.width / shown.width;
-  const px = point.x * comp.source.width;
-  const py = point.y * comp.source.height;
-  const x = content.x + (px - shown.x) * k;
-  const y = content.y + (py - shown.y) * k;
-  const scale = comp.source.width * k * (comp.cursor?.size ?? 1);
+  const place = (fx: number, fy: number) => ({ x: content.x + (fx * comp.source.width - shown.x) * k, y: content.y + (fy * comp.source.height - shown.y) * k });
+  const scale = comp.source.width * k * settings.size;
   const { info, bitmap } = image;
-  if (comp.cursor?.type === 'circle') {
-    // A touch point: about the arrow's height across, centred on the hotspot.
-    const r = (info.height * scale) / 2.2;
+  const height = info.height * scale;
+
+  for (const ripple of frame.ripples) {
+    const at = place(ripple.x, ripple.y);
+    const eased = 1 - (1 - ripple.progress) ** 3;
+    ctx.save();
+    ctx.globalAlpha = (1 - ripple.progress) * 0.85;
     ctx.beginPath();
-    ctx.arc(x, y, r, 0, Math.PI * 2);
-    ctx.fillStyle = 'rgba(255,255,255,0.55)';
+    ctx.arc(at.x, at.y, height * (0.35 + 1.1 * eased), 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(255,255,255,0.22)';
+    ctx.fill();
+    ctx.lineWidth = Math.max(1, height * 0.07);
+    ctx.strokeStyle = 'rgba(255,255,255,0.9)';
+    ctx.stroke();
+    ctx.restore();
+  }
+  if (frame.opacity <= 0) return;
+
+  const at = place(frame.x, frame.y);
+  ctx.save();
+  ctx.globalAlpha = frame.opacity;
+  ctx.translate(at.x, at.y);
+  ctx.rotate(frame.rotation);
+  ctx.scale(frame.scale, frame.scale);
+  if (settings.type === 'circle') {
+    // A touch point: about the arrow's height across, centred on the hotspot.
+    const r = height / 2.2;
+    ctx.beginPath();
+    ctx.arc(0, 0, r, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(255,255,255,0.6)';
     ctx.fill();
     ctx.lineWidth = Math.max(1, r * 0.12);
     ctx.strokeStyle = 'rgba(0,0,0,0.35)';
     ctx.stroke();
-    return;
+  } else {
+    ctx.shadowColor = 'rgba(0,0,0,0.28)';
+    ctx.shadowBlur = height * 0.18;
+    ctx.shadowOffsetY = height * 0.06;
+    ctx.drawImage(bitmap, -info.hotX * scale, -info.hotY * scale, info.width * scale, height);
   }
-  ctx.drawImage(bitmap, x - info.hotX * scale, y - info.hotY * scale, info.width * scale, info.height * scale);
+  ctx.restore();
 }
 
 /** The camera bubble: a cover-fitted square of the camera in a corner or edge of the canvas. */

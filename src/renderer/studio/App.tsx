@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { applyStyle, clampCrop, cropAspectRatio, effectiveFormat, outputSize, replaceSource, styleOf, type CanvasRatio, type CropAspect, type Rect, type VideoSettings } from '../../shared/composition/model';
-import { clipStartTime, sourceTimeAt, splitAt, timelineDuration } from '../../shared/composition/timeline';
+import { clipStartTime, segmentsOnTimeline, sourceTimeAt, splitAt, timelineDuration } from '../../shared/composition/timeline';
+import { autoZooms } from '../../shared/recording/autoZoom';
 import type { IpcResult } from '../../shared/contracts/ipc';
 import type { AddToPostResult, BeginExportResult, StudioPreset } from '../../shared/contracts/studio';
 import { CompositionCanvas } from '../common/composition/CompositionCanvas';
@@ -640,6 +641,16 @@ function Studio({ preview, settingsReady }: { preview: boolean; settingsReady: b
             selection={selection}
             onSelect={onSelect}
             onSplit={split}
+            onAutoZoom={
+              loadedCursor && videoInfo
+                ? () => {
+                    const generated = segmentsOnTimeline(video, autoZooms(loadedCursor.track, videoInfo.durationMs, () => crypto.randomUUID()));
+                    const manual = video.zooms.filter((z) => z.mode === 'manual' && !generated.some((g) => g.startMs < z.endMs && z.startMs < g.endMs));
+                    changeVideo({ ...video, zooms: [...manual, ...generated].sort((a, b) => a.startMs - b.startMs) });
+                    if (generated.length === 0) setNotice('No clicks to zoom in on in this recording.');
+                  }
+                : undefined
+            }
             hasCamera={composition?.camera !== undefined}
             zoomAnchor={zoomAnchor}
           />
@@ -672,7 +683,7 @@ function Studio({ preview, settingsReady }: { preview: boolean; settingsReady: b
           segment={selectedZoom}
           aspect={contentAspect}
           frameUrl={focusFrame}
-          autoAvailable={false}
+          autoAvailable={loadedCursor !== null}
           onChange={(segment, gesture) => changeVideo({ ...video, zooms: video.zooms.map((z) => (z.id === segment.id ? segment : z)) }, gesture)}
           onCommit={editor.endGesture}
           onDelete={() => {

@@ -7,7 +7,7 @@ const TYPES: { value: CursorType; label: string; description: string }[] = [
   { value: 'circle', label: 'Circle', description: 'A touch-style circle cursor like mobile simulators.' },
 ];
 
-/** Cap's cursor inspector: show it, its type and its size. */
+/** Cap's cursor inspector: show it, its type, size and tilt, smooth movement, idle hiding and click ripples. */
 export function CursorTab({ composition, onChange, onCommit }: TabProps) {
   const cursor = composition.cursor!;
   const set = (patch: Partial<CursorSettings>, gesture?: string) => onChange({ ...composition, cursor: { ...cursor, ...patch } }, gesture);
@@ -39,6 +39,14 @@ export function CursorTab({ composition, onChange, onCommit }: TabProps) {
       </Section>
       <Section title="Size">
         <Slider label="Cursor size" min={0.5} max={4} step={0.05} value={cursor.size} onChange={(size) => set({ size }, 'cursor-size')} onCommit={onCommit} testId="cursor-size" />
+      </Section>
+      <Section title="Tilt">
+        <Slider label="Cursor tilt" min={0} max={1} step={0.01} value={cursor.tilt} onChange={(tilt) => set({ tilt }, 'cursor-tilt')} onCommit={onCommit} testId="cursor-tilt" />
+      </Section>
+      <Section title="Movement">
+        <Toggle label="Smooth movement" description="Glides between positions instead of jumping." checked={cursor.smooth} onChange={(smooth) => set({ smooth })} />
+        <Toggle label="Hide when idle" description="Fades out after a moment without moving." checked={cursor.hideWhenIdle} onChange={(hideWhenIdle) => set({ hideWhenIdle })} />
+        <Toggle label="Click animation" description="A ripple wherever you click." checked={cursor.clickEffect} onChange={(clickEffect) => set({ clickEffect })} />
       </Section>
     </>
   );

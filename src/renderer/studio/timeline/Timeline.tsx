@@ -54,6 +54,7 @@ export function Timeline({
   selection,
   onSelect,
   onSplit,
+  onAutoZoom,
   hasCamera,
   zoomAnchor,
 }: {
@@ -68,6 +69,8 @@ export function Timeline({
   selection: TimelineSelection;
   onSelect(selection: TimelineSelection, anchor?: HTMLElement): void;
   onSplit(): void;
+  /** Regenerates the automatic zooms from the recording's cursor; absent without cursor data. */
+  onAutoZoom?: () => void;
   hasCamera: boolean;
   /** Set to the selected zoom segment's element, for its editor popover. */
   zoomAnchor: RefObject<HTMLElement | null>;
@@ -194,6 +197,13 @@ export function Timeline({
 
   const addItems: MenuItem[] = [
     { id: 'zoom', label: 'Zoom at playhead', onSelect: () => addZoomAt(clock.get()) },
+    {
+      id: 'auto-zoom',
+      label: 'Automatic zooms',
+      detail: onAutoZoom ? 'Zoom in wherever you clicked' : 'Needs an xBot recording',
+      disabled: !onAutoZoom,
+      onSelect: () => onAutoZoom?.(),
+    },
     { id: 'scene', label: 'Scene at playhead', disabled: !hasCamera, detail: hasCamera ? undefined : 'Needs a camera recording', onSelect: () => addSceneAt(clock.get()) },
     { id: 'split', label: 'Split clip at playhead', onSelect: onSplit },
   ];

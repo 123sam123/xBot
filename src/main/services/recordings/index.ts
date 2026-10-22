@@ -310,7 +310,7 @@ async function stop(): Promise<void> {
 
     ctx!.db.prepare('INSERT INTO recordings (id, dir, meta_json, created_at) VALUES (?, ?, ?, ?)').run(current.id, current.id, JSON.stringify(meta), meta.createdAt);
     beginOpen();
-    const document = await studio().createForRecording(item, current.id, { camera: cameraMeta !== null, cursor: meta.cursor !== null });
+    const document = await studio().createForRecording(item, current.id, { camera: cameraMeta !== null, cursor: meta.cursor ? track : null });
     const opened = adoptOpened({ document }, null);
     ctx?.events.emit('studio:opened', opened);
     openStudio();

@@ -464,7 +464,7 @@ export function defaultCursor(): CursorSettings {
  * corners, no browser chrome (a screen recording is its own window), the
  * camera and cursor when the recording has them.
  */
-export function recordingComposition(source: SourceRef, durationMs: number, has: { camera: boolean; cursor: boolean }): Composition {
+export function recordingComposition(source: SourceRef, durationMs: number, has: { camera: boolean; cursor: boolean }, zooms: ZoomSegment[] = []): Composition {
   const base = defaultComposition(source, { durationMs });
   return {
     ...base,
@@ -473,6 +473,7 @@ export function recordingComposition(source: SourceRef, durationMs: number, has:
     padding: { x: 0.07, y: 0.07, linked: true },
     shadow: shadowPreset('elevated'),
     background: { type: 'wallpaper', id: 'macos-tide', blur: 0, brightness: 0.5 },
+    video: { ...base.video!, zooms },
     ...(has.camera ? { camera: defaultCamera() } : {}),
     ...(has.cursor ? { cursor: defaultCursor() } : {}),
   };
