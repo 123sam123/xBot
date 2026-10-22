@@ -494,18 +494,11 @@ try {
     run.shoot('c80-reduce-transparency-light.png');
     await run.setSetting('ui.reduceTransparency', false);
 
-    // Both windows at another size: the mask stretches with them (and the shadow follows).
-    const sizes = await run.app.evaluate(({ BrowserWindow }) => {
-      const find = (s) => BrowserWindow.getAllWindows().find((w) => w.webContents.getURL().includes(`/${s}/`));
-      const composer = find('composer');
-      const height = composer.getBounds().height;
-      composer.setSize(420, 470);
-      find('studio').setSize(720, 560);
-      return { height };
-    });
+    // The Studio at its minimum size: the mask stretches with the window (and the shadow follows).
+    // (Resizing the composer by hand races its own fit-to-content sizing, which re-places it under the tray.)
+    await run.app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().find((w) => w.webContents.getURL().includes('/studio/')).setSize(720, 560));
     await sleep(800);
-    run.shoot('c80-resized-light.png');
-    await run.app.evaluate(({ BrowserWindow }, { height }) => BrowserWindow.getAllWindows().find((w) => w.webContents.getURL().includes('/composer/')).setSize(420, height), sizes);
+    run.shoot('c80-studio-resized-light.png');
     await run.place();
 
     // Simple full screen: the backdrop moves above the menu bar, so only xBot and the backdrop are captured.
