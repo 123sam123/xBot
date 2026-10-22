@@ -18,6 +18,8 @@ git clone --quiet --no-checkout "$repo" "$work/xbot"
 git -C "$work/xbot" checkout --quiet --detach "$head"
 mkdir "$work/electron-cache"
 export electron_config_cache="$work/electron-cache"
+# The caller's own Electron switches would skew the result.
+unset ELECTRON_SKIP_BINARY_DOWNLOAD ELECTRON_OVERRIDE_DIST_PATH
 cd "$work/xbot"
 echo "Fresh clone of ${head:0:7}, empty Electron cache."
 

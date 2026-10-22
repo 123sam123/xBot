@@ -1265,8 +1265,13 @@ from §4. Migration `202610221330_reminders_state.sql`.
   `allowBuilds`) runs Electron's `install.js`. That reuses @electron/get's cache
   (offline is fine once it is warm), honours `ELECTRON_MIRROR`, and does nothing
   when the binary is already there. `install.js` ignores
-  `ELECTRON_SKIP_BINARY_DOWNLOAD`, so the script checks it itself. A failed
-  download fails `pnpm install`; the fallback is `pnpm exec install-electron`.
+  `ELECTRON_SKIP_BINARY_DOWNLOAD`, so the script checks it itself, and it skips
+  a `--prod` install, which has no Electron. pnpm 11 skips root lifecycle
+  scripts on an install it thinks is up to date, so `pnpm-workspace.yaml` sets
+  `optimisticRepeatInstall: false`: a checkout installed without the binary
+  (before this script, or with the skip) gets it on its next `pnpm install`.
+  A failed download fails `pnpm install`; the fallback is
+  `pnpm exec install-electron`.
   `scripts/check-fresh-install.sh [--skip]` checks both paths on a clone of
   HEAD with an empty cache.
 - `twitter-text` (the counter) is bundled into the composer and, since T9,
