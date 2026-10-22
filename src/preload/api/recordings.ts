@@ -20,4 +20,8 @@ export const recordings: RecordingsApi = {
   cameraStarted: (id, startedAt, mime) => invoke(recordingsChannels.cameraStarted, { id, startedAt, mime }),
   cameraChunk: (id, bytes) => invoke(recordingsChannels.cameraChunk, { id, bytes }),
   cameraDone: (id) => invoke(recordingsChannels.cameraDone, { id }),
+  list: () => invoke(recordingsChannels.list),
+  open: (id) => invoke(recordingsChannels.open, { id }),
+  reveal: (id) => invoke(recordingsChannels.reveal, { id }),
+  remove: (id) => invoke(recordingsChannels.remove, { id }),
 };

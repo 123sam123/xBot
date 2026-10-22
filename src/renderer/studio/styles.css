@@ -1606,3 +1606,132 @@ body,
   font-size: 13px;
   font-variant-numeric: tabular-nums;
 }
+
+/* ---------- Recordings ---------- */
+
+.recordings-popover {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 400px;
+  max-height: 520px;
+  padding: 16px;
+}
+
+.recordings-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.recordings-head h2 {
+  font-size: 15px;
+  font-weight: var(--fw-semibold);
+}
+
+.recordings-new {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 32px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 9px;
+  background: linear-gradient(180deg, #ff5a52, #e5342b);
+  color: #fff;
+  font: inherit;
+  font-size: 13px;
+  font-weight: var(--fw-medium);
+}
+
+.recordings-empty {
+  padding: 18px 4px;
+  color: var(--text-tertiary);
+  font-size: 13.5px;
+  line-height: 1.45;
+}
+
+.recordings-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+  scrollbar-width: thin;
+}
+
+.recordings-row {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 4px;
+  border-radius: 12px;
+}
+
+.recordings-row:hover,
+.recordings-row-current {
+  background: rgb(255 255 255 / 0.07);
+}
+
+.recordings-open {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+}
+
+.recordings-thumb {
+  position: relative;
+  flex: none;
+  width: 96px;
+  height: 60px;
+  border-radius: 8px;
+  background: rgb(255 255 255 / 0.08) center / cover no-repeat;
+}
+
+.recordings-duration {
+  position: absolute;
+  right: 4px;
+  bottom: 4px;
+  padding: 1px 5px;
+  border-radius: 5px;
+  background: rgb(0 0 0 / 0.6);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.recordings-text {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.recordings-name {
+  overflow: hidden;
+  font-size: 13.5px;
+  font-weight: var(--fw-medium);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.recordings-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-tertiary);
+  font-size: 12px;
+}
+
+.recordings-confirm {
+  color: #ff6b62;
+}

@@ -48,6 +48,7 @@ export function Timeline({
   sourceDurationMs,
   clock,
   zoom,
+  onZoom,
   onSeek,
   onChange,
   onCommit,
@@ -63,6 +64,8 @@ export function Timeline({
   clock: Clock;
   /** Timeline zoom, 1 fits the whole timeline. */
   zoom: number;
+  /** A pinch (or ⌘-scroll) on the timeline asks for a new zoom. */
+  onZoom(zoom: number): void;
   onSeek(tMs: number): void;
   onChange(next: VideoSettings, gesture?: string): void;
   onCommit(): void;
@@ -100,6 +103,34 @@ export function Timeline({
     return Math.min(total, Math.max(0, ((clientX - left + el.scrollLeft - LEAD_PX) / pps) * 1000));
   };
   const contentWidth = Math.max(width, x(total) + TAIL_PX);
+
+  // Pinch to zoom (trackpads send it as a ctrl-wheel), keeping the time under the pointer in place.
+  const pinch = useRef({ zoom, pps, onZoom });
+  useLayoutEffect(() => {
+    pinch.current = { zoom, pps, onZoom };
+  });
+  const anchor = useRef<{ ms: number; offset: number } | null>(null);
+  useEffect(() => {
+    const el = scroller.current;
+    if (!el) return;
+    const onWheel = (event: WheelEvent) => {
+      if (!event.ctrlKey && !event.metaKey) return;
+      event.preventDefault();
+      const { zoom: current, pps: currentPps, onZoom: setZoom } = pinch.current;
+      const offset = event.clientX - el.getBoundingClientRect().left;
+      anchor.current = { ms: ((el.scrollLeft + offset - LEAD_PX) / currentPps) * 1000, offset };
+      setZoom(Math.min(12, Math.max(1, current * Math.exp(-event.deltaY * 0.01))));
+    };
+    el.addEventListener('wheel', onWheel, { passive: false });
+    return () => el.removeEventListener('wheel', onWheel);
+  }, []);
+  useLayoutEffect(() => {
+    const el = scroller.current;
+    const held = anchor.current;
+    if (!el || !held) return;
+    anchor.current = null;
+    el.scrollLeft = Math.max(0, LEAD_PX + (held.ms / 1000) * pps - held.offset);
+  }, [pps]);
 
   /** Keeps `left` (content px) in view. */
   const follow = useCallback((left: number) => {

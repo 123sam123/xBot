@@ -20,6 +20,7 @@ import { EXPORT_DIALOG, ExportDialog, type ExportSettings } from './ExportDialog
 import { FfmpegCard, useFfmpegStatus } from './FfmpegCard';
 import { FramePopover } from './FramePopover';
 import { PRESETS_POPOVER, PresetsPopover } from './PresetsPopover';
+import { RECORDINGS_POPOVER, RecordingsPopover } from './RecordingsPopover';
 import { PreviewPanel, SIZE_POPOVER, SizePopover, Transport, type PreviewQuality } from './PreviewPanel';
 import { Sidebar } from './Sidebar';
 import { SCENE_EDITOR, SceneEditor, ZOOM_EDITOR, ZoomEditor } from './timeline/SegmentEditors';
@@ -94,6 +95,7 @@ function Studio({ preview, settingsReady }: { preview: boolean; settingsReady: b
   const exportAnchor = useRef<HTMLSpanElement>(null);
   const deleteAnchor = useRef<HTMLButtonElement>(null);
   const nameAnchor = useRef<HTMLButtonElement>(null);
+  const recordingsAnchor = useRef<HTMLButtonElement>(null);
   const zoomAnchor = useRef<HTMLElement | null>(null);
   const stageArea = useRef<HTMLDivElement>(null);
   const cropOverlay = useRef<HTMLDivElement>(null);
@@ -254,7 +256,20 @@ function Studio({ preview, settingsReady }: { preview: boolean; settingsReady: b
         return;
       }
       if (command || event.altKey || !isVideo) return;
-      if (event.key === ' ' && !(event.target instanceof HTMLButtonElement)) {
+      const step = event.shiftKey ? 1000 : 1000 / 30;
+      const total = composition?.video ? timelineDuration(composition.video) : 0;
+      // Sliders, fields and radio groups keep their own arrow and Home/End keys.
+      const target = event.target as HTMLElement | null;
+      const owned = target?.closest('input, select, textarea, [role="radiogroup"], [role="slider"], [role="menu"], [role="tablist"]') != null;
+      if ((event.key === 'ArrowLeft' || event.key === 'ArrowRight' || event.key === 'Home' || event.key === 'End') && owned) return;
+      if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
+        event.preventDefault();
+        pause();
+        seek(clock.get() + (event.key === 'ArrowLeft' ? -step : step));
+      } else if (event.key === 'Home' || event.key === 'End') {
+        event.preventDefault();
+        seek(event.key === 'Home' ? 0 : total);
+      } else if (event.key === ' ' && !(event.target instanceof HTMLButtonElement)) {
         event.preventDefault();
         togglePlay();
       } else if (event.key.toLowerCase() === 's' && editable) {
@@ -264,7 +279,7 @@ function Studio({ preview, settingsReady }: { preview: boolean; settingsReady: b
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [editor, editable, cropping, applyCrop, isVideo, togglePlay, split]);
+  }, [editor, editable, cropping, applyCrop, isVideo, togglePlay, split, composition, pause, seek, clock]);
 
   const out = composition ? outputSize(composition) : null;
   // Fitted, never above 100 %: a small screenshot previews pixel for pixel.
@@ -583,6 +598,8 @@ function Studio({ preview, settingsReady }: { preview: boolean; settingsReady: b
         onReveal={doc ? () => void window.xbot.studio.reveal(doc.id) : undefined}
         presetsAnchor={presetsAnchor}
         exportAnchor={exportAnchor}
+        recordingsAnchor={recordingsAnchor}
+        onRecordings={() => popovers.toggle(RECORDINGS_POPOVER)}
         deleteAnchor={deleteAnchor}
         nameAnchor={nameAnchor}
         onName={() => popovers.toggle(FILE_MENU)}
@@ -654,6 +671,7 @@ function Studio({ preview, settingsReady }: { preview: boolean; settingsReady: b
             sourceDurationMs={videoInfo.durationMs}
             clock={clock}
             zoom={timelineZoom}
+            onZoom={setTimelineZoom}
             onSeek={seek}
             onChange={changeVideo}
             onCommit={editor.endGesture}
@@ -676,6 +694,7 @@ function Studio({ preview, settingsReady }: { preview: boolean; settingsReady: b
         </>
       )}
 
+      <RecordingsPopover anchor={recordingsAnchor} currentDocumentId={doc?.id ?? null} onDeletedCurrent={editor.clear} onError={setError} />
       <Menu id={DELETE_MENU} anchor={deleteAnchor} label="Delete" placement="bottom-start" items={deleteItems} />
       <Menu id={FILE_MENU} anchor={nameAnchor} label="File" placement="bottom-start" items={moreItems} testId="studio-more-menu" />
       {composition && (

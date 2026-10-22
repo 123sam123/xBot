@@ -28,7 +28,7 @@ are in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 - **To build it:** Node.js 22.12 or later and pnpm 11.28.6. The version is
   pinned in `package.json`, so `corepack enable pnpm` gives you the right one.
   The Xcode Command Line Tools (`xcode-select --install`) build the clear
-  glass; without them xBot still builds and runs (see [Native glass](#native-glass)).
+  glass and screen recorder; without them xBot still builds and runs (see [Native addons](#native-addons)).
 - **Optional:**
   - [Ollama](https://ollama.com/download), for local AI;
   - FFmpeg (`brew install ffmpeg`), for video;
@@ -99,7 +99,11 @@ build:
 - **Launch at login** is offered only for the packaged app in
   `/Applications`.
 
-## Native glass
+## Native addons
+
+Two small native addons (built together by `scripts/build-native.mjs`): the
+glass, below, and the screen recorder (`native/capture/`, ScreenCaptureKit; see
+"Screen recording").
 
 On macOS xBot's windows are clear liquid glass with 40 px corners. A small
 native addon (`native/glass/`, public AppKit API only) fades macOS's frosted
@@ -112,8 +116,8 @@ Reduce transparency is on.
 `pnpm install` builds the addon with the Xcode Command Line Tools
 (`xcode-select --install`). Without them it prints one line and xBot runs with
 the system's glass: frosted, with small corners, and the slider disabled.
-`pnpm package` refuses to package without the addon. After installing the
-tools, run `pnpm native`.
+Without them screen recording is unavailable too. `pnpm package` refuses to
+package without the addons. After installing the tools, run `pnpm native`.
 
 ## Local AI with Ollama
 
@@ -193,6 +197,23 @@ GPL (they include x264), so v1 runs the FFmpeg you installed as a separate
 program, which puts no obligations on xBot. The checked licence facts and what
 an LGPL bundle would need are in [`docs/FFMPEG.md`](docs/FFMPEG.md).
 
+## Screen recording
+
+Click **Record** in Write Post (or **Start Recording…** in the menu bar's
+right-click menu). Pick a display, a window or an area, a camera, a microphone
+and whether to record system audio, then **Start recording**: a 3-2-1
+countdown, then a stop bar with Stop, Pause, Restart and Delete. The recording
+opens in the Media Studio, Cap-style: on a wallpaper, with automatic zooms
+where you clicked, the cursor redrawn (smooth, with click ripples), the camera
+as a bubble, and the microphone and system sound at separate volumes.
+**Recordings** in the Studio lists them all.
+
+macOS asks once for **Screen Recording**, **Camera** and **Microphone**
+access (while developing, the app is listed as "Electron"). After allowing
+Screen Recording, quit and reopen xBot. Recording needs macOS 13, a microphone
+macOS 15. A recording is limited to 1 GB, X's video limit (about ten minutes
+of a full Retina screen).
+
 ## Where your data lives
 
 | Run | Folder |
@@ -206,6 +227,8 @@ Inside each one:
 - `xbot.db`: SQLite (drafts, Studio documents, presets, ideas, voice,
   reminders, X accounts and publish jobs, settings);
 - `media/`: imported files and Studio exports, with `media/thumbs/`;
+- `recordings/`: one folder per screen recording (camera video, cursor data,
+  audio tracks);
 - `logs/main.log`: a plain local log, never sent anywhere;
 - `tmp/`: emptied at every start.
 
@@ -239,7 +262,7 @@ folder.
 |---|---|
 | Writing, autosaved drafts and draft history | Downloading an Ollama model (once) |
 | Attaching screenshots and video | Connecting an X account |
-| Media Studio: every edit, PNG/JPEG export, MP4 export (local FFmpeg) | Posting to X, and **Check X** for an uncertain post |
+| Media Studio: every edit, screen recording, PNG/JPEG export, MP4 export (encoded on the Mac) | Posting to X, and **Check X** for an uncertain post |
 | Local AI suggestions and rewrites, once a model is installed | **Open X** in the browser |
 | Project ideas from approved folders | |
 | Reminders, backup, preview mode | |

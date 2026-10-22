@@ -1,9 +1,9 @@
 import { randomUUID } from 'node:crypto';
 import { createWriteStream, existsSync, type WriteStream } from 'node:fs';
-import { mkdir, rm, stat, writeFile } from 'node:fs/promises';
+import { mkdir, readdir, rm, stat, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { app, desktopCapturer, screen, shell, systemPreferences } from 'electron';
-import type { CameraCommand, CaptureSource, RecorderSetup, RecordingState, ScreenPermission, StartRecordingOptions } from '../../../shared/contracts/recordings';
+import type { CameraCommand, CaptureSource, RecorderSetup, RecordingState, RecordingSummary, ScreenPermission, StartRecordingOptions } from '../../../shared/contracts/recordings';
 import { cameraOffsetMs, cursorTrack } from '../../../shared/recording/track';
 import { IpcError } from '../../ipc/core';
 import { hideBar, hideCamera, hidePanel, showBar, showCamera, showPanel } from '../../windows/recorder';
@@ -13,7 +13,8 @@ import { ffmpeg } from '../ffmpeg';
 import { runTool } from '../ffmpeg/run';
 import { media } from '../media';
 import { MediaRejected } from '../media/service';
-import { adoptOpened, beginOpen } from '../studio';
+import { adoptOpened, beginOpen, closeStudioSession, currentSession } from '../studio';
+import { mediaUrl } from '../../../shared/contracts/media';
 import { studio } from '../studio';
 import type { ServiceContext, ServiceModule } from '../types';
 import { createCapture, PermissionDenied, type Capture, type CaptureStarted } from './capture';
@@ -367,7 +368,102 @@ function cameraDone(id: string): void {
   if (session?.id === id) session.camera?.finish();
 }
 
+// ---------------------------------------------------------------- the Recordings list
+
+interface ListRow {
+  id: string;
+  dir: string;
+  meta_json: string;
+  created_at: string;
+  document_id: string | null;
+  name: string | null;
+  thumb_path: string | null;
+}
+
+function list(): RecordingSummary[] {
+  const rows = ctx!.db
+    .prepare<[], ListRow>(
+      `SELECT r.id, r.dir, r.meta_json, r.created_at, d.id AS document_id, m.original_name AS name, m.thumb_path
+       FROM recordings r
+       LEFT JOIN studio_documents d ON d.id = (SELECT id FROM studio_documents WHERE recording_id = r.id ORDER BY updated_at DESC LIMIT 1)
+       LEFT JOIN media m ON m.id = d.source_media_id
+       ORDER BY r.created_at DESC`,
+    )
+    .all();
+  return rows.map((row) => {
+    let meta: { durationMs?: number; camera?: unknown } = {};
+    try {
+      meta = JSON.parse(row.meta_json) as typeof meta;
+    } catch {
+      // keep the defaults
+    }
+    return {
+      id: row.id,
+      documentId: row.document_id,
+      name: row.name?.replace(/\.mp4$/i, '') ?? 'Recording',
+      durationMs: meta.durationMs ?? 0,
+      createdAt: row.created_at,
+      thumbUrl: row.thumb_path ? mediaUrl(row.thumb_path) : null,
+      camera: Boolean(meta.camera),
+    };
+  });
+}
+
+async function open(id: string): Promise<void> {
+  const found = list().find((r) => r.id === id);
+  if (!found?.documentId) throw new IpcError('recording_gone', 'That recording’s Studio document is gone.');
+  beginOpen();
+  const opened = adoptOpened({ document: studio().get(found.documentId) }, null);
+  ctx?.events.emit('studio:opened', opened);
+  openStudio();
+}
+
+function folderOf(id: string): string {
+  const row = ctx!.db.prepare<[string], { dir: string }>('SELECT dir FROM recordings WHERE id = ?').get(id);
+  if (!row) throw new IpcError('recording_gone', 'That recording no longer exists.');
+  return join(ctx!.paths.recordings, row.dir);
+}
+
+function reveal(id: string): void {
+  shell.showItemInFolder(folderOf(id));
+}
+
+/** The recording, its documents (their exports on posts stay) and its folder. The video media goes with the next media cleanup. */
+async function remove(id: string): Promise<void> {
+  const dir = folderOf(id);
+  const db = ctx!.db;
+  const current = currentSession();
+  const documents = db.prepare<[string], { id: string }>('SELECT id FROM studio_documents WHERE recording_id = ?').all(id).map((d) => d.id);
+  db.transaction(() => {
+    for (const documentId of documents) db.prepare('DELETE FROM studio_documents WHERE id = ?').run(documentId);
+    db.prepare('DELETE FROM recordings WHERE id = ?').run(id);
+  })();
+  if (current && 'document' in current && documents.includes(current.document.id)) closeStudioSession();
+  await rm(dir, { recursive: true, force: true });
+}
+
+/** Startup: folders no recording row names (a crash mid-recording) and recordings no document uses any more. */
+async function collect(): Promise<void> {
+  const db = ctx!.db;
+  const unused = db
+    .prepare<[], { id: string }>('SELECT id FROM recordings r WHERE NOT EXISTS (SELECT 1 FROM studio_documents d WHERE d.recording_id = r.id)')
+    .all();
+  for (const { id } of unused) db.prepare('DELETE FROM recordings WHERE id = ?').run(id);
+  const known = new Set(db.prepare<[], { dir: string }>('SELECT dir FROM recordings').all().map((r) => r.dir));
+  let removed = 0;
+  for (const entry of await readdir(ctx!.paths.recordings).catch(() => [])) {
+    if (known.has(entry)) continue;
+    await rm(join(ctx!.paths.recordings, entry), { recursive: true, force: true });
+    removed++;
+  }
+  if (removed > 0) ctx?.log.info(`recordings: removed ${removed} unused recording folder(s)`);
+}
+
 export const recordings = {
+  list,
+  open,
+  reveal,
+  remove,
   setup,
   requestPermission,
   start,
@@ -417,6 +513,7 @@ export const recordingsModule: ServiceModule = {
       log: context.log,
     });
     if (capture.unavailable) context.log.warn('recordings:', capture.unavailable);
+    void collect().catch((err: unknown) => context.log.warn('recordings: cleanup failed', err));
   },
   async dispose() {
     if (session) await discard().catch(() => {});

@@ -1,5 +1,5 @@
 import type { ReactNode, RefObject } from 'react';
-import { ChevronDownIcon, FolderIcon, IconButton, RedoIcon, Tooltip, TrashIcon, UndoIcon, UploadIcon, WandIcon } from '../design-system';
+import { ChevronDownIcon, FilmIcon, FolderIcon, IconButton, RedoIcon, Tooltip, TrashIcon, UndoIcon, UploadIcon, WandIcon } from '../design-system';
 
 /**
  * The editor's top bar, laid out like Cap's: the window's lights, delete and
@@ -16,6 +16,8 @@ export function TopBar({
   onReveal,
   presetsAnchor,
   exportAnchor,
+  recordingsAnchor,
+  onRecordings,
   deleteAnchor,
   nameAnchor,
   onName,
@@ -40,6 +42,8 @@ export function TopBar({
   onReveal?: () => void;
   presetsAnchor: RefObject<HTMLButtonElement | null>;
   exportAnchor: RefObject<HTMLSpanElement | null>;
+  recordingsAnchor: RefObject<HTMLButtonElement | null>;
+  onRecordings(): void;
   deleteAnchor: RefObject<HTMLButtonElement | null>;
   nameAnchor: RefObject<HTMLButtonElement | null>;
   /** Opens the file menu (open, replace). */
@@ -117,6 +121,10 @@ export function TopBar({
         {notice}
         <button type="button" className="studio-bar-btn studio-back-btn" onClick={onBack} data-testid="studio-back">
           Back to post
+        </button>
+        <button ref={recordingsAnchor} type="button" className="studio-bar-btn studio-back-btn" onClick={onRecordings} data-testid="studio-recordings">
+          <FilmIcon size={17} />
+          Recordings
         </button>
         <span ref={exportAnchor} className="studio-export-wrap">
           {exportDisabledReason ? <Tooltip label={exportDisabledReason}>{exportButton}</Tooltip> : exportButton}

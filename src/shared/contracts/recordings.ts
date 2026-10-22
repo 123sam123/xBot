@@ -72,6 +72,18 @@ export interface RecordingState {
 /** What the camera bubble is asked to do. */
 export type CameraCommand = 'record' | 'pause' | 'resume' | 'stop' | 'discard';
 
+/** One saved recording, for the Recordings list. */
+export interface RecordingSummary {
+  id: string;
+  /** The Studio document it opens as (null if that document is gone). */
+  documentId: string | null;
+  name: string;
+  durationMs: number;
+  createdAt: string;
+  thumbUrl: string | null;
+  camera: boolean;
+}
+
 export interface RecordingsEvents {
   'recording:state': RecordingState;
   /** To the camera bubble: start, pause, resume, stop or drop its recording. */
@@ -141,4 +153,12 @@ export interface RecordingsApi {
   cameraChunk(id: string, bytes: Uint8Array): Promise<IpcResult<null>>;
   /** The camera bubble: every chunk has been sent. */
   cameraDone(id: string): Promise<IpcResult<null>>;
+  /** Saved recordings, newest first. */
+  list(): Promise<IpcResult<RecordingSummary[]>>;
+  /** Opens a recording in the Studio. */
+  open(id: string): Promise<IpcResult<null>>;
+  /** Shows a recording's folder in Finder. */
+  reveal(id: string): Promise<IpcResult<null>>;
+  /** Deletes a recording and its Studio document (exports already on posts stay). */
+  remove(id: string): Promise<IpcResult<null>>;
 }

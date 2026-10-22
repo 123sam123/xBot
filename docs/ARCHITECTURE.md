@@ -676,160 +676,133 @@ T3 (XBOT-6F4GAC). Migration `202610212200_drafts_media.sql`.
 
 ## Studio
 
-T4 (XBOT-1N58PP): non-destructive screenshot editing. Migration
-`202610220100_studio_documents.sql`. T5 (XBOT-G66JJK) adds video on top.
+T4 (XBOT-1N58PP): non-destructive screenshot editing; T5 (XBOT-G66JJK) added
+video. The Cap-style rebuild replaced the compact editor with Cap's layout and
+features (see "Studio video" and "Recording"). Migrations
+`202610220100_studio_documents.sql` onwards.
 
+- **Layout** (`renderer/studio/`, Cap's editor in xBot's glass; window
+  1280×820, at least 980×660). `TopBar` (window lights drawn by the page,
+  delete/close, show in Finder, the file's name and its Open/Replace menu,
+  Presets, undo/redo, Back to post, Recordings, Export); `PreviewPanel` (aspect
+  ▾ with Auto/16:9/4:3/1:1/4:5/9:16/Custom size…, Crop, Frame ▾, Preview
+  quality, the stage, and for a video the `Transport`); the `Sidebar`
+  inspector with Background, Camera, Audio and Cursor tabs (`sidebar/*Tab.tsx`);
+  and for a video the multi-track `timeline/Timeline.tsx`, resizable by its
+  handle. Images open in the same editor without transport or timeline.
 - **One composition** (`src/shared/composition/`). `model.ts` holds the
-  `Composition` type: source (media id and size), crop (fractions of the
-  source) and its aspect lock, frame, canvas ratio, padding, shadow,
-  background, output format and scale, and an optional `video` block
-  (`trimStartMs`, `trimEndMs`, `muted`), present exactly when the source is a
-  video (T5). It also holds the defaults, the curated gradients (T2's CSS ported
-  stop for stop), the shadow presets, the chrome constants and the style
-  helpers. `schema.ts` is its zod schema (main only; compile-time checks keep
-  the two identical). Units are resolution-independent: with W the cropped
-  source width and S the longer side of the framed picture, padding is a
-  fraction of S, and radius, shadow blur and distance are fractions of W.
-- **One geometry.** `layout.ts`'s pure `computeLayout(comp, { scale, maxSide, maxShortSide? })`
-  returns every rect in output px: canvas (integers, even for a video), frame,
-  chrome and its parts, content and the source crop. `exportLayout(comp)` is
-  the layout an export renders. The footer, the Output popover, both renderers
-  and main's checks use it. It fits the padded frame uniformly into
-  the canvas, so the content always keeps the crop's aspect. Sizes over 8192 px
-  a side are scaled down uniformly and flagged `capped`. Output size at 1×:
-  `original` is the padded frame at source resolution; 16:9, 1:1 and 4:5 are
-  the smallest canvas of that ratio around it; `custom` is the chosen W×H.
+  `Composition` (`v: 2`): source, crop and its aspect lock, frame, canvas
+  ratio, padding, shadow, background (gradient, solid, image, bundled
+  `wallpaper`, transparent), output format and scale, and for a video `video`
+  (clips, zooms, scenes, mute; see "Studio video"). A recording adds optional
+  `camera`, `cursor` and `audio` settings. `upgradeComposition` turns a stored
+  v1 document (one trim) into v2 before `schema.ts` (zod, main only; compile-
+  time checks keep the two identical) validates it. Units are resolution-
+  independent: padding is a fraction of S (the framed picture's longer side),
+  radius and shadow sizes of W (the cropped source width).
+- **One geometry.** `layout.ts`'s pure `computeLayout` returns every rect in
+  output px; `exportLayout` is an image export's, `videoExportLayout(comp,
+  resolution)` a video's (720p/1080p/4K box, even sides), and
+  `zoomedSourceCrop` the part of the source a zoom shows.
 - **One draw routine** (`renderer/common/composition/draw.ts`):
-  `drawComposition(ctx, comp, layout, assets)` draws the background, the
-  shadow (shape off-canvas, so only the shadow lands), then the frame clipped
-  to its rounded rect (chrome as vectors, the source from its crop rect), and
-  only that. The preview (`CompositionCanvas`) calls it at display size ×
-  `devicePixelRatio` (backing capped at 4096 px); the export
-  (`render.ts`) calls it on an `OffscreenCanvas` at the output size and
-  encodes PNG or JPEG. Images are decoded once per media id
-  (`assets.ts`: `xbot-media:` URLs are fetched, anything else goes through an
-  `<img>`). Transparent backgrounds show CSS checks behind the
-  preview canvas, never in it, and export as PNG; GIF sources export their first
-  frame, as PNG. Colour: Chromium converts Display P3 sources to the sRGB
-  canvas on decode, so exports are sRGB.
-- **Tables.** `studio_documents` (one source image and its composition JSON;
-  `revision` refuses stale saves; `composition_backup` keeps unreadable JSON
-  that the defaults replaced; `background_media_id` mirrors an image
-  background), `studio_exports` (a rendered export of a document) and
-  `studio_presets` (a saved style: frame, canvas, padding, shadow,
-  background). Every media reference is a foreign key, so the media cleanup
-  keeps it. Documents no attachment refers to (directly, or by holding one of
-  their exports), not current, and untouched for 30 days are deleted at
-  startup; their media is collected by a later launch's media cleanup.
-- **Opening.** The studio module answers `draft:studio-target`: the
-  attachment's linked document, else the document of the export it holds,
-  else a new document linked at once. Picking or dropping an image in the
-  Studio reopens the newest document for that image (or for the export it
-  is), else creates one. Videos too (see "Studio video").
-  `studio.currentDocumentId` brings the document back after a restart.
-- **Saving.** The renderer keeps undoable snapshots (100) and saves through
-  one serial queue, 500 ms after the last change and at once on hide, before
-  switching documents and on `studio:flush-requested`; each save names its base
-  revision. A slider drag or a typing run is one undo step.
-- **Add to post** (`studio:add-to-post`, on the drafts queue): main saves the
-  composition, checks the bytes' real format and size against
-  `exportLayout`, imports them (`importLoose`, at most 20 MB), records the
-  export, and on the current draft swaps it into the attachment that opened
-  the document (else the one linked to it), keeping its position, or appends a
-  linked attachment; export rows no draft uses any more are deleted. The
-  Studio then hides and the composer shows; `draft:changed` reloads its
-  attachments and never touches its text. X takes images up to about 5 MB, so
-  T9 checks the size when posting.
+  `drawComposition(ctx, comp, layout, assets, { frame, zoom, sourceMs, camera,
+  scene })` draws background, shadow, the frame with the source (an image, or a
+  video's current frame) through the zoom, the recording's cursor, then the
+  camera. The preview (`CompositionCanvas`, redrawn when the playhead `Clock`
+  ticks) and every export call it, so they agree. Images decode once per key
+  (`assets.ts`; wallpapers from `xbot-media://wallpapers/`).
+- **Wallpapers.** 25 original 3840×2160 JPEGs with thumbnails in
+  `resources/wallpapers/` (`scripts/render-wallpapers.mjs`, `pnpm wallpapers`;
+  committed), in five categories, served by the media protocol's `wallpapers`
+  host and packaged as extra resources. The Desktop tile imports the Mac's
+  desktop picture as an image background (converted from HEIC natively).
+- **Tables.** `studio_documents` (source media, composition JSON, `revision`
+  against stale saves, `composition_backup`, `source_video_json`,
+  `recording_id`), `studio_exports` and `studio_presets`. Unlinked documents
+  untouched for 30 days are deleted at startup.
+- **Opening, saving.** As before: `draft:studio-target`, picks and drops open
+  or create the document; `studio.currentDocumentId` restores it; saves go
+  through one serial queue 500 ms after the last change, each naming its base
+  revision; a slider drag is one undo step. `studio:close` clears the session.
+- **Export** (the Export dialog): Add to post or Save to file; for an image
+  PNG/JPEG at 1×/2× (`studio:add-to-post` for the post, as before), for a video
+  see "Studio video". Save to file streams through the same export sink and a
+  save panel in Downloads.
 
 ## Studio video
 
-T5 (XBOT-G66JJK): playback, trim, mute and MP4 export through local FFmpeg.
-The packaging and licence decision, setup and troubleshooting are in
-[`FFMPEG.md`](FFMPEG.md): v1 uses the FFmpeg the user installs, and bundles
-none. Migration `202610221200_studio_export_jobs.sql`.
+Video editing, Cap-style: clips, zooms and scenes on a timeline, and an MP4
+export encoded in the renderer. FFmpeg (the user's; see
+[`FFMPEG.md`](FFMPEG.md)) is still needed to read a video (probe, filmstrip)
+and to split a recording's audio, but no longer to export.
 
-- **FFmpeg** (`services/ffmpeg/`, electron-free apart from `index.ts`).
-  - `locate.ts` searches, in order: the user's pick, `<resources>/ffmpeg/`,
-    `/opt/homebrew/bin`, `/usr/local/bin`, then `PATH`. It runs `-version` and
-    `-encoders` in the background with a 15 s timeout. It needs FFmpeg 4.4 or
-    later with libx264 (preferred) or `h264_videotoolbox`, plus `aac` and an
-    ffprobe. Otherwise it reports a `missing` status with a reason and the fix.
-  - `probe.ts`: ffprobe JSON (zod-parsed) and the first-frame decode check.
-  - `export.ts`: the pure argument builder.
-  - `frames.ts`: filmstrip frames.
-  - `run.ts`: `execFile` with an argument array, never a shell.
-  - `XBOT_E2E_NO_FFMPEG=1` (unpackaged only) simulates a Mac without FFmpeg.
-- **Composition and geometry.**
-  - A video's canvas has even sides (4:2:0).
-  - A video exports at 1× inside the 1080p box (`MAX_VIDEO_OUTPUT`: 1920 ×
-    1080, or 1080 × 1920 upright). Its `output.format` and `output.scale` are
-    ignored.
-  - The trim is whole milliseconds, at least `MIN_TRIM_MS` (500, or the whole
-    clip), validated against the clip in main.
-  - `videoPlacement(layout, source)` is where FFmpeg puts the video: the
-    content rect rounded outward to whole pixels and clamped to the canvas,
-    with an integer source crop.
-- **The frame layer.** `drawComposition(…, { hole: true })` draws background,
-  shadow, frame and chrome, cuts the content out (inside the frame's rounded
-  clip), then strokes the border.
-  - The preview stacks it as the export does: `VideoStage` puts a `<video>`
-    *under* a `CompositionCanvas` drawn with the hole, sized `source × k` and
-    offset by `−crop × k`, so the crop fills the content rect at one scale.
-  - Layout rects map to CSS px by `canvas.width / cssWidth`, never by the
-    device pixel ratio, because the backing store is capped.
-  - `useCompositionAssets` never decodes a video source.
-  - `renderVideoLayer` encodes the same layer as an RGBA PNG at the export
-    size.
+- **Timeline model** (`shared/composition/timeline.ts`, pure). `video.clips`
+  are source ranges played back to back; output time runs over them
+  (`sourceTimeAt`, `clipStartTime`, `timelineTimeOf`). Split, trim and remove
+  keep clips at least `MIN_TRIM_MS` and refit the segments. `zooms`
+  (`scale`, `mode` auto/manual, focus) and `scenes` (camera only / hide
+  camera) live in output time, never overlap, and ease in and out
+  (`zoomAt`, `sceneAt`; 400 ms and 350 ms ramps).
+- **Playback** (`useTimelinePlayback`). A hidden `<video>` plays clip after
+  clip; the playhead is a `Clock` outside React state, so only the canvas, the
+  time readout and the playhead re-render at 60 fps. A recording's camera and
+  audio tracks follow it (`useSyncedMedia`), the audio through Web Audio gains
+  (`useTrackGain`, up to 200 %).
+- **Timeline UI.** Ruler, red playhead, clip segments (drag an edge to trim,
+  S or ✂ to split, ⌫ to delete), zoom segments (click the track to add, drag to
+  move or resize, click to edit in `ZoomEditor`: amount, Auto/Manual, a focus
+  box over the frame), scene segments (`SceneEditor`), Add track ▾ (zoom or
+  scene at the playhead, Automatic zooms, split). Zoom with − / + / the slider,
+  ⌘+/−, or a pinch. Space plays; ←/→ step a frame (Shift: a second); Home/End.
+- **Export** (`common/composition/videoExport.ts`, Mediabunny over WebCodecs).
+  Each output frame is decoded from the source (and the camera) at its source
+  time, drawn with `drawComposition` on an `OffscreenCanvas` and encoded as
+  H.264; the clips' audio follows as AAC, or for a recording its system and
+  microphone files mixed at their volumes. The MP4 streams to main through the
+  export sink: `studio:begin-export` (saves, opens `tmp/<token>.export.mp4`),
+  `studio:write-export` (positioned chunks, at most 1 GB), `studio:finish-export`
+  (import and attach on the drafts queue, or a save panel) and
+  `studio:cancel-export`. Cancel aborts the encode and deletes the file.
+  Migration `202610230100_drop_export_jobs.sql` removed the old FFmpeg job
+  table.
 - **Documents.** A video document stores ffprobe's facts in
-  `studio_documents.source_video_json`: display size (rotation and SAR
-  applied), the video stream's duration, fps, streams and colour. These are
-  `StudioDocument.video`.
-  - Saves validate against that record, never against `media.width`/`height`:
-    same source, trim inside the clip, `video` present.
-  - The open paths are async: probe outside the transaction, then create and
-    link inside one. Opens are numbered, so a slow open that a newer one
-    overtook is dropped.
-  - Without FFmpeg a video opens as a read-only `{ view }`, whose attachment is
-    now nullable. When `studio:ffmpeg` turns `ready`, main re-runs that open
-    and emits `studio:opened`.
-  - "Replace source…" is images only. The "None" background is disabled for
-    video, and main refuses a transparent video export.
-- **Export jobs** (`services/studio/exports.ts`, table `export_jobs`).
-  - `studio:export-video` saves, checks the layer PNG (IHDR size against
-    `exportLayout`, colour type 6) and queues a job. It resolves
-    `{ job, revision }`.
-  - Jobs run one at a time, in order. A second export of a document already
-    queued or running is refused.
-  - FFmpeg runs off the drafts queue at `nice` 10. Only the import of the
-    finished MP4 (`importLoose`) and the attach go on the drafts queue. The
-    attach is the same path as images, refactored into `attachExport`. The
-    MP4 goes to the draft the user asked from (else the current one).
-  - Progress (`-progress pipe:1`, `out_time_us` over the trim length, clamped)
-    goes to the row and to `export:progress { job }`. The "Export running"
-    chip comes from status provider `studio-export` (order 91).
-  - Cancel (`studio:cancel-export`) sends SIGTERM, then SIGKILL after 3 s. It
-    resolves once FFmpeg has exited, and `tmp/<job>.mp4` and
-    `tmp/<job>.layer.png` are deleted however a job ends.
-  - Quitting SIGKILLs FFmpeg and records `canceled` before the database
-    closes.
-  - At startup, jobs left `queued` or `running` become `failed`. A leftover
-    FFmpeg is killed if `ps` shows it is still writing that job's output (pids
-    get reused). Finished jobs older than 30 days are pruned.
-  - `export_id` points at `studio_exports` (now also `mp4`), never at
-    `media`, so a job doesn't pin its output from the media cleanup.
-  - `XBOT_E2E_FFMPEG_REALTIME=1` (unpackaged only) adds `-re`, so an export
-    takes as long as its trim.
-- **Studio UI** (`renderer/studio/`).
-  - Hooks: `useVideoPlayback` (play inside the trim, pause at its end, muted
-    as the export will be) and `useFilmstrip` (`studio:filmstrip` JPEG bytes
-    as `blob:` URLs; `xbot-media:` serves only the media folder).
-  - Components: `FfmpegCard` (with `useFfmpegStatus`) and `VideoStage`.
-  - "Add to post" reads "Exporting… N%". A chip with Cancel sits over the
-    canvas. A running job doesn't set `busy`, so editing stays live.
-  - On success the Studio hides only while it is visible and still shows that
-    document. Otherwise `draft:changed` just swaps the attachment in.
-  - The Output popover shows MP4, the size, the clip length and the sound.
-  - HDR sources get a notice: there is no tone mapping.
+  `source_video_json`; saves check every clip against them. Without FFmpeg a
+  video opens read-only with guidance.
+
+## Recording
+
+Cap's recorder (migration `202610230000_recordings.sql`).
+
+- **Native capture** (`native/capture/capture.mm`, built with the glass addon
+  by `scripts/build-native.mjs`; `services/recordings/capture.ts` loads it
+  safely). ScreenCaptureKit records a display, a window or an area with the
+  cursor hidden and xBot's own windows excluded, plus system audio (macOS 13+)
+  and a microphone (macOS 15+), into one MP4 with AVAssetWriter (H.264 up to
+  3840 px, AAC). Pausing drops samples and shifts later ones back. An AppKit
+  event monitor records cursor moves, clicks and cursor images (the sharpest
+  representation). All times are host time, the clock frames are stamped with.
+  It also lists microphones and converts the desktop picture to JPEG.
+- **Windows** (`windows/recorder.ts`, one `recorder` page with `?mode=`): the
+  glass panel (display/window/area, camera, microphone, system audio, Start,
+  the 3-2-1 countdown), the round draggable camera bubble (records the camera
+  with MediaRecorder and streams it to main in order), the stop bar (stop and
+  time, pause/resume, restart, delete) and the area overlay. Only these pages
+  may use the camera and microphone (`security.ts`).
+- **Orchestration** (`services/recordings/index.ts`). Entry points: Record in
+  Write Post, Start Recording in the menu bar, New recording in the Studio's
+  Recordings list. Stop writes the bundle `userData/recordings/<id>/`:
+  `cursor.json` (`shared/recording/track.ts`: recording ms, fractions of the
+  captured area) and `cursors/*.png`, `camera.mp4|webm` with its offset,
+  `system.m4a` / `mic.m4a`, `meta.json`; muxes a mixed track first for
+  playback, imports the video as media, and opens a document
+  (`recordingComposition`: wallpaper, padding, no chrome, camera, cursor,
+  audio, automatic zooms). The Recordings list opens, reveals and deletes
+  recordings; startup removes folders and rows nothing uses.
+- **Cursor and zoom** (`shared/recording/motion.ts`, `autoZoom.ts`, pure). The
+  drawn cursor follows a critically damped spring, leans into movement (tilt),
+  shrinks on a press, ripples on a click and can fade when idle. Automatic
+  zooms are 2× segments around click clusters; their focus follows the cursor
+  through a slower spring.
 
 ## Local AI
 
@@ -1144,8 +1117,8 @@ adding their own files; nobody edits a shared list.
   renderer reads `app.getStatus()` and the `status:changed` event
   (`status/useIntegrationStatus.ts`); Settings → Status shows the chips, so the
   default view stays as in the reference. Ids in use: T3's `media-export`
-  (90), and T5's `studio-export` (91, "Export running") and `ffmpeg` (92,
-  "FFmpeg not found" plus the fix).
+  (90), and T5's `ffmpeg` (92, "FFmpeg not found" plus the fix). The video
+  export's progress shows in the Studio's Export dialog instead of a chip.
 
 ## Reminders
 

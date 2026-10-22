@@ -1,15 +1,16 @@
 # FFmpeg in xBot
 
-The Media Studio uses FFmpeg for everything video:
+The Media Studio uses FFmpeg to read video:
 - reading a video's facts (`ffprobe`);
 - the timeline's thumbnails;
-- the MP4 export (trim, crop, frame, background, mute).
+- splitting and mixing a screen recording's audio tracks.
+
+The MP4 export no longer uses it: the Studio encodes video in the renderer with WebCodecs (ARCHITECTURE.md → "Studio video").
 
 Images never need it.
 
 T5 (XBOT-G66JJK) made the decisions recorded here, on 2026-10-22. The code is in
-`src/main/services/ffmpeg/` and `src/main/services/studio/exports.ts`; see
-also ARCHITECTURE.md → "Studio".
+`src/main/services/ffmpeg/`; see also ARCHITECTURE.md → "Studio video".
 
 ## Decision: the user installs FFmpeg; xBot doesn't bundle it (v1)
 

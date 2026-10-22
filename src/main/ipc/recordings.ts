@@ -84,6 +84,19 @@ export function registerRecordingsIpc(): void {
     await recordings.cameraChunk(id, bytes);
     return null;
   });
+  handle(recordingsChannels.list, z.undefined(), () => recordings.list());
+  handle(recordingsChannels.open, recordingIdSchema, async ({ id }) => {
+    await recordings.open(id);
+    return null;
+  });
+  handle(recordingsChannels.reveal, recordingIdSchema, ({ id }) => {
+    recordings.reveal(id);
+    return null;
+  });
+  handle(recordingsChannels.remove, recordingIdSchema, async ({ id }) => {
+    await recordings.remove(id);
+    return null;
+  });
   handle(recordingsChannels.cameraDone, recordingIdSchema, ({ id }) => {
     recordings.cameraDone(id);
     return null;

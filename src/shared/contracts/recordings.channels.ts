@@ -16,4 +16,8 @@ export const recordingsChannels = {
   cameraStarted: 'recordings:camera-started',
   cameraChunk: 'recordings:camera-chunk',
   cameraDone: 'recordings:camera-done',
+  list: 'recordings:list',
+  open: 'recordings:open',
+  reveal: 'recordings:reveal',
+  remove: 'recordings:remove',
 } as const;
