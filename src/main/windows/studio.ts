@@ -1,4 +1,5 @@
 import { BrowserWindow, screen } from 'electron';
+import { appEvents } from '../events';
 import { loadPage, manageWindow, materialOptions, secureWebPreferences } from './common';
 
 // Media Studio: a separate resizable window, centred on the display under the
@@ -19,15 +20,36 @@ export function createStudioWindow(): BrowserWindow {
     show: false,
     frame: false,
     resizable: true,
-    fullscreenable: false,
+    fullscreenable: true,
     hasShadow: true,
     title: 'xBot — Media Studio',
     ...materialOptions(),
     webPreferences: secureWebPreferences(),
   });
   manageWindow(win, 'studio');
+  // Every way of hiding the Studio (Back to post, Add to post, Escape, close) leaves full screen.
+  win.on('hide', () => setStudioFullscreen(false));
   void loadPage(win, 'studio');
   return win;
+}
+
+function isFullscreen(): boolean {
+  if (!win) return false;
+  return process.platform === 'darwin' ? win.isSimpleFullScreen() : win.isFullScreen();
+}
+
+/** Simple full screen on macOS (no new Space for a menu-bar app), the window manager's elsewhere. */
+export function setStudioFullscreen(on: boolean): void {
+  if (!win || isFullscreen() === on) return;
+  if (process.platform === 'darwin') win.setSimpleFullScreen(on);
+  else win.setFullScreen(on);
+  appEvents.emit('studio:fullscreen', { on });
+}
+
+export function toggleStudioFullscreen(): boolean {
+  const on = !isFullscreen();
+  setStudioFullscreen(on);
+  return on;
 }
 
 export function openStudio(): void {

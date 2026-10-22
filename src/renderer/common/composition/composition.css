@@ -1,0 +1,27 @@
+/* The composition canvas (preview and thumbnails). */
+
+.composition-canvas {
+  display: block;
+  flex: none;
+}
+
+/* Transparent output: checks behind the canvas element, never drawn into it. */
+.composition-canvas-transparent {
+  background-color: #fff;
+  background-image:
+    linear-gradient(45deg, #d9dbe0 25%, transparent 25%, transparent 75%, #d9dbe0 75%),
+    linear-gradient(45deg, #d9dbe0 25%, transparent 25%, transparent 75%, #d9dbe0 75%);
+  background-position:
+    0 0,
+    8px 8px;
+  background-size: 16px 16px;
+}
+
+/* A box the canvas fills (contain) or covers, centred. */
+.composition-box {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
