@@ -14,8 +14,8 @@ import { clarityToAlpha, createGlass, type GlassOptions } from '../../src/main/w
 
 const handle = Buffer.alloc(8);
 
-function logger(): Logger & { [K in keyof Logger]: ReturnType<typeof vi.fn> } {
-  return { info: vi.fn(), warn: vi.fn(), error: vi.fn() };
+function logger() {
+  return { info: vi.fn<Logger['info']>(), warn: vi.fn<Logger['warn']>(), error: vi.fn<Logger['error']>() };
 }
 
 function options(overrides: Partial<GlassOptions> = {}): GlassOptions {
