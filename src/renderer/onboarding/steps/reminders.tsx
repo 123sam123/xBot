@@ -26,7 +26,7 @@ function ReminderHours() {
       <DaysField days={values['reminders.days']} />
       <IntervalField minutes={values['reminders.intervalMinutes']} />
       <div className="reminder-field">
-        <GhostButton onClick={() => void test()} data-testid="reminder-test-notification">
+        <GhostButton className="ai-status-action reminder-test" onClick={() => void test()} data-testid="reminder-test-notification">
           Send a test notification
         </GhostButton>
         {tested && <p className="reminder-note">{tested}</p>}

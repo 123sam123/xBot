@@ -74,7 +74,7 @@ export function ShortcutField({ startup, mac, onChange }: { startup: StartupStat
           {recording ? 'Press the keys…' : formatAccelerator(accelerator, mac)}
         </button>
         {accelerator !== '' && !recording && (
-          <GhostButton className="reminder-shortcut-off" onClick={() => void save('')}>
+          <GhostButton className="ai-status-action" onClick={() => void save('')}>
             Turn off
           </GhostButton>
         )}

@@ -1,6 +1,7 @@
 /* Reminders (T8): the row's idea and hint, the reminder menu's header, and
    the hours, days and shortcut fields. Fields reuse the design system's
-   .field / .field-input; nothing here restyles a shared component. */
+   .field / .field-input and small buttons T6's .ai-status-action; nothing
+   here restyles a shared component. */
 
 /* ---------- Row ---------- */
 
@@ -49,7 +50,8 @@
 }
 
 .reminder-time .field-input {
-  width: 104px;
+  /* Room for a 12-hour "09:00 AM" and the picker icon. */
+  width: 124px;
   flex: none;
   font-variant-numeric: tabular-nums;
   color-scheme: dark;
@@ -107,6 +109,6 @@
   color: var(--text-secondary);
 }
 
-.reminder-shortcut-off {
-  flex: none;
+.reminder-test {
+  align-self: flex-start;
 }

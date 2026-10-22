@@ -31,7 +31,9 @@ function Reminders() {
           <span className="toggle-text">
             <span className="toggle-label">Snoozed until {untilPhrase(snoozedUntil, now, status.timeZone)}</span>
           </span>
-          <GhostButton onClick={() => void window.xbot.reminders.resume()}>Resume now</GhostButton>
+          <GhostButton className="ai-status-action" onClick={() => void window.xbot.reminders.resume()}>
+            Resume now
+          </GhostButton>
         </div>
       )}
       <IntervalField minutes={values['reminders.intervalMinutes']} />
