@@ -11,6 +11,12 @@ export const windowsSettings = {
   'ui.reduceTransparency': defineSetting(z.boolean(), false),
   /** Stronger scrim and borders behind text, on top of the OS "Increase contrast" preference. */
   'ui.increaseContrast': defineSetting(z.boolean(), false),
+  /**
+   * Settings → Appearance → Glass clarity: how far the native glass's frost
+   * fades, from 0 (as macOS draws it) to 1 (invisible). macOS with the native
+   * glass addon only (src/main/windows/glass.ts).
+   */
+  'ui.glassClarity': defineSetting(z.number().min(0).max(1), 0.8),
   /** Onboarding steps the user has moved past or skipped (src/renderer/onboarding/). */
   'ui.onboardingSeen': defineSetting(z.array(z.string().max(64)).max(200), []),
 } satisfies SettingsShape;
@@ -38,4 +44,9 @@ export interface WindowsApi {
   openStudio(): Promise<IpcResult<null>>;
   /** Opens the OS emoji picker for the focused text field. */
   showEmojiPanel(): Promise<IpcResult<null>>;
+  /**
+   * Recomputes the sender window's shadow, which shows through the native
+   * glass (see `useGlassShadow`). A no-op without the native glass.
+   */
+  refreshGlassShadow(): Promise<IpcResult<null>>;
 }

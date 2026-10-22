@@ -10,6 +10,9 @@ directories:
 files:
   - out/**
   - package.json
+  # The native glass addon (scripts/build-glass.mjs; universal, so both
+  # architectures share it). asarUnpack below unpacks it.
+  - native/glass/build/glass.node
   # better-sqlite3 ships every platform's N-API prebuild plus SQLite's sources;
   # keep only this platform's prebuild. (app-builder-lib only honours negated
   # patterns for node_modules, hence one negated extglob.)

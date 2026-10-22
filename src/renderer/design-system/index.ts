@@ -22,5 +22,6 @@ export { createPopoverManager, popovers, type PopoverId, type PopoverManager } f
 export { Sheet } from './Sheet';
 export { cx, Divider, GlassCard, GlassPanel, StatusChip } from './Surfaces';
 export { Tooltip } from './Tooltip';
-export { applyMaterialFromLocation, useAppearance } from './useAppearance';
+export { applyMaterialFromLocation, hasNativeGlass, useAppearance } from './useAppearance';
+export { useGlassShadow } from './useGlassShadow';
 export { useAnyPopoverOpen, usePopoverOpen } from './usePopover';

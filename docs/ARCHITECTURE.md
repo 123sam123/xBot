@@ -107,6 +107,7 @@ imported by every aggregator, so **a sibling ticket edits only its own files**:
 | `reminders` (+ launch at login, global shortcut) | T8 (XBOT-8V5WV5). T8 also added, additively and for the reasons in "Reminders": `showComposerInactive`, `isComposerVisible`, `composerDisplay`, the `onComposerHidden` / `onComposerFocused` hooks and the focus-instead-of-hide toggle to `windows/composer.ts`, `startReminders()` and the `fireReminder` test seam to `app.ts`, the `header` prop to the design system's `Menu`, `disabled` to `Toggle`, the reminder row's props, and the `src/shared/reminders/` lint block |
 | `x` | T9 (XBOT-OE2XV9). T9 also added, additively and for the reasons in "X publishing": the X wait in `app.ts`'s first `before-quit`, `openExternalIfAllowed` exported from `security.ts`, `db/durable.ts`, the design system's `TextField`, and props on `AccountMenu`, `ComposerHeader`, `ActionRow` and `PublishSheet` |
 | `backup` (+ README, preview mode, packaging) | T10 (XBOT-1DDYA1). T2 created `src/renderer/preview/` and `resources/fixtures/`; T10 extends them. **Not additive:** T10 turned preview mode from a renderer-only sample into the real app on a seeded userData (see "Preview mode"). That removed the preview branches T2–T7 had put in `composer/App.tsx`, `composer/ideas/IdeasMenu.tsx`, `studio/App.tsx` and `studio/useStudioEditor.ts`, deleted `common/CompositionPreview.tsx`, and changed preview handling in `ipc/drafts.ts` and `ipc/studio.ts` (quit flushes), `tray.ts` (drop), `services/x/index.ts` (no network) and `services/projects/suggestions.ts` (stored ideas). Additively: `pickPaths` exported from `ipc/media.ts`, the seed call in `app.ts`, the `pnpm capture` waits for seeded media, and the unique `.partial` names in `ffmpeg/frames.ts` (two requests for one clip used to clobber each other) |
+| native glass (`native/glass/`, `windows/glass.ts`) | XBOT-RM99AJ. Also added, additively and for the reasons in "Native glass": `ui.glassClarity` and `refreshGlassShadow` to `windows`, `applyGlass` / `manageGlass` and borderless windows to `windows/common.ts` (both windows call them; the Studio's full screen re-applies), the clarity listener in `app.ts`, `data-glass`, `data-fullscreen`, `hasNativeGlass` and `useGlassShadow` to the design system, the clarity-scaled tokens and bands, the Glass clarity slider in `settings/sections/appearance.tsx`, the build scripts in `package.json`, `scripts/capture-glass.mjs`, and `XBOT_GLASS=off` in `scripts/capture-ui.ts` |
 
 Shared files that several tickets may still touch, so coordinate:
 - `package.json` / `pnpm-lock.yaml`, for new dependencies (see below);
@@ -361,11 +362,12 @@ do windows really close. `will-quit` disposes services, then closes the DB.
   - Reload and DevTools exist only when unpackaged.
   - Never call `Menu.setApplicationMenu(null)`.
 
-## Native material (spike results)
+## Native material
 
 The brief asks for clear liquid glass using native backdrop effects where they
-are supported. This is what Electron 45 offers. **None of it has been observed
-on macOS yet**: T1 was built on a Linux machine.
+are supported. T1 and T2 explored what Electron 45 offers on a Linux machine;
+XBOT-RM99AJ measured it on a real Mac (macOS 15.5, Apple Silicon) and added the
+native glass below.
 
 - **Options available:**
   - `vibrancy`: `popover`, `hud`, `under-window` or `fullscreen-ui`, plus
@@ -386,20 +388,10 @@ on macOS yet**: T1 was built on a Linux machine.
   true` window (`XBOT_VIBRANCY=none`) loses it, and its glass can only be faked
   in CSS, because `backdrop-filter` cannot blur the desktop behind a native
   window.
-- **Corners are the known gap.**
-  - The material fills the whole window rectangle. A frameless window with
-    `roundedCorners: true` gets the system corner radius (about 10 px), and
-    Electron has no option to set the radius of the vibrancy view.
-  - CSS `border-radius` only clips web content, not the native material.
-  - The reference panels have corners of about 40 px.
-  - T2's options:
-    - accept the system radius;
-    - add a tiny native addon that sets `NSVisualEffectView.maskImage` to a
-      40 px rounded-rect image (public AppKit API, available since macOS 10.10);
-    - or use `none` with CSS-only glass.
-
-  The addon is allowed only if captures show the system radius clearly cannot
-  match.
+- **Corners (T2's gap, closed by the native glass below).** The material
+  fills the whole window rectangle; a frameless window with `roundedCorners:
+  true` gets the system radius (about 10 px), Electron has no option for the
+  vibrancy view's radius, and CSS `border-radius` only clips web content.
 - **Rejected:** NSGlassEffectView exists only on macOS 26, and the human's Mac
   runs 15.5. `electron-liquid-glass` relies on private API.
 - **T2's outcome** (still not observed on macOS: T2 also ran on Linux):
@@ -414,16 +406,56 @@ on macOS yet**: T1 was built on a Linux machine.
     at startup. xBot's text is white, and the light `under-window` material
     under it is the rejected milky-silver look. `themeSource` is app-wide, so
     the tray menu and native dialogs (T3's file pickers) are dark too.
-  - Corners: under vibrancy the CSS window radius is the system radius
-    (`--radius-window-native`, 10 px; tune it from a Mac capture), so the
-    rim follows the native silhouette instead of drawing a 40 px curve inside a
-    10 px one. The CSS path keeps 40 px. The `maskImage` addon is the follow-up
-    if Mac captures show the system radius is too far from the reference; it
-    was not built because it could not be compiled or observed here.
-  - Run `pnpm capture --desktop` on a Mac for real captures over four
-    wallpapers, per material (`XBOT_CAPTURE_MATERIALS`, default
-    `under-window,hud,none`). It needs Screen Recording permission for the
-    terminal.
+  - Corners: without the native glass, the CSS window radius under vibrancy
+    is the system radius (`--radius-window-native`, 10 px), so the rim follows
+    the native silhouette. The CSS path keeps 40 px.
+  - `pnpm capture --desktop` takes real captures by changing the desktop
+    wallpaper; `pnpm capture` runs with `XBOT_GLASS=off`, so its simulated
+    composites (10 px, no clarity) are now only the Linux reference. On a Mac,
+    `pnpm capture:glass` is the real check (below).
+
+### Native glass (XBOT-RM99AJ)
+
+- **What macOS showed.** In the forced dark appearance, `under-window` is a
+  dark grey, mostly opaque slab (measured: 85% opaque over black and white);
+  `hud`, `popover` and `fullscreen-ui` are only a little clearer. Electron puts
+  one behind-window `NSVisualEffectView` at the bottom of the window's content
+  view: a backdrop blur, an 80% grey fill and a "lighten" grey layer.
+- **The addon** (`native/glass/glass.mm`, public AppKit API only, plain
+  Node-API so one build serves any Electron) finds the window's behind-window
+  effect views by class and sets their `alphaValue` (the frost fades; the web
+  content above stays opaque) and a 40 px `maskImage` (a cap-inset, stretching
+  rounded rect, so it follows any size and scale). `scripts/build-glass.mjs`
+  builds it universal (arm64 + x86_64) with `xcrun clang++` against
+  `node-api-headers`; `postinstall`, `dev`, `build` and `pnpm glass` rebuild it
+  when its source is newer, and `package` refuses to go without it on macOS.
+- **Borderless windows.** A titled frameless window keeps the system's 10 px
+  outline and shadow even with a 40 px mask, so with the addon both windows are
+  created with `roundedCorners: false`. Borderless windows still focus, edge
+  resize, drag and enter simple full screen (checked on the real app).
+  Accepted risk: macOS tiling, Stage Manager and third-party window managers
+  may treat them differently.
+- **Clarity → alpha.** `ui.glassClarity` (Settings → Appearance → Glass
+  clarity, default 0.8) maps to `alpha = (1 − clarity)²`
+  (`src/main/windows/glass.ts`): the open glass's measured opacity falls much
+  more slowly than `alphaValue`, and squaring makes 80% about 80% less opaque.
+  Changes apply live (`settings:changed` → `applyGlass`); simple full screen
+  uses radius 0.
+- **The shadow.** A borderless, non-opaque window's shadow is computed from
+  its pixels and shows through the clear glass, so a stale one leaves ghosts
+  of content that has gone (a closed sheet, deleted text). Main recomputes it
+  after clarity and size changes, and each page asks for it after its own
+  changes (`useGlassShadow` → `windows.refreshGlassShadow()`).
+- **Fallbacks.** No addon (no Command Line Tools, `XBOT_GLASS=off` in
+  unpackaged runs, not macOS, `XBOT_VIBRANCY=none`): titled windows and the
+  page CSS exactly as before, one warning in the log, the slider disabled. The
+  addon loaded but no effect view found (a future Electron or macOS, such as
+  26's new glass): one error naming the macOS version, and the page is told
+  `glass=square` so its rim matches the unmasked material.
+- **`pnpm capture:glass`** (macOS) is the evidence: real `screencapture -R`
+  shots over an on-screen backdrop window (never the desktop wallpaper) at
+  clarity 0, 80% and 100%, with gates for glyph-edge contrast, the open
+  glass's opacity, the slider and persistence (see the script's header).
 
 ## Design system
 
@@ -444,6 +476,8 @@ UI from these pieces instead of adding page-local styles that restate them.
   | Attribute | Set by | Also on with |
   |---|---|---|
   | `data-material="vibrancy"\|"css"` | `applyMaterialFromLocation()`, before the first render | — |
+  | `data-glass="native"\|"square"` | `applyMaterialFromLocation()`, from main's `?glass=` (see "Native glass") | — |
+  | `data-fullscreen` | `applyMaterialFromLocation()` (`?fullscreen=1`), then the Studio's full-screen state | — |
   | `data-reduce-transparency="on"` | `useAppearance`, from `ui.reduceTransparency` | `prefers-reduced-transparency: reduce` |
   | `data-contrast="more"` | `useAppearance`, from `ui.increaseContrast` | `prefers-contrast: more` |
 
@@ -455,6 +489,18 @@ UI from these pieces instead of adding page-local styles that restate them.
   text at 3:1 or better over a light wallpaper under an approximate dark
   native tint; Increase contrast keeps it at 4.5:1 or better with no tint at
   all. `pnpm capture` gates both.
+- **Glass clarity.** Under `data-glass="native"`, `--glass-clarity` (0–1, set
+  by `useAppearance` from `ui.glassClarity`, first from `?clarity=`) moves the
+  legibility layers onto the text as the glass clears: `--scrim-panel` and
+  `--glass-tint` fade (the tint never to 0, so the glass still takes clicks);
+  `--scrim-card`, `--scrim-band` (`.glass-panel`'s header and footer bands,
+  heights `--glass-band-top/bottom` per surface, and `.glass-float`),
+  `--text-shadow` and `--icon-halo` (line icons on the glass) grow, and so do
+  the secondary and tertiary text alphas. Every token equals its old value at
+  clarity 0. Increase contrast takes `max()` of its fixed values and the scaled
+  ones; sheets use the fixed `--scrim-sheet`. `pnpm capture:glass` gates it:
+  editor text ≥ 4.5:1 and other text and icons ≥ 3:1 at the glyph edge on
+  light, dark, busy and text backdrops at 80%.
 - `backdrop-filter` only blurs in-window content (popovers and the toolbar
   over the canvas). It never applies to text, icons or media.
 - Each page's root sets `<html data-ready>` once app info and settings have

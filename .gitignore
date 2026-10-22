@@ -10,3 +10,5 @@ playwright-report/
 .DS_Store
 # Per-machine Claude Code settings
 .claude/settings.local.json
+# The native glass addon, built by scripts/build-glass.mjs
+native/glass/build/

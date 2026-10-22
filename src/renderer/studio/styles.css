@@ -7,6 +7,10 @@ body,
 }
 
 .studio {
+  /* The top bar and the footer. */
+  --glass-band-top: 62px;
+  --glass-band-bottom: 50px;
+
   display: flex;
   flex-direction: column;
   height: 100%;

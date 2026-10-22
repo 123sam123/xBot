@@ -9,4 +9,6 @@ export const windowsChannels = {
   openStudio: 'windows:open-studio',
   /** The OS emoji picker for the focused text field (`app.showEmojiPanel()`). */
   showEmojiPanel: 'windows:show-emoji-panel',
+  /** The sender's page changed under the native glass: recompute its window's shadow. */
+  refreshGlassShadow: 'windows:refresh-glass-shadow',
 } as const;

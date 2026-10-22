@@ -42,6 +42,7 @@ import {
   UndoIcon,
   useAppearance,
   useEscapeLayer,
+  useGlassShadow,
   type MenuItem,
 } from '../design-system';
 import { fitAspect } from './crop';
@@ -117,7 +118,8 @@ export function App() {
   const { values: settings, ready: settingsReady } = useSettings();
 
   useEscapeToHide();
-  useAppearance(settings?.['ui.reduceTransparency'] ?? false, settings?.['ui.increaseContrast'] ?? false);
+  useAppearance(settings?.['ui.reduceTransparency'] ?? false, settings?.['ui.increaseContrast'] ?? false, settings?.['ui.glassClarity']);
+  useGlassShadow();
 
   const preview = info?.isPreview ?? false;
   return infoReady ? (
@@ -148,7 +150,8 @@ function Studio({ preview, settingsReady }: { preview: boolean; settingsReady: b
 
   const [fit, setFit] = useState<FitMode | null>('fit');
   const [zoomLevel, setZoomLevel] = useState(100);
-  const [fullscreen, setFullscreen] = useState(false);
+  // A reload in full screen (main's `?fullscreen=1`) starts there.
+  const [fullscreen, setFullscreen] = useState(() => document.documentElement.hasAttribute('data-fullscreen'));
   const [busy, setBusy] = useState(false);
   const [pendingCrop, setPendingCrop] = useState<{ crop: Rect; aspect: CropAspect } | null>(null);
   const { notice, setNotice, error, setError } = editor;
@@ -213,6 +216,10 @@ function Studio({ preview, settingsReady }: { preview: boolean; settingsReady: b
   }, [notice, setNotice]);
 
   useEffect(() => window.xbot.events.on('studio:fullscreen', ({ on }) => setFullscreen(on)), []);
+  // The glass's corners are square in full screen (tokens.css), as main makes the native ones.
+  useEffect(() => {
+    document.documentElement.toggleAttribute('data-fullscreen', fullscreen);
+  }, [fullscreen]);
   useEscapeLayer(fullscreen, () => void window.xbot.studio.toggleFullscreen().then((result) => result.ok && setFullscreen(result.data)));
 
   // Crop mode lasts while the Crop popover is open; closing it any other way than Apply discards the edit.

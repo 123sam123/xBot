@@ -153,7 +153,8 @@ async function launch(env: Record<string, string>): Promise<AppRun> {
   const app = await electron.launch({
     args: ['.', `--force-device-scale-factor=${SCALE}`, ...(LINUX ? ['--no-sandbox'] : [])],
     cwd: root,
-    env: { ...process.env, XBOT_E2E: '1', XBOT_USER_DATA_DIR: userData, ...env },
+    // XBOT_GLASS=off: the simulated composites model the system material (10 px, no clarity); `pnpm capture:glass` is the real glass.
+    env: { ...process.env, XBOT_E2E: '1', XBOT_USER_DATA_DIR: userData, XBOT_GLASS: 'off', ...env },
   });
   // Registered for every page load, so it survives the reload below.
   await app.context().addInitScript(() => {

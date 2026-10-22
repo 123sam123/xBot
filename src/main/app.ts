@@ -22,9 +22,9 @@ import { setStudioDocument, studio } from './services/studio';
 import { settleXForQuit } from './services/x';
 import { onStatusChanged } from './status';
 import { createTray } from './tray';
-import { applyAppearance, markQuitting } from './windows/common';
-import { createComposerWindow, toggleComposer } from './windows/composer';
-import { createStudioWindow, openStudio } from './windows/studio';
+import { applyAppearance, applyGlass, markQuitting } from './windows/common';
+import { composerWindow, createComposerWindow, toggleComposer } from './windows/composer';
+import { createStudioWindow, openStudio, studioWindow } from './windows/studio';
 
 let db: Db | null = null;
 /** How long quitting waits for the composer to save typed text and the Studio its edits. */
@@ -98,6 +98,11 @@ export async function startApp(paths: AppPaths): Promise<void> {
   applyAppearance();
   createComposerWindow();
   createStudioWindow();
+  // Settings → Appearance → Glass clarity applies live, to both windows.
+  appEvents.on('settings:changed', ({ key }) => {
+    if (key !== 'ui.glassClarity') return;
+    for (const win of [composerWindow(), studioWindow()]) if (win) applyGlass(win);
+  });
   createTray();
   installAppMenu();
   // Reminders need the windows (auto-open), the tray (its display) and the forwarded events.

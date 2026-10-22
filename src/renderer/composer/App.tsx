@@ -11,7 +11,7 @@ import { isActiveStatus, mediaViolation } from '../../shared/xRules';
 import { useAppInfo, useReadyMarker } from '../common/useAppInfo';
 import { useEscapeToHide } from '../common/useEscapeToHide';
 import { setSetting, useSettings } from '../common/useSettings';
-import { Divider, GlassPanel, popovers, StatusChip, useAnyPopoverOpen, useAppearance, type MenuItem } from '../design-system';
+import { Divider, GlassPanel, popovers, StatusChip, useAnyPopoverOpen, useAppearance, useGlassShadow, type MenuItem } from '../design-system';
 import { OnboardingSheet } from '../onboarding/OnboardingSheet';
 import { unseenSteps } from '../onboarding/registry';
 import { PREVIEW_HANDLE } from '../preview/fixtures';
@@ -154,7 +154,8 @@ export function App() {
 
   useEscapeToHide();
   useFitWindowToContent(panel);
-  useAppearance(settings?.['ui.reduceTransparency'] ?? false, settings?.['ui.increaseContrast'] ?? false);
+  useAppearance(settings?.['ui.reduceTransparency'] ?? false, settings?.['ui.increaseContrast'] ?? false, settings?.['ui.glassClarity']);
+  useGlassShadow();
   useClosePopoversOnHide();
 
   const preview = info?.isPreview ?? false;
