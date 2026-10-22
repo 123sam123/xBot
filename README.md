@@ -27,6 +27,8 @@ are in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 - **macOS** on Apple Silicon or Intel. xBot was developed against macOS 15.
 - **To build it:** Node.js 22.12 or later and pnpm 11.28.6. The version is
   pinned in `package.json`, so `corepack enable pnpm` gives you the right one.
+  The Xcode Command Line Tools (`xcode-select --install`) build the clear
+  glass; without them xBot still builds and runs (see [Native glass](#native-glass)).
 - **Optional:**
   - [Ollama](https://ollama.com/download), for local AI;
   - FFmpeg (`brew install ffmpeg`), for video;
@@ -55,6 +57,8 @@ pnpm package          # dist/: a .dmg and a .zip for Apple Silicon and for Intel
 | `pnpm lint` | ESLint, including the main/preload/renderer boundary rules. |
 | `pnpm preview:ui` | Builds, then opens [preview mode](#preview-mode) on a fresh sample userData. |
 | `pnpm capture` | Builds, then captures both windows and compares them with the reference image (`docs/reference/captures/`). Needs FFmpeg. On a Mac, `pnpm capture --desktop` also takes real screenshots over four wallpapers; it needs Screen Recording permission for the terminal. |
+| `pnpm capture:glass` | macOS: builds, then takes real screenshots of both windows over on-screen backdrops at Glass clarity 0, 80% and 100%, and checks text contrast and the glass's opacity (`test-results/glass/`). Needs Screen Recording permission for the terminal and an unlocked screen; your wallpaper is not changed. |
+| `pnpm glass` | Rebuilds the native glass addon (`dev`, `build`, `package` and `pnpm install` do it when needed). |
 | `pnpm fixtures` | Builds, then re-renders preview mode's sample media in `resources/fixtures/`. Needs FFmpeg with libx264. |
 | `pnpm icons` | Re-renders the tray PNGs and `build/icon.png` from the SVGs in `resources/`. |
 
@@ -63,6 +67,8 @@ Environment switches, all honoured only in unpackaged runs:
 - `XBOT_VIBRANCY=hud|popover|under-window|fullscreen-ui|none` tries another
   native material.
 - `XBOT_USER_DATA_DIR=<dir>` puts the data in `<dir>`.
+- `XBOT_GLASS=off` skips the native glass addon: today's system glass, as
+  without the Command Line Tools.
 
 **On Linux** (CI only; xBot targets macOS):
 - run `pnpm dev --noSandbox`, because Ubuntu's AppArmor blocks Chromium's
@@ -92,6 +98,22 @@ build:
   reminders depend on notifications.
 - **Launch at login** is offered only for the packaged app in
   `/Applications`.
+
+## Native glass
+
+On macOS xBot's windows are clear liquid glass with 40 px corners. A small
+native addon (`native/glass/`, public AppKit API only) fades macOS's frosted
+material and rounds it. **Settings → Appearance → Glass clarity** sets how
+clear it is: 80% by default, 0% for macOS's own frosted look. Text keeps a
+soft shadow and the cards behind text get darker as the glass clears, so it
+stays readable over light and busy backgrounds. Glass clarity is off while
+Reduce transparency is on.
+
+`pnpm install` builds the addon with the Xcode Command Line Tools
+(`xcode-select --install`). Without them it prints one line and xBot runs with
+the system's glass: frosted, with small corners, and the slider disabled.
+`pnpm package` refuses to package without the addon. After installing the
+tools, run `pnpm glass`.
 
 ## Local AI with Ollama
 

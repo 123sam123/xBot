@@ -1,6 +1,10 @@
 /* Write Post. 420 px wide; the window's height follows this panel's height. */
 
 .composer {
+  /* The header and title; the counter, Post and reminder rows. */
+  --glass-band-top: 122px;
+  --glass-band-bottom: 112px;
+
   display: flex;
   flex-direction: column;
   width: 100%;
@@ -319,7 +323,7 @@
   padding: 0;
   border: 0;
   border-radius: var(--radius-thumb);
-  background: var(--dashes), rgb(255 255 255 / 0.025);
+  background: var(--dashes), linear-gradient(var(--scrim-band), var(--scrim-band)), rgb(255 255 255 / 0.025);
   color: inherit;
   font: inherit;
   text-shadow: inherit;
@@ -636,6 +640,21 @@
 /* A section whose component renders nothing (e.g. Status with no providers) is hidden. */
 .settings-section:has(> .settings-section-body:empty) {
   display: none;
+}
+
+/* Settings → Appearance → Glass clarity. */
+.glass-clarity {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.glass-clarity-value {
+  min-width: 40px;
+  font-size: var(--fs-sm);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  color: var(--text-secondary);
 }
 
 .status-chips {

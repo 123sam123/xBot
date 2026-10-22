@@ -6,6 +6,10 @@
  */
 
 .glass-panel {
+  /* Header and footer rows whose text sits on the glass get a band of scrim (set per surface). */
+  --glass-band-top: 0px;
+  --glass-band-bottom: 0px;
+
   position: relative;
   isolation: isolate;
   border-radius: var(--radius-window);
@@ -17,6 +21,9 @@
     radial-gradient(70% 18% at 50% 0%, rgb(255 255 255 / 0.08), transparent 100%),
     /* faint inner shade at the bottom */
     linear-gradient(to top, rgb(0 0 0 / 0.1), transparent 20%),
+    /* the legibility bands, fading out below the header and above the footer */
+    linear-gradient(to bottom, var(--scrim-band) var(--glass-band-top), transparent calc(var(--glass-band-top) + 32px)),
+    linear-gradient(to top, var(--scrim-band) var(--glass-band-bottom), transparent calc(var(--glass-band-bottom) + 32px)),
     linear-gradient(var(--scrim-panel), var(--scrim-panel)),
     linear-gradient(var(--glass-tint), var(--glass-tint)),
     var(--panel-base);
@@ -59,6 +66,12 @@
   }
 }
 
+/* Line icons on the glass get the clarity-scaled halo (not the mark, not frosted pills' dark icons). */
+.glass-panel svg:not(.app-mark, .btn-frost svg),
+.glass-float svg:not(.btn-frost svg) {
+  filter: var(--icon-halo);
+}
+
 /* Lighter inner glass: the editor, attachment card and timeline. */
 .glass-card {
   position: relative;
@@ -78,6 +91,8 @@
   background:
     linear-gradient(to bottom, rgb(255 255 255 / 0.08), transparent 45%),
     linear-gradient(var(--glass-popover-fill), var(--glass-popover-fill)),
+    /* floats often sit over bright media: the band's extra scrim as clarity rises */
+    linear-gradient(var(--scrim-band), var(--scrim-band)),
     linear-gradient(var(--scrim-card), var(--scrim-card));
   box-shadow:
     var(--shadow-popover),

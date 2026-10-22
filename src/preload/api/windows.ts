@@ -10,4 +10,5 @@ export const windows: WindowsApi = {
   showComposer: () => invoke(windowsChannels.showComposer),
   openStudio: () => invoke(windowsChannels.openStudio),
   showEmojiPanel: () => invoke(windowsChannels.showEmojiPanel),
+  refreshGlassShadow: () => invoke(windowsChannels.refreshGlassShadow),
 };

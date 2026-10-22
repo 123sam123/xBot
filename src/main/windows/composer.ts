@@ -1,6 +1,6 @@
 import { app, BrowserWindow, screen, type Display, type Tray } from 'electron';
 import { resetHold, isHeld } from './hold';
-import { loadPage, manageWindow, materialOptions, secureWebPreferences } from './common';
+import { loadPage, manageGlass, manageWindow, materialOptions, secureWebPreferences } from './common';
 import { anchorPoint, computeComposerBounds } from './position';
 
 // The Write Post composer: a 420 px frameless panel under the tray icon. Its
@@ -39,6 +39,7 @@ export function createComposerWindow(): BrowserWindow {
   });
   win.setAlwaysOnTop(true, 'pop-up-menu');
   manageWindow(win, 'composer');
+  manageGlass(win);
 
   win.on('blur', () => {
     if (!win || !win.isVisible()) return;

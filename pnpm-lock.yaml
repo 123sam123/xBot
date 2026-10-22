@@ -63,6 +63,9 @@ importers:
       ignore:
         specifier: 7.0.13
         version: 7.0.13
+      node-api-headers:
+        specifier: 1.9.0
+        version: 1.9.0
       pixelmatch:
         specifier: ^8.0.0
         version: 8.0.0
@@ -1581,6 +1584,9 @@ packages:
   node-addon-api@8.9.2:
     resolution: {integrity: sha512-VijLXbi3UACN69I0JVXJsX4tjACjNoQDgv2gTF6sx2wWEi8tkSg2eX8p5gSIFi8z2+DL3oHmY6OyKce38SDolg==}
     engines: {node: ^18 || ^20 || >= 21}
+
+  node-api-headers@1.9.0:
+    resolution: {integrity: sha512-2oNILP4jXwRB4ywnYKjVk1YyJ96n2D4EOVJO6S3oYZ5PtbJrw3Yt9TpAuX3nBLMuzn74rnfGQrv13pS9vC+YiA==}
 
   node-api-version@0.2.1:
     resolution: {integrity: sha512-2xP/IGGMmmSQpI1+O/k72jF/ykvZ89JeuKX3TLJAYPDVLUalrshrLHkeVcCCZqG/eEa635cr8IBYzgnDvM2O8Q==}
@@ -3716,6 +3722,8 @@ snapshots:
       semver: 7.7.4
 
   node-addon-api@8.9.2: {}
+
+  node-api-headers@1.9.0: {}
 
   node-api-version@0.2.1:
     dependencies:

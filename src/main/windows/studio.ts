@@ -1,6 +1,6 @@
 import { BrowserWindow, screen } from 'electron';
 import { appEvents } from '../events';
-import { loadPage, manageWindow, materialOptions, secureWebPreferences } from './common';
+import { applyGlass, loadPage, manageGlass, manageWindow, materialOptions, secureWebPreferences } from './common';
 
 // Media Studio: a separate resizable window, centred on the display under the
 // cursor the first time it opens; afterwards it keeps wherever the user put it.
@@ -27,6 +27,7 @@ export function createStudioWindow(): BrowserWindow {
     webPreferences: secureWebPreferences(),
   });
   manageWindow(win, 'studio');
+  manageGlass(win);
   // Every way of hiding the Studio (Back to post, Add to post, Escape, close) leaves full screen.
   win.on('hide', () => setStudioFullscreen(false));
   void loadPage(win, 'studio');
@@ -43,6 +44,8 @@ export function setStudioFullscreen(on: boolean): void {
   if (!win || isFullscreen() === on) return;
   if (process.platform === 'darwin') win.setSimpleFullScreen(on);
   else win.setFullScreen(on);
+  // Square glass corners in full screen, the panel's 40 px out of it.
+  applyGlass(win);
   appEvents.emit('studio:fullscreen', { on });
 }
 
