@@ -12,6 +12,7 @@
     "node": ">=22.12"
   },
   "scripts": {
+    "postinstall": "node scripts/install-electron.mjs",
     "dev": "electron-vite dev",
     "build": "electron-vite build",
     "test": "vitest run",
