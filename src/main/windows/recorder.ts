@@ -11,7 +11,7 @@ import { loadPage, manageGlass, manageWindow, materialOptions, secureWebPreferen
 
 export type RecorderMode = 'panel' | 'camera' | 'bar' | 'area';
 
-const PANEL = { width: 360, height: 548 };
+const PANEL = { width: 360, height: 456 };
 const CAMERA = 230;
 const BAR = { width: 300, height: 64 };
 

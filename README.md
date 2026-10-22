@@ -1,23 +1,55 @@
 # xBot
 
-xBot is a macOS menu-bar app that turns the small tools you build every day
-into authentic posts on X. Click its icon and a compact **Write Post** dropdown
-opens: write, drop in a screenshot or a video, polish it in **Media Studio**
-(browser frame, background, padding, shadow, crop, trim), and post it to X with
-your own developer app, or copy it and post it yourself.
+**Turn the small tools you build every day into authentic posts on X — from your menu bar.**
 
+<p align="center">
+  <img src="docs/media/studio.jpg" alt="xBot's Media Studio: a Cap-style editor with a wallpaper background, a browser frame, and a timeline with clip, zoom and scene tracks" width="900">
+</p>
+
+xBot is a macOS menu-bar app. Click its icon and a compact **Write Post**
+dropdown opens: write, drop in a screenshot or a video, or **record your
+screen**, polish it in **Media Studio**, and post it to X with your own
+developer app, or copy it and post it yourself.
+
+- **Screen recording and a Cap-style editor.** Record a display, a window or an
+  area, with your camera and microphone. The Studio puts it on a wallpaper,
+  redraws the cursor smoothly with click ripples, zooms in where you clicked,
+  and exports MP4 up to 4K, encoded on your Mac.
 - **AI runs only on your Mac**, through [Ollama](https://ollama.com). There is
   no hosted fallback and no API key. It suggests posts, rewrites them, and finds
   story ideas in the project folders you approve.
-- **Video renders with your own FFmpeg.**
 - **Publishing uses the official X API** and your own X developer app. Nothing
   is posted without your click.
 - **Reminders** nudge you every 30 minutes during working hours, and can open
   the dropdown without stealing focus.
 
-Everything works without Ollama, without FFmpeg, without an X account and
-without a network connection. Each of those only adds a feature, and xBot says
-plainly when one is missing (see [Works offline](#what-works-offline)).
+## See it
+
+<p align="center">
+  <img src="docs/media/studio-demo.gif" alt="Picking wallpapers in Media Studio, then playing the clip as it zooms in on a button and back out" width="880">
+  <br><sub>Pick a wallpaper, press play: the zoom eases in on the button and back out. (<a href="docs/media/studio-demo.mp4">MP4</a>)</sub>
+</p>
+
+<table>
+  <tr>
+    <td align="center" width="50%"><img src="docs/media/write-post.jpg" alt="The Write Post dropdown with a draft, a framed screenshot attachment, and the Record button" width="380"><br><sub><b>Write Post</b>: draft, attach, record, post.</sub></td>
+    <td align="center" width="50%"><img src="docs/media/recorder.jpg" alt="The New recording panel: display, window or area, camera, microphone and system audio" width="380"><br><sub><b>New recording</b>: a display, a window or an area, with camera and mic.</sub></td>
+  </tr>
+</table>
+
+<p align="center">
+  <img src="docs/media/export-demo.gif" alt="The MP4 the Studio exported: the framed app on a wallpaper, zooming in on its Process button" width="720">
+  <br><sub>What the Studio exports: 1080p H.264, ready for X. (<a href="docs/media/export-demo.mp4">MP4</a>)</sub>
+</p>
+
+<p align="center">
+  <img src="docs/media/studio-export.jpg" alt="The Export dialog: add to post or save to file, 720p, 1080p or 4K, 30 or 60 fps" width="820">
+</p>
+
+Everything works without Ollama, without FFmpeg (it's only needed to read
+videos), without an X account and without a network connection. Each of those
+only adds a feature, and xBot says plainly when one is missing (see
+[Works offline](#what-works-offline)).
 
 The product brief is [`docs/SPEC.md`](docs/SPEC.md). The code's conventions
 are in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
