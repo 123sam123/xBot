@@ -54,6 +54,25 @@ export default defineConfig(
     },
   },
   {
+    // The reminder schedule, labels and shortcut rules are imported by the renderer as values (T8).
+    files: ['src/shared/reminders/**/*.ts'],
+    rules: {
+      '@typescript-eslint/no-restricted-imports': [
+        'error',
+        {
+          paths: [...boundaryPaths, { name: 'zod', message: 'The renderer imports this folder; validation lives in the contracts.' }],
+          patterns: [
+            {
+              regex: 'contracts/(?!.*\\.channels$)',
+              allowTypeImports: true,
+              message: 'The renderer imports this folder; take only types from contract files (they pull in zod).',
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
     // zod stays out of the renderer bundles: types only from zod and from contract or schema files.
     files: ['src/renderer/**/*.{ts,tsx}'],
     rules: {

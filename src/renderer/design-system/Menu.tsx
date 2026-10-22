@@ -1,4 +1,4 @@
-import { useEffect, useRef, type KeyboardEvent, type RefObject } from 'react';
+import { useEffect, useRef, type KeyboardEvent, type ReactNode, type RefObject } from 'react';
 import { CheckIcon } from './icons';
 import { Popover, type Placement } from './Popover';
 import { popovers, type PopoverId } from './popoverManager';
@@ -21,12 +21,15 @@ export interface MenuProps {
   placement?: Placement;
   offset?: number;
   testId?: string;
+  /** Non-interactive text above the items, e.g. a status line (T8). */
+  header?: ReactNode;
 }
 
 /** A Popover holding `role="menu"` items: Up/Down/Home/End move, Enter or Space activates. */
-export function Menu({ id, anchor, label, items, placement = 'bottom-end', offset = 8, testId }: MenuProps) {
+export function Menu({ id, anchor, label, items, placement = 'bottom-end', offset = 8, testId, header }: MenuProps) {
   return (
     <Popover id={id} anchor={anchor} placement={placement} offset={offset} label={label} role="menu" className="menu" testId={testId}>
+      {header && <div className="menu-header">{header}</div>}
       <MenuItems id={id} items={items} />
     </Popover>
   );

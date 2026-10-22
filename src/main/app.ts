@@ -11,6 +11,7 @@ import type { AppPaths } from './paths';
 import { handleMediaProtocol } from './protocols/media';
 import { installSecurityHandlers } from './security';
 import { disposeServices, initServices } from './services';
+import { fireReminderNow, startReminders } from './services/reminders';
 import { settleXForQuit } from './services/x';
 import { onStatusChanged } from './status';
 import { createTray } from './tray';
@@ -64,6 +65,8 @@ export async function startApp(paths: AppPaths): Promise<void> {
   createStudioWindow();
   createTray();
   installAppMenu();
+  // Reminders need the windows (auto-open), the tray (its display) and the forwarded events.
+  startReminders();
 
   app.on('second-instance', () => toggleComposer());
   app.on('activate', () => toggleComposer());
@@ -93,7 +96,7 @@ export async function startApp(paths: AppPaths): Promise<void> {
 
   if (!app.isPackaged && process.env.XBOT_E2E === '1') {
     // Test seam for the Playwright smoke test: drive the real code paths.
-    (globalThis as Record<string, unknown>).__xbotTest = { toggleComposer, openStudio };
+    (globalThis as Record<string, unknown>).__xbotTest = { toggleComposer, openStudio, fireReminder: fireReminderNow };
   }
 
   log.info('xBot ready', { userData: paths.userData, version: app.getVersion() });
