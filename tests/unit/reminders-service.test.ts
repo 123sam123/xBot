@@ -19,7 +19,9 @@ import { cleanupFixtures, makeProjects, quiet } from './helpers/projectFixtures'
 // reopened before the next interval, and a fire with no new project activity
 // makes no AI call (against T7's real services and a mock Ollama).
 
-installLoopbackFetchSpy({ expectRequests: true });
+// Loopback only. The no-AI test asserts its own /api/chat hit counts, so the
+// file doesn't also require requests (a `-t` filter that skips it still passes).
+installLoopbackFetchSpy({ expectRequests: false });
 
 const ZONE = 'Europe/Stockholm'; // UTC+2 on Monday 2026-10-19
 const at = (iso: string) => Date.parse(iso);
