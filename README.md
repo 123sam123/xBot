@@ -35,18 +35,18 @@ are in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 ## Commands
 
 ```sh
-pnpm install          # dependencies (the lockfile is committed)
+pnpm install          # dependencies and Electron (the lockfile is committed)
 pnpm dev              # run it with hot reload; data goes to "xBot Dev"
 pnpm build            # build main, preload and renderer into out/
 pnpm test             # unit tests (Vitest)
 pnpm package          # dist/: a .dmg and a .zip for Apple Silicon and for Intel
 ```
 
-> **Fresh clone and `pnpm dev`:** pnpm doesn't run Electron's own download
-> step, so on a fresh clone `pnpm dev` stops with "Electron uninstall". Run
-> `pnpm exec install-electron` once, then `pnpm dev`. A follow-up ticket
-> (XBOT-V6Q92A) makes `pnpm install` do this. Every other command fetches
-> Electron on its own when it needs it.
+> **Electron:** `pnpm install` also downloads Electron's app binary, or takes
+> it from Electron's download cache. If that step fails (offline, for
+> example), `pnpm install` fails with a note, and `pnpm dev` stops with
+> "Electron uninstall": run `pnpm exec install-electron` once you're back
+> online. `ELECTRON_SKIP_BINARY_DOWNLOAD=1 pnpm install` skips the download.
 
 | Command | What it does |
 |---|---|

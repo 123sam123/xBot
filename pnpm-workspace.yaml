@@ -5,6 +5,10 @@ allowBuilds:
   electron-winstaller: false
   # Pulled in by twitter-text; its postinstall only prints a funding banner.
   core-js: false
+# An install that looks up to date would otherwise skip the root postinstall,
+# which downloads Electron's binary (scripts/install-electron.mjs), so a
+# checkout installed without the binary would never get it.
+optimisticRepeatInstall: false
 minimumReleaseAgeExclude:
   # Electron 45.0.0 was published on 2026-10-21, inside pnpm's release-age window.
   - electron@45.0.0

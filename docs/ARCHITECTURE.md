@@ -1258,6 +1258,22 @@ from §4. Migration `202610221330_reminders_state.sql`.
   `pnpm-workspace.yaml`, and `pnpm ignored-builds` must list nothing.
 - pnpm 11 also refuses versions published in the last day
   (`minimumReleaseAge`). Commit whatever `minimumReleaseAgeExclude` entry it adds.
+- **Electron's binary:** Electron 45 has no install script; its download is the
+  `install-electron` bin. electron-vite never downloads it: without
+  `node_modules/electron/path.txt`, `pnpm dev` stops with "Electron uninstall".
+  So the root `postinstall` (`scripts/install-electron.mjs`, not subject to
+  `allowBuilds`) runs Electron's `install.js`. That reuses @electron/get's cache
+  (offline is fine once it is warm), honours `ELECTRON_MIRROR`, and does nothing
+  when the binary is already there. `install.js` ignores
+  `ELECTRON_SKIP_BINARY_DOWNLOAD`, so the script checks it itself, and it skips
+  a `--prod` install, which has no Electron. pnpm 11 skips root lifecycle
+  scripts on an install it thinks is up to date, so `pnpm-workspace.yaml` sets
+  `optimisticRepeatInstall: false`: a checkout installed without the binary
+  (before this script, or with the skip) gets it on its next `pnpm install`.
+  A failed download fails `pnpm install`; the fallback is
+  `pnpm exec install-electron`.
+  `scripts/check-fresh-install.sh [--skip]` checks both paths on a clone of
+  HEAD with an empty cache.
 - `twitter-text` (the counter) is bundled into the composer and, since T9,
   into main (validation before posting, URL matching for reconciliation). Its
   core-js@2 polyfills patch no globals on Electron's V8 (checked). Its
