@@ -22,6 +22,12 @@ export const studio: StudioApi = {
   savePreset: (name, style) => invoke(studioChannels.savePreset, { name, style }),
   deletePreset: (id) => invoke(studioChannels.deletePreset, { id }),
   addToPost: (documentId, baseRevision, composition, bytes) => invoke(studioChannels.addToPost, { documentId, baseRevision, composition, bytes }),
+  exportVideo: (documentId, baseRevision, composition, layer) => invoke(studioChannels.exportVideo, { documentId, baseRevision, composition, layer }),
+  cancelExport: (jobId) => invoke(studioChannels.cancelExport, { jobId }),
+  filmstrip: (documentId) => invoke(studioChannels.filmstrip, { documentId }),
+  ffmpegStatus: () => invoke(studioChannels.ffmpegStatus),
+  checkFfmpeg: () => invoke(studioChannels.ffmpegCheck),
+  locateFfmpeg: () => invoke(studioChannels.locateFfmpeg),
   toggleFullscreen: () => invoke(studioChannels.toggleFullscreen),
   flushed: () => invoke(studioChannels.flushed),
 };

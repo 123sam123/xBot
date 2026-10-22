@@ -5,11 +5,13 @@ import { basename, extname, isAbsolute, join } from 'node:path';
 import { Transform } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { MAX_IMPORT_FILES, type ImportRejection, type ImportResult, type MediaItem } from '../../../shared/contracts/media';
+import type { VideoInfo } from '../../../shared/contracts/studio';
 import type { Db } from '../../db';
 import type { Logger } from '../../log';
 import type { AppPaths } from '../../paths';
 import { statusChanged } from '../../status';
 import type { DraftsService } from '../drafts/service';
+import { VideoProbeError } from '../ffmpeg/probe';
 import { toMediaItem, type MediaRow } from './rows';
 import { probe, ProbeError, sniff, SNIFF_BYTES, type Probe } from './sniff';
 
@@ -17,9 +19,10 @@ import { probe, ProbeError, sniff, SNIFF_BYTES, type Probe } from './sniff';
 // thumbnails come in through `MediaTools`, so unit tests run it with a fake.
 //
 // Import, per file: validate the source, sniff and probe it by content, stream
-// it into tmp/ while hashing, make a thumbnail from the temp copy, then in one
-// transaction reuse the row with the same sha256 or move the file into media/
-// and insert it, and attach it to the draft. A failure leaves nothing behind.
+// it into tmp/ while hashing, check a video with ffprobe when FFmpeg is there
+// (T5), make a thumbnail from the temp copy, then in one transaction reuse the
+// row with the same sha256 or move the file into media/ and insert it, and
+// attach it to the draft. A failure leaves nothing behind.
 
 export const IMAGE_MAX_BYTES = 20 * 1024 * 1024;
 export const VIDEO_MAX_BYTES = 1024 * 1024 * 1024;
@@ -33,6 +36,12 @@ export interface MediaTools {
    * does not decode.
    */
   makeThumbnail(file: string, info: Probe, out: string): Promise<boolean>;
+  /**
+   * Checks a video with ffprobe and decodes its first frame (T5). Returns
+   * null when FFmpeg isn't installed (the box check then stands alone);
+   * throws VideoProbeError when the file isn't a readable video.
+   */
+  inspectVideo?(file: string): Promise<VideoInfo | null>;
 }
 
 export interface MediaServiceDeps {
@@ -79,6 +88,10 @@ function probeMessage(name: string, err: ProbeError, kind: 'image' | 'video'): s
   return kind === 'video' ? `${name} couldn’t be read as a video. It may be incomplete.` : `${name} couldn’t be read as an image.`;
 }
 
+function videoMessage(name: string, err: VideoProbeError): string {
+  return err.reason === 'no-video' ? `${name} has no video in it.` : `${name} couldn’t be read as a video. It may be incomplete or damaged.`;
+}
+
 /** A name safe for any folder: basename only, no control characters, `/` or `:`. */
 export function exportName(index: number, originalName: string, ext: string): string {
   const base = [...basename(originalName, extname(originalName))]
@@ -97,6 +110,7 @@ export function createMediaService({ db, paths, log, tools, drafts, now = Date.n
 
   const q = {
     bySha: db.prepare<[string], MediaRow>('SELECT * FROM media WHERE sha256 = ?'),
+    videoSize: db.prepare('UPDATE media SET width = ?, height = ?, duration_ms = ? WHERE id = ?'),
     byId: db.prepare<[string], MediaRow>('SELECT * FROM media WHERE id = ?'),
     insert: db.prepare(
       `INSERT INTO media (id, kind, path, mime, width, height, duration_ms, bytes, sha256, thumb_path, original_name, created_at)
@@ -184,6 +198,18 @@ export function createMediaService({ db, paths, log, tools, drafts, now = Date.n
     const tmpThumb = join(paths.tmp, `${id}.thumb.png`);
     try {
       const { sha256, bytes } = await copyAndHash(src, tmpFile, cap, name, type.kind);
+      if (type.kind === 'video' && tools.inspectVideo) {
+        let video: VideoInfo | null;
+        try {
+          video = await tools.inspectVideo(tmpFile);
+        } catch (err) {
+          if (err instanceof VideoProbeError) throw new MediaRejected(videoMessage(name, err));
+          log.warn('media: video check failed', name, err);
+          throw new MediaRejected(`${name} couldn’t be checked as a video.`);
+        }
+        // ffprobe's display size and the picture's own duration beat the box headers'.
+        if (video) info = { ...info, width: video.width, height: video.height, durationMs: video.durationMs };
+      }
       let hasThumb: boolean;
       try {
         hasThumb = await tools.makeThumbnail(tmpFile, info, tmpThumb);
@@ -202,6 +228,7 @@ export function createMediaService({ db, paths, log, tools, drafts, now = Date.n
           let mediaId: string;
           if (existing) {
             mediaId = existing.id;
+            if (info.kind === 'video' && info.width && info.height) q.videoSize.run(info.width, info.height, info.durationMs, existing.id);
             // Repair a row whose file went missing; otherwise the temps are simply dropped.
             const file = join(paths.media, existing.path);
             if (!existsSync(file)) {

@@ -79,7 +79,10 @@ export const compositionSchema = z
       .strictObject({ trimStartMs: z.number().int().min(0), trimEndMs: z.number().int().min(0), muted: z.boolean() })
       .optional(),
   })
-  .superRefine(({ crop, source }, ctx) => {
+  .superRefine(({ crop, source, video }, ctx) => {
+    if (video && video.trimEndMs <= video.trimStartMs) {
+      ctx.addIssue({ code: 'custom', path: ['video'], message: 'The trim must end after it starts.' });
+    }
     if (crop.x + crop.width > 1 + EPSILON || crop.y + crop.height > 1 + EPSILON) {
       ctx.addIssue({ code: 'custom', path: ['crop'], message: 'The crop must stay inside the source.' });
     }
