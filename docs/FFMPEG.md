@@ -97,6 +97,8 @@ the chosen `ffmpeg` first, then along the same list.
 - Pick the `ffmpeg` program itself, or the folder that holds it.
 - xBot stores the path as you picked it and checks it again every time, so a
   Homebrew symlink keeps working after `brew upgrade`.
+- If the pick stops working, the automatic search still runs. The pick's
+  problem is reported only when nothing else is found.
 - The renderer can't set this path. It is not a regular setting, so a
   compromised page could never make xBot run another program.
 

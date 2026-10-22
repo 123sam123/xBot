@@ -105,13 +105,16 @@ export async function locateFfmpeg({ userPath, resourcesPath, env, platform, tim
   const ffmpegName = exe('ffmpeg', platform);
   const ffprobeName = exe('ffprobe', platform);
 
-  // The user's pick may be the program or the folder holding it.
+  // The user's pick may be the program or the folder holding it. If it no
+  // longer works, the automatic search still runs; its problem is reported
+  // only when nothing else is found.
   let userCandidate: string | null = null;
+  let firstFailure: LocateResult | null = null;
   if (userPath && isAbsolute(userPath)) {
     try {
       userCandidate = (await stat(userPath)).isDirectory() ? join(userPath, ffmpegName) : userPath;
     } catch {
-      return missing('not-ffmpeg', `${userPath} no longer exists. Locate FFmpeg again.`);
+      firstFailure = missing('not-ffmpeg', `${userPath} no longer exists. Locate FFmpeg again.`);
     }
   }
   const dirs = [
@@ -122,16 +125,13 @@ export async function locateFfmpeg({ userPath, resourcesPath, env, platform, tim
   ];
   const candidates = [...new Set([...(userCandidate ? [userCandidate] : []), ...dirs.map((dir) => join(dir, ffmpegName))])];
 
-  let firstFailure: LocateResult | null = null;
   for (const candidate of candidates) {
     if (!(await isExecutableFile(candidate))) {
-      if (candidate === userCandidate) return missing('not-ffmpeg', `${candidate} isn’t a program xBot can run.`);
+      if (candidate === userCandidate) firstFailure ??= missing('not-ffmpeg', `${candidate} isn’t a program xBot can run.`);
       continue;
     }
     const result = await check(candidate);
     if (result.state === 'ready') return result;
-    // The user's pick is reported as is; otherwise keep looking and report the first problem.
-    if (candidate === userCandidate) return result;
     firstFailure ??= result;
   }
   return firstFailure ?? missing('not-found', MISSING_MESSAGES['not-found']);
