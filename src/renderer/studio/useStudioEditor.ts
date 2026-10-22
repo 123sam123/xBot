@@ -3,14 +3,14 @@ import type { Composition } from '../../shared/composition/model';
 import type { IpcResult } from '../../shared/contracts/ipc';
 import type { MediaItem } from '../../shared/contracts/media';
 import type { StudioDocument, StudioView } from '../../shared/contracts/studio';
-import { PREVIEW_COMPOSITION, PREVIEW_MEDIA } from '../preview/fixtures';
 import { endGesture, record, redo, startHistory, undo, type History } from './history';
 
 // The Studio's open document and its edits. Every edit is an undoable
 // snapshot; saves go through one serial queue, 500 ms after the last change
 // (and at once before switching documents, on hide and before quitting), and
 // each names the revision it started from. "Add to post" runs in the same
-// queue, after the last save. Preview mode edits the sample locally.
+// queue, after the last save. Preview mode runs the same way on its seeded
+// sample documents (T10).
 
 const SAVE_DELAY_MS = 500;
 
@@ -46,27 +46,14 @@ export interface StudioEditor {
   setNotice(message: string | null): void;
 }
 
-const PREVIEW_DOCUMENT: StudioDocument = {
-  id: 'preview',
-  revision: 0,
-  composition: PREVIEW_COMPOSITION,
-  source: PREVIEW_MEDIA,
-  sourceMissing: false,
-  background: null,
-  gif: false,
-  video: null,
-  exportJob: null,
-  updatedAt: '',
-};
-
-/** Preview mode starts on the sample; normal mode loads main's session. */
-export function useStudioEditor(preview: boolean): StudioEditor {
-  const [status, setStatus] = useState<EditorStatus>(preview ? 'document' : 'loading');
-  const [document, setDocument] = useState<StudioDocument | null>(preview ? PREVIEW_DOCUMENT : null);
+/** Loads main's session and keeps it current. */
+export function useStudioEditor(): StudioEditor {
+  const [status, setStatus] = useState<EditorStatus>('loading');
+  const [document, setDocument] = useState<StudioDocument | null>(null);
   const [view, setView] = useState<StudioView | null>(null);
-  const [history, setHistory] = useState<History<Composition> | null>(() => (preview ? startHistory(PREVIEW_COMPOSITION) : null));
+  const [history, setHistory] = useState<History<Composition> | null>(null);
   const [revision, setRevision] = useState(0);
-  const [media, setMedia] = useState<ReadonlyMap<string, MediaItem>>(() => new Map(preview ? [[PREVIEW_MEDIA.id, PREVIEW_MEDIA]] : []));
+  const [media, setMedia] = useState<ReadonlyMap<string, MediaItem>>(() => new Map());
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
@@ -112,7 +99,7 @@ export function useStudioEditor(preview: boolean): StudioEditor {
     window.clearTimeout(timer.current);
     const { documentId, dirty } = latest.current;
     const composition = historyRef.current?.present;
-    if (preview || !documentId || !composition || !dirty) return enqueue(async () => true);
+    if (!documentId || !composition || !dirty) return enqueue(async () => true);
     latest.current.dirty = false;
     // The snapshot is taken now, so switching documents cannot redirect it.
     return enqueue(async () => {
@@ -133,7 +120,7 @@ export function useStudioEditor(preview: boolean): StudioEditor {
       }
       return false;
     });
-  }, [enqueue, preview, reload]);
+  }, [enqueue, reload]);
 
   const commit = useCallback(
     (next: History<Composition>) => {
@@ -210,9 +197,8 @@ export function useStudioEditor(preview: boolean): StudioEditor {
     [open, showView],
   );
 
-  // The document to show: the sample in preview, else main's session, kept current by `studio:opened`.
+  // The document to show: main's session, kept current by `studio:opened`.
   useEffect(() => {
-    if (preview) return;
     let alive = true;
     void window.xbot.studio.current().then((result) => {
       if (!alive) return;
@@ -253,7 +239,7 @@ export function useStudioEditor(preview: boolean): StudioEditor {
       window.document.removeEventListener('visibilitychange', onVisibility);
       window.clearTimeout(timer.current);
     };
-  }, [preview, load, flush, showView]);
+  }, [load, flush, showView]);
 
   return {
     status,

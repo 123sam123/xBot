@@ -1,3 +1,4 @@
+import { join } from 'node:path';
 import { app, dialog } from 'electron';
 import { bundledMigrations, openDatabase, type Db } from './db';
 import { migrate } from './db/migrate';
@@ -7,11 +8,17 @@ import { requestDraftFlush } from './ipc/drafts';
 import { requestStudioFlush } from './ipc/studio';
 import { log } from './log';
 import { installAppMenu } from './menu';
-import type { AppPaths } from './paths';
+import { isPreviewMode, type AppPaths } from './paths';
+import { seedPreview } from './preview/seed';
 import { handleMediaProtocol } from './protocols/media';
 import { installSecurityHandlers } from './security';
 import { disposeServices, initServices } from './services';
+import { drafts } from './services/drafts';
+import { draftsQueue } from './services/drafts/queue';
+import { ffmpeg } from './services/ffmpeg';
+import { media } from './services/media';
 import { fireReminderNow, startReminders } from './services/reminders';
+import { setStudioDocument, studio } from './services/studio';
 import { settleXForQuit } from './services/x';
 import { onStatusChanged } from './status';
 import { createTray } from './tray';
@@ -43,6 +50,33 @@ function openAndMigrate(paths: AppPaths): Db | null {
   }
 }
 
+/**
+ * Preview mode (T10): a fresh preview userData gets the sample drafts, media
+ * and idea through the services' own paths (src/main/preview/seed.ts), on the
+ * drafts queue. The first preview launch waits for it, FFmpeg's detection
+ * included (at most its 15 s timeout).
+ */
+async function seedPreviewData(opened: Db): Promise<void> {
+  if (!isPreviewMode(process.argv, process.env)) return;
+  const fixturesDir = app.isPackaged ? join(process.resourcesPath, 'fixtures') : join(app.getAppPath(), 'resources', 'fixtures');
+  try {
+    await draftsQueue(() =>
+      seedPreview({
+        db: opened,
+        log,
+        fixturesDir,
+        drafts: drafts(),
+        media: media(),
+        studio: studio(),
+        ffmpeg: () => ffmpeg().binaries(),
+        setStudioDocument,
+      }),
+    );
+  } catch (err) {
+    log.error('preview: seeding failed; preview mode starts with what it has', err);
+  }
+}
+
 /** Everything after `app.whenReady()`, in the order ARCHITECTURE.md documents. */
 export async function startApp(paths: AppPaths): Promise<void> {
   app.dock?.hide();
@@ -59,6 +93,7 @@ export async function startApp(paths: AppPaths): Promise<void> {
   registerIpc();
   forwardEventsToRenderers();
   onStatusChanged((statuses) => appEvents.emit('status:changed', { statuses }));
+  await seedPreviewData(db);
 
   applyAppearance();
   createComposerWindow();

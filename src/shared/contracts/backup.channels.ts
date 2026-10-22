@@ -1,2 +1,7 @@
-// Owned by T10 (XBOT-1DDYA1). Add `backup:<verb>` channel names here.
-export const backupChannels = {} as const;
+// Owned by T10 (XBOT-1DDYA1).
+export const backupChannels = {
+  /** Ask for a folder, then write a timestamped backup into it. */
+  create: 'backup:create',
+  /** Show the last backup this run made in Finder. */
+  reveal: 'backup:reveal',
+} as const;

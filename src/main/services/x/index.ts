@@ -29,11 +29,13 @@ export function settleXForQuit(maxMs: number): Promise<void> {
 export const xModule: ServiceModule = {
   name: 'x',
   init(ctx) {
+    const preview = isPreviewMode(process.argv, process.env);
     instance = createXService({
       db: ctx.db,
       log: ctx.log,
       // Chromium's network stack: the system proxy and certificates, and no cookie jar (credentials: 'omit').
-      fetch: (url, init) => net.fetch(url, init),
+      // Preview mode (T10) never reaches X, on top of the service's own `preview_mode` refusals.
+      fetch: preview ? () => Promise.reject(new Error('X is off in preview mode.')) : (url, init) => net.fetch(url, init),
       vault: createVault(safeStorage, process.platform),
       drafts: drafts(),
       mediaRoot: ctx.paths.media,
@@ -43,7 +45,7 @@ export const xModule: ServiceModule = {
       // The always-on-top panel would cover X's consent page.
       beforeBrowser: () => hideComposer(),
       afterAnswer: () => showComposer(),
-      preview: isPreviewMode(process.argv, process.env),
+      preview,
     });
     instance.init();
     unregisterStatus = registerStatusProvider({ id: 'x', order: 40, get: () => instance?.status() ?? null });

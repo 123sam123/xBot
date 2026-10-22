@@ -20,7 +20,8 @@
     "lint": "eslint .",
     "package": "electron-vite build && electron-builder --publish never",
     "icons": "node scripts/render-icons.mjs",
-    "fixtures": "node --experimental-strip-types --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/render-fixtures.ts",
+    "fixtures": "electron-vite build && node --experimental-strip-types --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/render-fixtures.ts",
+    "preview:ui": "electron-vite build && node scripts/preview-ui.mjs",
     "capture": "electron-vite build && node --experimental-strip-types --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/capture-ui.ts"
   },
   "dependencies": {

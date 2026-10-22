@@ -36,25 +36,30 @@ src/
     protocols/media.ts       xbot-media://
     db/                      index.ts, migrate.ts, migrations/*.sql
     services/                index.ts, types.ts, <domain>/index.ts; ffmpeg/ (T5, see "Studio video")
+    preview/seed.ts          preview mode's sample data (T10, see "Preview mode")
   preload/                   index.ts (window.xbot), invoke.ts, api/<domain>.ts
   shared/contracts/          <domain>.ts, <domain>.channels.ts, ipc.ts, define.ts,
                              bridge.ts, events.ts, settings.ts (aggregators)
   shared/composition/        model.ts, layout.ts (zod-free), schema.ts (zod, main only); see "Studio"
   shared/reminders/          schedule.ts, label.ts, shortcut.ts (zod-free, pure); see "Reminders"
+  shared/previewSample.ts    preview mode's sample texts, idea and compositions (zod-free, pure)
   renderer/
     design-system/           tokens, glass material, shared components (see "Design system")
-    common/                  base.css, CompositionPreview, hooks shared by both pages,
+    common/                  base.css, hooks shared by both pages,
                              composition/ (the Studio's draw routine, see "Studio")
-    preview/                 preview mode's fixed sample content
+    preview/                 preview mode's two renderer-only labels (handle, reminder row)
     composer/, studio/       one Vite page each
     onboarding/, settings/,  the sheet registries and the status chips (see "Registries")
     status/
-resources/                   tray.svg → trayTemplate.png / @2x (pnpm icons)
-  fixtures/                  preview mode's sample media (pnpm fixtures)
+resources/                   tray.svg → trayTemplate.png / @2x, icon.svg → build/icon.png (pnpm icons)
+  fixtures/                  preview mode's sample media: PNG, MP4, framed PNG (pnpm fixtures)
+build/icon.png               the app icon electron-builder turns into the .icns
 scripts/                     capture-ui.ts (pnpm capture), render-fixtures.ts, capture-stage.cjs,
-                             fixtures/*.html (the fixtures' sources), render-icons.mjs
+                             fixtures/*.html (the fixtures' sources), render-icons.mjs,
+                             preview-ui.mjs (pnpm preview:ui)
 tests/unit/  tests/e2e/
-docs/                        SPEC.md, ARCHITECTURE.md, OLLAMA.md, FFMPEG.md, reference/ (+ captures/)
+docs/                        SPEC.md, ARCHITECTURE.md, OLLAMA.md, FFMPEG.md, X.md, reference/ (+ captures/)
+README.md                    setup, commands, data, backup, offline, preview mode, privacy
 ```
 
 ## Process boundaries
@@ -101,7 +106,7 @@ imported by every aggregator, so **a sibling ticket edits only its own files**:
 | `projects` | T7 (XBOT-5UVE6R). T7 also added, additively and for the reasons in "Project context": `generateTask` (with `buildTaskMessages` in `prompts.ts`, an exported `toFormat` in `schemas.ts` and an `'ideas'` running action) to the AI service, the `ideas` slot to `ComposerHeader`, `LightbulbIcon`, the `projects` sheet and Ideas wiring to `composer/App.tsx` (whose AI apply path became the shared `applyText`), `src/shared/ideaCopy.ts`, and the `ignore` devDependency |
 | `reminders` (+ launch at login, global shortcut) | T8 (XBOT-8V5WV5). T8 also added, additively and for the reasons in "Reminders": `showComposerInactive`, `isComposerVisible`, `composerDisplay`, the `onComposerHidden` / `onComposerFocused` hooks and the focus-instead-of-hide toggle to `windows/composer.ts`, `startReminders()` and the `fireReminder` test seam to `app.ts`, the `header` prop to the design system's `Menu`, `disabled` to `Toggle`, the reminder row's props, and the `src/shared/reminders/` lint block |
 | `x` | T9 (XBOT-OE2XV9). T9 also added, additively and for the reasons in "X publishing": the X wait in `app.ts`'s first `before-quit`, `openExternalIfAllowed` exported from `security.ts`, `db/durable.ts`, the design system's `TextField`, and props on `AccountMenu`, `ComposerHeader`, `ActionRow` and `PublishSheet` |
-| `backup` (+ README, preview mode fixtures, packaging) | T10 (XBOT-1DDYA1). T2 created `src/renderer/preview/` and `resources/fixtures/`; T10 extends them. |
+| `backup` (+ README, preview mode, packaging) | T10 (XBOT-1DDYA1). T2 created `src/renderer/preview/` and `resources/fixtures/`; T10 extends them. **Not additive:** T10 turned preview mode from a renderer-only sample into the real app on a seeded userData (see "Preview mode"). That removed the preview branches T2–T7 had put in `composer/App.tsx`, `composer/ideas/IdeasMenu.tsx`, `studio/App.tsx` and `studio/useStudioEditor.ts`, deleted `common/CompositionPreview.tsx`, and changed preview handling in `ipc/drafts.ts` and `ipc/studio.ts` (quit flushes), `tray.ts` (drop), `services/x/index.ts` (no network) and `services/projects/suggestions.ts` (stored ideas). Additively: `pickPaths` exported from `ipc/media.ts`, the seed call in `app.ts`, the `pnpm capture` waits for seeded media, and the unique `.partial` names in `ffmpeg/frames.ts` (two requests for one clip used to clobber each other) |
 
 Shared files that several tickets may still touch, so coordinate:
 - `package.json` / `pnpm-lock.yaml`, for new dependencies (see below);
@@ -229,6 +234,7 @@ domain's `<domain>ForwardedEvents` is forwarded to every window automatically.
 | Packaged app | `~/Library/Application Support/xBot` |
 | `pnpm dev`, e2e, any unpackaged run | `~/Library/Application Support/xBot Dev`, so branch migrations never touch real data |
 | `--preview` or `XBOT_PREVIEW=1` | `~/Library/Application Support/xBot Preview` |
+| `pnpm preview:ui` | a fresh folder under the OS temp dir, removed on quit (it sets `XBOT_USER_DATA_DIR`) |
 | `XBOT_USER_DATA_DIR=<dir>` | `<dir>`, honoured only when unpackaged (tests) |
 
 Inside it: `xbot.db`, `media/` (served by `xbot-media://`; thumbnails in
@@ -255,19 +261,22 @@ Defined by `src/main/index.ts` and `src/main/app.ts`:
    5. `protocol.handle`;
    6. `registerIpc()`;
    7. forward events to the renderers (and status changes as `status:changed`);
-   8. `applyAppearance()` (`XBOT_APPEARANCE`), then create both windows, hidden;
-   9. create the tray and the app menu;
-   10. `startReminders()`: the reminder timer, powerMonitor, notifications and
+   8. preview mode only: seed a fresh preview userData (`seedPreview`, on the
+       drafts queue; see "Preview mode"). The first preview launch waits for it,
+       FFmpeg's detection included;
+   9. `applyAppearance()` (`XBOT_APPEARANCE`), then create both windows, hidden;
+   10. create the tray and the app menu;
+   11. `startReminders()`: the reminder timer, powerMonitor, notifications and
        the global shortcut, which need the windows, the tray and the forwarded
        events (see "Reminders");
-   11. attach the lifecycle handlers;
-   12. log `xBot ready`.
+   12. attach the lifecycle handlers;
+   13. log `xBot ready`.
 
 `second-instance` (another launch) and macOS `activate` (reopened from Finder)
 both toggle the composer. The first `before-quit` is prevented: main asks the
 composer to save text, and the Studio to save edits, still inside their
-autosave debounce and waits for both acks (each at most 1 s, skipped in preview
-or when that page is not loaded) and, only while a create-post request is in
+autosave debounce and waits for both acks (each at most 1 s, skipped when that
+page is not loaded; preview mode flushes too) and, only while a create-post request is in
 flight, for X to answer it (at most 10 s, `settleXForQuit`; past that the
 request is aborted and launch reconciles the job), then
 quits again. That second `before-quit` marks the app as quitting, and only then
@@ -518,8 +527,8 @@ Prop changes are additive only; siblings build against these.
     (`composer/ai/`, see "Local AI"), `publish/ReconcileSheet` (T9: "Did it post?")
     and `ProjectsSheet` (`composer/ideas/`, see "Project context").
 
-  In normal mode the draft is persisted (`composer/useDraft.ts`, see "Drafts
-  and media"); preview mode keeps its fixed sample in local state.
+  The draft is persisted (`composer/useDraft.ts`, see "Drafts and media"), in
+  preview mode too, where it is the seeded sample.
 - **Studio** (`studio/`):
   - `StudioTopBar({ onBack, onAdd, addDisabledReason?, badge?, notice?, actions?, addLabel? })`
     (`actions`: undo, redo and the More menu);
@@ -527,14 +536,11 @@ Prop changes are additive only; siblings build against these.
   - `ToolPopovers` (Background, Frame, Padding, Shadow, Crop), `OutputPopover`,
     `PresetsPopover`, `CropOverlay`;
   - `Timeline({ duration, current, trim, frames, playing, onTogglePlay, label?, onSeek?, onTrim?, onTrimEnd?, minTrim?, muted?, onToggleMute?, muteDisabledReason? })`.
-    Without the optional handlers it only shows (preview mode's sample).
+    Without the optional handlers it only shows.
     `onSeek` scrubs, `onTrim` drags the handles and takes arrow keys (0.1 s,
     Shift 1 s), and `onToggleMute` adds the mute button;
   - `StudioFooter({ dimensions, fit, zoom, onFit?, onZoom?, dimsAnchor?, onDimensions?, fullscreen?, onFullscreen? })`;
     `fit` is null while a zoom level is chosen.
-- `common/CompositionPreview({ composition, source, fit?, className?, testId? })`
-  draws a shared `Composition` with the Studio's canvas renderer, contained in
-  or covering its box (the composer's preview-mode thumbnail).
 - **Honest states.** In normal mode the header reads "Connect X" until an
   account is connected, then its real handle. Without an account, Post opens
   the publish-options sheet (Copy text / Export media / Open X, plus Connect X);
@@ -546,9 +552,9 @@ Prop changes are additive only; siblings build against these.
   waiting to be checked. The Studio's tools and "Add to post" are
   disabled with a reason until an image or video is open (a video needs FFmpeg),
   and the reminder row shows the real schedule ("Next reminder in 24 min",
-  "Reminders paused", …). The sample handle and media
-  exist only in preview mode, labelled "Preview", where Post says "Posting is
-  off in preview" and adding media is off.
+  "Reminders paused", …). The sample handle and media exist only in preview
+  mode, labelled "Preview", where Post opens the post-it-yourself sheet with
+  "Posting to X is off in preview. You can post it yourself." and no Connect X.
 - **Studio hand-off.** "Edit in Studio ↗" calls `drafts.openInStudio({ draftId, attachmentId })`;
   the studio module answers T3's `draft:studio-target` by opening that
   attachment's document (see "Studio").
@@ -557,7 +563,10 @@ Prop changes are additive only; siblings build against these.
 
 `pnpm capture` writes to `test-results/captures/` and copies the comparisons
 the PR carries to `docs/reference/captures/`. It exits non-zero on any failed
-assertion. Its limits:
+assertion. Its preview runs are seeded (see "Preview mode"): it waits for the
+composer's framed screenshot and for the sample video's first frame and
+filmstrip, and scrubs to the reference's playhead, so it needs FFmpeg. Its
+limits:
 - Linux captures use Inter, so text runs a little wider than SF Pro.
 - The behind-window blur and the native tint are simulated (blur 24 px,
   saturate 1.3, with and without an approximate dark tint). Only
@@ -652,8 +661,8 @@ T4 (XBOT-1N58PP): non-destructive screenshot editing. Migration
   `devicePixelRatio` (backing capped at 4096 px); the export
   (`render.ts`) calls it on an `OffscreenCanvas` at the output size and
   encodes PNG or JPEG. Images are decoded once per media id
-  (`assets.ts`: `xbot-media:` URLs are fetched, the bundled preview sample goes
-  through an `<img>`). Transparent backgrounds show CSS checks behind the
+  (`assets.ts`: `xbot-media:` URLs are fetched, anything else goes through an
+  `<img>`). Transparent backgrounds show CSS checks behind the
   preview canvas, never in it, and export as PNG; GIF sources export their first
   frame, as PNG. Colour: Chromium converts Display P3 sources to the sRGB
   canvas on decode, so exports are sRGB.
@@ -920,7 +929,9 @@ privacy). Migration `202610220300_projects_context.sql`. Everything under
   note), the projects sheet with the brief editor, and onboarding step
   `projects` (30). The folder picker runs in main; `folderPolicy.ts`
   refuses `/`, the home folder and its ancestors, private and system
-  folders, whole disks and xBot's data folder. Preview mode reads nothing.
+  folders, whole disks and xBot's data folder. Preview mode reads nothing; its
+  Ideas popover lists the one seeded sample idea, labelled, without Refresh or
+  the note field.
 
 ## X publishing
 
@@ -972,6 +983,97 @@ behaviour, setup and troubleshooting are in [`X.md`](X.md).
 - **Status chip** (`id: 'x'`, from the database only): X not set up / X
   disconnected / X: @handle / Reconnect X / Posting to X / A post needs checking.
 
+## Backup
+
+T10 (XBOT-1DDYA1): "Settings → Data → Back up data…" (SPEC §19). No
+migration. `services/backup/service.ts` is electron-free;
+`services/backup/index.ts` gives it the app version; `ipc/backup.ts` asks for
+the folder with the composer's `pickPaths` (held, so the picker doesn't hide
+the panel).
+
+- **Calls.** `backup:create` (no payload: main shows the folder picker; null
+  when it is cancelled) resolves `BackupResult { folderName, tables, rows,
+  mediaFiles, bytes, missing }`. `backup:reveal` shows the last backup in
+  Finder; main remembers its path, so the renderer never sends one.
+- **What a backup is.** A folder `xBot Backup YYYY-MM-DD HH.MM.SS` (local time;
+  ` 2`, ` 3`… on a clash), built as `<name>.partial` and renamed when
+  complete:
+  - `xbot.db`: `VACUUM INTO`, one consistent snapshot even while the app
+    writes. In the copy (`journal_mode=DELETE`, `secure_delete=ON`) every
+    `x_accounts.token_blob` is blanked and `reconnect_required` set, then the
+    copy is vacuumed again so no ciphertext survives in free pages. Tokens
+    only decrypt on the Mac that made them anyway; a restored account reads
+    "Reconnect";
+  - `media/`: only the files the copy's `media.path` / `thumb_path` name,
+    cloned with `COPYFILE_FICLONE` where the volume can (APFS). Files that
+    are gone are listed, not fatal;
+  - `manifest.json` (app version, time, migration ids, per-table row counts,
+    media files and bytes, missing files, what was left out) and
+    `RESTORE.txt`.
+- **Failure.** Any error removes only the `.partial` folder this run made; the
+  IPC layer turns ENOSPC, EACCES/EPERM, EROFS and ENOENT into sentences. A
+  second backup while one runs is refused (`backup_running`). Quitting
+  stops a running backup and removes its `.partial` synchronously (the backup
+  module is the last in `services/index.ts`, so it is disposed first).
+- **Restore** is manual and documented (`RESTORE.txt`, README): quit, move the
+  `xBot` folder aside, copy `xbot.db` and `media/` into a new one, reopen. No
+  in-app restore in v1.
+- **Test.** `tests/unit/backup.test.ts`: every table's row count matches,
+  `integrity_check` is ok, the media files match byte for byte, the token
+  bytes are nowhere in the file, the manifest matches; missing files, name
+  clashes, a concurrent backup and unwritable or failing targets leave no
+  `.partial`.
+
+## Preview mode
+
+T10 (XBOT-1DDYA1): SPEC §20's "deterministic visual-preview mode using local
+sample media and no external publishing". `pnpm preview:ui` (a fresh
+temporary userData every run), `--preview` or `XBOT_PREVIEW=1` (the
+persistent `xBot Preview` folder; see "userData and modes").
+
+- **The real app on seeded data.** Preview used to be a renderer-only sample
+  in React state, so attaching, history, the Studio and Add to post couldn't
+  run in it. Now `src/main/preview/seed.ts` (electron-free) seeds a fresh
+  preview userData (no media rows and no `preview.seededAt` row in
+  `settings`, a raw key outside the registry like `studio.ffmpegPath`)
+  through the services' own paths, on the drafts queue, before the first
+  window:
+  1. the current draft gets the video text and `media().importFiles()` the
+     MP4; with FFmpeg, `openForAttachment()` + `save()` give its document
+     `previewStudioComposition` and the trim (1560–8520 ms of 12 000, the
+     reference's 0.13–0.71);
+  2. `drafts().startNew()` (the video draft goes to history), the reference
+     text and the PNG; its document gets `previewThumbnailComposition`
+     (1540 × 1000);
+  3. if `my-tiny-tool-framed.png` exists, `studio().addToPost()` with its
+     bytes: the same size check against `exportLayout` as a real Add to post,
+     so a stale fixture keeps the plain screenshot and logs a warning;
+  4. one `suggestions` row (kind `demo`, source "Preview sample");
+  5. `setStudioDocument()`: the video document, else the screenshot's;
+  6. `preview.seededAt`, and the log line `preview: seeded {…}`.
+
+  A failed step is logged and skipped. Fixtures are found like the tray icon:
+  `process.resourcesPath/fixtures` when packaged, `<app>/resources/fixtures`
+  otherwise. The texts, idea and compositions live in
+  `src/shared/previewSample.ts`; the renderer keeps only the header's sample
+  handle and the reminder row's label (`renderer/preview/fixtures.ts`).
+- **What runs and what doesn't.** Drafts, history, media import (pickers,
+  drops, the menu-bar drop), the Studio (every tool, presets, Open, Replace,
+  Add to post, video export) and the quit flushes run as in normal mode. Off:
+  AI (never probes), X (every call refused with `preview_mode`, and its
+  `fetch` rejects outright, so nothing reaches the network), project scanning
+  and refreshing ideas, reminders, the global shortcut, onboarding. Post ↑
+  opens the post-it-yourself sheet with "Posting to X is off in preview. You
+  can post it yourself." and no Connect X. The header shows `@samuelbuilds`
+  with a "Preview" badge, and the Studio title a "Preview" badge.
+- **Fixtures** (`resources/fixtures/`, `pnpm fixtures`): `my-tiny-tool.png`
+  (1440 × 800, from HTML), `my-tiny-tool.mp4` (12.0 s, 30 fps, H.264
+  yuv420p, faststart, no audio, a cursor dot passing the Process button;
+  about 72 KB) and `my-tiny-tool-framed.png` (the app's own Studio export of
+  the screenshot's document, about 1 MB: the gradient doesn't compress).
+- **Tests.** `tests/e2e/journey.spec.ts` runs the whole journey on it;
+  `tests/e2e/studio.spec.ts` runs on the seeded video document.
+
 ## Registries
 
 Later tickets add onboarding steps, settings sections and status chips by
@@ -987,7 +1089,8 @@ adding their own files; nobody edits a shared list.
 - **Settings** (`renderer/settings/`): each `sections/<id>.tsx` default-exports
   `{ id, order, title, Component }`; the component reads its own state. A
   section that renders nothing is hidden. Built in: Status (0), Appearance (100).
-  Others: Local AI 10, Voice 20, Reminders 30, X 40, Startup and shortcut 90.
+  Others: Local AI 10, Voice 20, Reminders 30, X 40, Startup and shortcut 90,
+  Data 95 (T10's backup, `sections/backup.tsx`).
 - **Status** (`src/main/status.ts`, electron-free): a domain calls
   `registerStatusProvider({ id, order, get })` once, where `get()` returns an
   `IntegrationStatus { id, label, tone: 'ok' | 'neutral' | 'warning' | 'busy', detail? }`
@@ -1175,13 +1278,14 @@ from §4. Migration `202610221330_reminders_state.sql`.
 | `pnpm dev` | electron-vite dev server plus Electron, with hot reload for the renderer |
 | `pnpm build` | builds `out/main`, `out/preload` and `out/renderer` |
 | `pnpm test` | Vitest unit tests (`tests/unit/**/*.test.ts`, Node environment) |
-| `pnpm test:e2e` | builds, then runs the Playwright `_electron` smoke test (`tests/e2e`) |
+| `pnpm test:e2e` | builds, then runs the Playwright `_electron` tests (`tests/e2e`), including the preview-mode journey |
 | `pnpm typecheck` | `tsc` for `tsconfig.node.json` (main, preload, shared, tests), `tsconfig.web.json` (renderer, shared) and `tsconfig.scripts.json` (`scripts/**/*.ts`, with the DOM lib for `page.evaluate` bodies) |
 | `pnpm lint` | ESLint, including the process-boundary rules |
 | `pnpm package` | build plus electron-builder: `dist/*.dmg` and `dist/*.zip` on macOS, `dist/*.zip` on Linux |
-| `pnpm icons` | re-renders the tray PNGs from `resources/tray.svg` |
-| `pnpm fixtures` | re-renders `resources/fixtures/*.png` from `scripts/fixtures/*.html` |
-| `pnpm capture` | builds, then captures both surfaces and compares them with the reference (see "Design system → Visual verification") |
+| `pnpm icons` | re-renders the tray PNGs from `resources/tray.svg` and `build/icon.png` (1024²) from `resources/icon.svg` |
+| `pnpm fixtures` | builds, then re-renders `resources/fixtures/`: the PNG from `scripts/fixtures/my-tiny-tool.html`, the MP4 from it with FFmpeg, and the framed PNG through the app's own Add to post. Needs FFmpeg with libx264 |
+| `pnpm preview:ui` | builds, then opens preview mode on a fresh temporary userData (see "Preview mode") |
+| `pnpm capture` | builds, then captures both surfaces and compares them with the reference (see "Design system → Visual verification"). Needs FFmpeg |
 
 - Modules that unit tests import must not import `electron`. Put the logic in a
   pure module, as `position.ts`, `ipc/core.ts` and `db/` do, and pass in the
@@ -1199,7 +1303,11 @@ from §4. Migration `202610221330_reminders_state.sql`.
     `test-results/captures/studio-video.png`.
 
   They skip with a message when FFmpeg is missing, and
-  `XBOT_REQUIRE_FFMPEG=1` turns that skip into a failure. The helpers are in
+  `XBOT_REQUIRE_FFMPEG=1` turns that skip into a failure. So does
+  `tests/e2e/journey.spec.ts` (T10), the whole user journey in preview mode:
+  write and attach, edit in the Studio and add to post, reopen the same
+  document, restore the video draft and export it, relaunch, and the
+  post-it-yourself path with nothing reaching X. The helpers are in
   `tests/unit/helpers/video.ts` (services) and `videoFixtures.ts` (fixtures
   and readers, also used by the e2e, so they import no database code).
 - The Studio specs (`tests/e2e/studio-*.spec.ts`, helpers in
@@ -1216,8 +1324,14 @@ from §4. Migration `202610221330_reminders_state.sql`.
 
 ## Packaging
 
-`electron-builder.yml` builds an unsigned app, and code signing and
-notarization are out of scope:
+`electron-builder.yml` builds an unsigned app; code signing and notarization
+are optional and not set up (its comments say what to change, and the README
+how to open the unsigned app):
+- **Targets:** on macOS a `dmg` and a `zip` for each of `arm64` and `x64`. Not
+  universal: each build ships only its own better-sqlite3 prebuild, which a
+  universal merge can't reconcile. Linux makes a `zip`, for CI only.
+- **Icon:** `build/icon.png` (from `resources/icon.svg`, the AppMark on the
+  macOS icon grid), turned into the `.icns`.
 - **Signing:** mac uses `identity: '-'` (ad-hoc) because Apple Silicon refuses
   fully unsigned binaries, with `hardenedRuntime: false`.
 - **Info.plist:** `mac.extendInfo.LSUIElement: true` means no Dock icon and no
@@ -1226,4 +1340,12 @@ notarization are out of scope:
   loads only from the asar.
 - **Native code:** `asarUnpack` covers `*.node`, and `npmRebuild: false`.
 - **Prebuilds:** only the target platform's better-sqlite3 prebuild ships.
-- **Tray PNGs** go to `Contents/Resources` via `extraResources`.
+- **Tray PNGs** go to `Contents/Resources` via `extraResources`, and preview
+  mode's three fixtures to `Contents/Resources/fixtures/`.
+- **FFmpeg** is not bundled (`docs/FFMPEG.md`); the packaged app shows the
+  "FFmpeg not found" guidance until the user installs it.
+- **Checked on Linux only** (T10's runner): `pnpm package` makes
+  `dist/xbot-<version>.zip` with exactly one prebuild (`linux-x64.node`), the
+  fixtures and no FFmpeg, and the packaged binary logs `xBot ready` (and, with
+  `--preview`, `preview: seeded`). The macOS `.dmg`/`.app` has not been built
+  or launched by a ticket yet.

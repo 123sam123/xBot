@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { existsSync, mkdirSync } from 'node:fs';
 import { readFile, rename, unlink } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -5,7 +6,9 @@ import { runTool, type Runner } from './run';
 
 // The timeline's filmstrip: N frames evenly spaced over the clip, each from a
 // fast input seek (never a decode of the whole file), small JPEGs cached by
-// the source's hash for this run (tmp/ is emptied at every start).
+// the source's hash for this run (tmp/ is emptied at every start). Each call
+// writes its own `.partial` and renames it into place, so two requests for
+// the same clip (a page reloaded mid-strip, T10) never clobber each other.
 
 export const FILMSTRIP_FRAMES = 8;
 /** Twice the strip's 37 CSS px, for Retina. */
@@ -31,7 +34,7 @@ export async function filmstrip({ ffmpeg, source, durationMs, dir, signal, run =
     const file = join(dir, `${String(i).padStart(2, '0')}.jpg`);
     if (!existsSync(file)) {
       const at = ((i + 0.5) * durationMs) / count / 1000;
-      const partial = `${file}.partial`;
+      const partial = `${file}.${randomUUID()}.partial`;
       await run(
         ffmpeg,
         ['-hide_banner', '-nostdin', '-y', '-loglevel', 'error', '-noaccurate_seek', '-ss', at.toFixed(3), '-i', source, '-frames:v', '1', '-vf', `scale=-2:${FILMSTRIP_HEIGHT}`, '-c:v', 'mjpeg', '-q:v', '5', '-update', '1', '-f', 'image2', partial],

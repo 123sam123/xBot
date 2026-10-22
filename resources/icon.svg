@@ -1,0 +1,33 @@
+<!-- xBot app icon: the header's AppMark (src/renderer/design-system/icons.tsx)
+     on the macOS icon grid: a 1024×1024 canvas, an 824×824 body at 100,100
+     with a 185 px corner radius, and a soft shadow below it. `pnpm icons`
+     renders it to build/icon.png, which electron-builder turns into the
+     .icns. The bars keep the AppMark's 30-unit geometry (× 824/30). -->
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="body" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="1" stop-color="#eef1f8"/>
+    </linearGradient>
+    <linearGradient id="bar" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#3c74f2"/>
+      <stop offset="1" stop-color="#2a58d8"/>
+    </linearGradient>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="125%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="14"/>
+      <feOffset dy="12" result="blur"/>
+      <feComponentTransfer>
+        <feFuncA type="linear" slope="0.28"/>
+      </feComponentTransfer>
+      <feMerge>
+        <feMergeNode/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+  <rect x="100" y="100" width="824" height="824" rx="185" fill="url(#body)" filter="url(#shadow)"/>
+  <rect x="100.5" y="100.5" width="823" height="823" rx="184.5" fill="none" stroke="#000" stroke-opacity="0.06"/>
+  <rect x="354.1" y="402.1" width="82.4" height="219.7" rx="41.2" fill="url(#bar)"/>
+  <rect x="470.8" y="306" width="82.4" height="412" rx="41.2" fill="url(#bar)"/>
+  <rect x="587.5" y="367.8" width="82.4" height="288.4" rx="41.2" fill="url(#bar)"/>
+</svg>

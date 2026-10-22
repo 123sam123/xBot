@@ -17,7 +17,6 @@ import {
 } from '../../shared/contracts/studio';
 import { studioChannels } from '../../shared/contracts/studio.channels';
 import { appEvents } from '../events';
-import { isPreviewMode } from '../paths';
 import { draftsQueue } from '../services/drafts/queue';
 import { ffmpeg } from '../services/ffmpeg';
 import { media } from '../services/media';
@@ -40,7 +39,6 @@ let flushAck: (() => void) | null = null;
  */
 export function requestStudioFlush(timeoutMs: number): Promise<void> {
   const win = studioWindow();
-  if (isPreviewMode(process.argv, process.env)) return Promise.resolve();
   if (!win || win.isDestroyed() || win.webContents.isCrashed() || win.webContents.isLoading()) return Promise.resolve();
   return new Promise((resolve) => {
     const done = () => {

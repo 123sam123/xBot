@@ -8,14 +8,13 @@ import type { ImportResult, MediaItem } from '../../shared/contracts/media';
 import type { PublishJob } from '../../shared/contracts/x';
 import { postLength } from '../../shared/postLength';
 import { isActiveStatus, mediaViolation } from '../../shared/xRules';
-import { CompositionPreview } from '../common/CompositionPreview';
 import { useAppInfo, useReadyMarker } from '../common/useAppInfo';
 import { useEscapeToHide } from '../common/useEscapeToHide';
 import { setSetting, useSettings } from '../common/useSettings';
 import { Divider, GlassPanel, popovers, StatusChip, useAnyPopoverOpen, useAppearance, type MenuItem } from '../design-system';
 import { OnboardingSheet } from '../onboarding/OnboardingSheet';
 import { unseenSteps } from '../onboarding/registry';
-import { PREVIEW_DRAFT_TEXT, PREVIEW_HANDLE, PREVIEW_SOURCE, PREVIEW_THUMBNAIL_COMPOSITION } from '../preview/fixtures';
+import { PREVIEW_HANDLE } from '../preview/fixtures';
 import { SettingsSheet } from '../settings/SettingsSheet';
 import { accountMenuEntries, accountTrigger, activeAccount, type AccountAction } from './account/accountMenu';
 import { connectX, useXState } from './account/useXState';
@@ -53,9 +52,10 @@ import { UploadZone } from './UploadZone';
 import { useDraft } from './useDraft';
 import { useFileDrop } from '../common/useFileDrop';
 
-// The Write Post composer. In normal mode the draft and its media are
-// persisted (useDraft, window.xbot.drafts / .media); preview mode keeps T2's
-// fixed sample in local state. T8 wires the reminder row. T9: the header's X
+// The Write Post composer. The draft and its media are persisted (useDraft,
+// window.xbot.drafts / .media), in preview mode too: there main seeds a
+// labelled sample into the preview userData (T10), and only AI, X, project
+// folders and reminders stay off. T8 wires the reminder row. T9: the header's X
 // account menu, and Post ↑ — a publish job with a connected account
 // (window.xbot.x), the post-it-yourself sheet without one. T6 adds local AI:
 // the ✦ menu, the suggestions sheet and the AI status row; an AI change goes
@@ -67,6 +67,7 @@ import { useFileDrop } from '../common/useFileDrop';
 const NOTICE_MS = 3200;
 /** The drafts contract's DRAFT_TEXT_MAX (not imported here: contract files bundle zod). */
 const TEXT_MAX = 25_000;
+const PREVIEW_POST_LEDE = 'Posting to X is off in preview. You can post it yourself.';
 
 type SheetId = 'onboarding' | 'history' | 'settings' | 'publish' | 'suggestions' | 'reconcile' | 'projects';
 
@@ -172,7 +173,7 @@ export function App() {
 }
 
 function Composer({ preview, emojiPanel, seenSteps }: { preview: boolean; emojiPanel: boolean; seenSteps: readonly string[] }) {
-  const model = useDraft(!preview);
+  const model = useDraft(true);
   const { draft } = model;
   const editor = useRef<HTMLTextAreaElement>(null);
 
@@ -181,20 +182,6 @@ function Composer({ preview, emojiPanel, seenSteps }: { preview: boolean; emojiP
   const [sheet, setSheet] = useState<SheetId | null>(() => (onboarding.length > 0 ? 'onboarding' : null));
   const seen = useRef<readonly string[]>(seenSteps);
 
-  const [previewText, setPreviewText] = useState(PREVIEW_DRAFT_TEXT);
-  const [previewAttachments, setPreviewAttachments] = useState<ComposerAttachment[]>(() =>
-    preview
-      ? [
-          {
-            id: 'preview-sample',
-            label: 'sample screenshot',
-            thumbnail: (
-              <CompositionPreview composition={PREVIEW_THUMBNAIL_COMPOSITION} source={PREVIEW_SOURCE} fit="cover" className="attachment-composition" />
-            ),
-          },
-        ]
-      : [],
-  );
   const [notice, setNotice] = useState<string | null>(null);
   const [errors, setErrors] = useState<string[]>([]);
   const [importing, setImporting] = useState(false);
@@ -207,7 +194,8 @@ function Composer({ preview, emojiPanel, seenSteps }: { preview: boolean; emojiP
   /** The `aiRun.finished` count the user has seen, so "Suggestions ready" shows only for new results. */
   const [aiSeen, setAiSeen] = useState(0);
   const [settingsFocus, setSettingsFocus] = useState<string | undefined>(undefined);
-  const ideasState = useIdeas(!preview);
+  // Preview mode lists the seeded sample idea; finding new ones stays off.
+  const ideasState = useIdeas(true);
   const projectList = useProjects(!preview) ?? [];
 
   // X (T9): accounts, publish jobs, and the sheets they open.
@@ -218,13 +206,10 @@ function Composer({ preview, emojiPanel, seenSteps }: { preview: boolean; emojiP
   const freshDraftFor = useRef(new Set<string>());
 
   useHoldWhile(useAnyPopoverOpen() || sheet !== null);
-  useReadyMarker(preview || draft !== null);
+  useReadyMarker(draft !== null);
   useEffect(() => window.xbot.events.on('ui:open-settings', () => setSheet('settings')), []);
-  useEffect(() => {
-    if (preview) return;
-    // A drop on the menu-bar icon: main imported it; useDraft reloads the attachments.
-    return window.xbot.events.on('media:imported', ({ rejected }) => setErrors(rejected.map((r) => r.message)));
-  }, [preview]);
+  // A drop on the menu-bar icon: main imported it; useDraft reloads the attachments.
+  useEffect(() => window.xbot.events.on('media:imported', ({ rejected }) => setErrors(rejected.map((r) => r.message))), []);
   useEffect(() => {
     const onVisibility = () => {
       if (document.visibilityState === 'hidden') setErrors([]);
@@ -262,27 +247,20 @@ function Composer({ preview, emojiPanel, seenSteps }: { preview: boolean; emojiP
     }
   };
   const addFiles = (files: File[]) => void importWith((id) => window.xbot.media.importFiles(id, files));
-  const dragActive = useFileDrop(!preview && draft !== null, addFiles);
+  const dragActive = useFileDrop(draft !== null, addFiles);
 
-  const text = preview ? previewText : model.text;
+  const text = model.text;
   const media = draft?.attachments.map((a) => a.media) ?? [];
-  const attachments: ComposerAttachment[] = preview
-    ? previewAttachments
-    : (draft?.attachments ?? []).map((a, index) => ({
-        id: a.id,
-        label: `attachment ${index + 1}, ${a.media.name}`,
-        thumbnail: <MediaThumb media={a.media} />,
-      }));
+  const attachments: ComposerAttachment[] = (draft?.attachments ?? []).map((a, index) => ({
+    id: a.id,
+    label: `attachment ${index + 1}, ${a.media.name}`,
+    thumbnail: <MediaThumb media={a.media} />,
+  }));
 
   const remove = (id: string) => {
-    if (preview) setPreviewAttachments((list) => list.filter((a) => a.id !== id));
-    else if (draft) void run(window.xbot.drafts.removeAttachment(draft.id, id));
+    if (draft) void run(window.xbot.drafts.removeAttachment(draft.id, id));
   };
   const reorder = (from: number, to: number) => {
-    if (preview) {
-      setPreviewAttachments((list) => move(list, from, to));
-      return;
-    }
     if (!draft) return;
     const next = move(draft.attachments, from, to);
     model.apply({ ...draft, attachments: next }); // at once, so focus can follow the moved card
@@ -294,10 +272,7 @@ function Composer({ preview, emojiPanel, seenSteps }: { preview: boolean; emojiP
     );
   };
   const editInStudio = async (id: string) => {
-    if (preview || !draft) {
-      void window.xbot.windows.openStudio();
-      return;
-    }
+    if (!draft) return;
     await model.flush();
     const result = await window.xbot.drafts.openInStudio(draft.id, id);
     if (!result.ok) setErrors([result.error.message]);
@@ -336,7 +311,7 @@ function Composer({ preview, emojiPanel, seenSteps }: { preview: boolean; emojiP
   const aiRunning = aiRun.running || aiState?.running?.priority === 'interactive';
   const aiContext: MenuContext = {
     preview,
-    draftLoaded: preview || draft !== null,
+    draftLoaded: draft !== null,
     hasText: text.trim() !== '',
     hasSelection: aiSelection !== null,
     running: aiRunning,
@@ -481,16 +456,12 @@ function Composer({ preview, emojiPanel, seenSteps }: { preview: boolean; emojiP
     }
   };
 
-  /** Post ↑: with a connected account, one publish job for the saved draft; without one, the post-it-yourself sheet. */
+  /** Post ↑: with a connected account, one publish job for the saved draft; without one (and always in preview), the post-it-yourself sheet. */
   const post = async () => {
-    if (preview) {
-      setNotice('Posting is off in preview');
-      return;
-    }
     if (!draft || posting) return;
     setErrors([]);
-    if (!activeAccount(xstate)) {
-      setFallbackLede(null);
+    if (preview || !activeAccount(xstate)) {
+      setFallbackLede(preview ? PREVIEW_POST_LEDE : null);
       setSheet('publish');
       return;
     }
@@ -509,29 +480,23 @@ function Composer({ preview, emojiPanel, seenSteps }: { preview: boolean; emojiP
 
   const { weightedLength, overLimit, limit } = postLength(text);
   const hasContent = text.trim() !== '' || attachments.length > 0;
-  const warning = preview ? null : mixWarning(media);
+  const warning = mixWarning(media);
   const jobBusy = posting || (draftJob !== null && isActiveStatus(draftJob.status) && draftJob.status !== 'needs_reconciliation');
-  const postDisabledReason = preview
-    ? overLimit
-      ? `Over the ${limit}-character limit`
-      : weightedLength === 0
-        ? 'Write something first'
-        : undefined
-    : !draft
-      ? 'Loading your draft…'
-      : !hasContent
-        ? 'Write something or add media first'
-        : overLimit
-          ? `Over the ${limit}-character limit`
-          : warning
-            ? warning
-            : importing
-              ? 'Adding media…'
-              : jobBusy
-                ? 'This draft is being posted'
-                : draftJob?.status === 'needs_reconciliation'
-                  ? 'Check X for this post first'
-                  : undefined;
+  const postDisabledReason = !draft
+    ? 'Loading your draft…'
+    : !hasContent
+      ? 'Write something or add media first'
+      : overLimit
+        ? `Over the ${limit}-character limit`
+        : warning
+          ? warning
+          : importing
+            ? 'Adding media…'
+            : jobBusy
+              ? 'This draft is being posted'
+              : draftJob?.status === 'needs_reconciliation'
+                ? 'Check X for this post first'
+                : undefined;
 
   const trigger = accountTrigger(xstate);
   const account: AccountState = preview
@@ -539,10 +504,9 @@ function Composer({ preview, emojiPanel, seenSteps }: { preview: boolean; emojiP
     : trigger.kind === 'connected'
       ? { kind: 'connected', handle: trigger.handle, reconnect: trigger.reconnect }
       : trigger;
-  const unavailableInPreview = preview ? 'Not available in preview' : undefined;
   const menuItems: MenuItem[] = [
-    { id: 'new-draft', label: 'New draft', detail: unavailableInPreview, disabled: preview || !draft, onSelect: () => void startNew() },
-    { id: 'history', label: 'Draft history…', detail: unavailableInPreview, disabled: preview, onSelect: () => setSheet('history') },
+    { id: 'new-draft', label: 'New draft', disabled: !draft, onSelect: () => void startNew() },
+    { id: 'history', label: 'Draft history…', onSelect: () => setSheet('history') },
     {
       id: 'settings',
       label: 'Settings…',
@@ -576,11 +540,11 @@ function Composer({ preview, emojiPanel, seenSteps }: { preview: boolean; emojiP
       <h1 className="composer-title">Write Post</h1>
       <PostEditor
         value={text}
-        onChange={preview ? setPreviewText : model.setText}
+        onChange={model.setText}
         autoFocus
-        readOnly={!preview && !draft}
+        readOnly={!draft}
         maxLength={TEXT_MAX}
-        saveState={preview ? undefined : model.saveState}
+        saveState={model.saveState}
         onEmoji={emojiPanel ? () => void window.xbot.windows.showEmojiPanel() : undefined}
         editorRef={editor}
       />
@@ -591,8 +555,8 @@ function Composer({ preview, emojiPanel, seenSteps }: { preview: boolean; emojiP
         </div>
       )}
       <UploadZone
-        onAdd={preview || !draft ? undefined : () => void importWith((id) => window.xbot.media.pick(id))}
-        disabledReason={preview ? 'Adding media is off in preview' : 'Loading your draft…'}
+        onAdd={!draft ? undefined : () => void importWith((id) => window.xbot.media.pick(id))}
+        disabledReason="Loading your draft…"
         dragActive={dragActive}
         busy={importing}
       />
