@@ -1,0 +1,128 @@
+/*
+ * xBot design tokens. One set for both surfaces; values are CSS px measured
+ * from docs/reference/xbot-final-ui.png (≈1.483 image px per CSS px).
+ *
+ * Modes, set on <html> (see ARCHITECTURE.md → "Design system"):
+ * - data-material="vibrancy" | "css": native macOS material behind the page,
+ *   or the CSS-only glass over its own neutral base;
+ * - data-reduce-transparency="on" or prefers-reduced-transparency: opaque graphite;
+ * - data-contrast="more" or prefers-contrast: more: strong scrim.
+ */
+:root {
+  /* Type: SF Pro on macOS; Inter only where it happens to be installed (capture boxes). */
+  --font-ui: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', Inter, system-ui, sans-serif;
+  --fs-xs: 12px;
+  --fs-sm: 14px;
+  --fs-md: 16px;
+  --fs-lg: 20px;
+  --fs-title: 23px;
+  --fs-heading: 25.5px;
+  --fw-regular: 400;
+  --fw-medium: 500;
+  --fw-semibold: 600;
+  --fw-bold: 700;
+
+  /* Text: white on glass, dark navy on frosted pills. */
+  --text-primary: #fff;
+  --text-secondary: rgb(255 255 255 / 0.8);
+  --text-tertiary: rgb(255 255 255 / 0.62);
+  --text-on-frost: #0d1b3a;
+  --text-shadow: 0 1px 2px rgb(0 0 0 / 0.22);
+
+  /* Radii. Under native vibrancy the window silhouette is the system radius. */
+  --radius-window-css: 40px;
+  --radius-window-native: 10px;
+  --radius-window: var(--radius-window-css);
+  --radius-card: 18px;
+  --radius-thumb: 16px;
+  --radius-canvas: 13px;
+  --radius-control: 12px;
+  --radius-pill: 999px;
+
+  /* Glass fills. Neutral (no hue): the colour comes from what is behind the window. */
+  --glass-tint: rgb(255 255 255 / 0.05);
+  --glass-card-fill: rgb(255 255 255 / 0.09);
+  --glass-card-border: rgb(255 255 255 / 0.26);
+  --glass-control-fill: rgb(255 255 255 / 0.16);
+  --glass-control-hover: rgb(255 255 255 / 0.24);
+  --glass-popover-fill: rgb(255 255 255 / 0.16);
+  --glass-active-fill: rgb(255 255 255 / 0.18);
+  --frost-fill: rgb(255 255 255 / 0.94);
+  --divider: rgb(255 255 255 / 0.16);
+
+  /* What sits under the glass layers: nothing over native vibrancy. */
+  --panel-base: transparent;
+
+  /* Specular rim and edges. */
+  --rim-strong: rgb(255 255 255 / 0.65);
+  --rim-weak: rgb(255 255 255 / 0.15);
+  --hairline: rgb(0 0 0 / 0.22);
+
+  /* Scrim behind text-bearing areas: just enough for 3:1 over a light wallpaper. */
+  --scrim-panel: rgb(10 12 18 / 0.12);
+  --scrim-card: rgb(10 12 18 / 0.14);
+
+  /* Shadows. */
+  --shadow-pill: 0 6px 18px rgb(0 0 0 / 0.18);
+  --shadow-popover: 0 18px 40px rgb(0 0 0 / 0.28);
+
+  --focus-ring: 0 0 0 2px rgb(255 255 255 / 0.6);
+  --warning: #ffb4a8;
+}
+
+:root[data-material='vibrancy'] {
+  --radius-window: var(--radius-window-native);
+}
+
+/* CSS-only glass (no native material): a neutral graphite base, never navy. */
+:root[data-material='css'] {
+  --panel-base: linear-gradient(160deg, rgb(70 73 80 / 0.94), rgb(38 40 45 / 0.96));
+}
+
+/* Increase contrast: the app setting or the OS preference. */
+:root[data-contrast='more'] {
+  --scrim-panel: rgb(10 12 18 / 0.45);
+  --scrim-card: rgb(10 12 18 / 0.35);
+  --text-secondary: rgb(255 255 255 / 0.92);
+  --text-tertiary: rgb(255 255 255 / 0.82);
+  --glass-card-border: rgb(255 255 255 / 0.42);
+  --divider: rgb(255 255 255 / 0.3);
+}
+
+@media (prefers-contrast: more) {
+  :root {
+    --scrim-panel: rgb(10 12 18 / 0.45);
+    --scrim-card: rgb(10 12 18 / 0.35);
+    --text-secondary: rgb(255 255 255 / 0.92);
+    --text-tertiary: rgb(255 255 255 / 0.82);
+    --glass-card-border: rgb(255 255 255 / 0.42);
+    --divider: rgb(255 255 255 / 0.3);
+  }
+}
+
+/* Reduced transparency: the app setting or the OS preference. Opaque neutral graphite. */
+:root[data-reduce-transparency='on'] {
+  --panel-base: #2b2d31;
+  --glass-tint: transparent;
+  --glass-card-fill: #393b40;
+  --glass-control-fill: #45474d;
+  --glass-control-hover: #505259;
+  --glass-popover-fill: #393b40;
+  --glass-active-fill: #4a4c52;
+  --scrim-panel: transparent;
+  --scrim-card: transparent;
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  :root {
+    --panel-base: #2b2d31;
+    --glass-tint: transparent;
+    --glass-card-fill: #393b40;
+    --glass-control-fill: #45474d;
+    --glass-control-hover: #505259;
+    --glass-popover-fill: #393b40;
+    --glass-active-fill: #4a4c52;
+    --scrim-panel: transparent;
+    --scrim-card: transparent;
+  }
+}

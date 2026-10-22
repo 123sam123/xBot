@@ -1,0 +1,875 @@
+/* Write Post. 420 px wide; the window's height follows this panel's height. */
+
+.composer {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  padding: 40px 36px 27px;
+}
+
+/* ---------- Header ---------- */
+
+.composer-header {
+  display: flex;
+  align-items: center;
+  height: 30px;
+}
+
+.app-mark {
+  flex: none;
+  filter: drop-shadow(0 1px 2px rgb(0 0 0 / 0.12));
+}
+
+.composer-name {
+  margin-left: 14px;
+  font-size: 18px;
+  font-weight: var(--fw-medium);
+}
+
+/* The mark and name are the app menu's trigger; padding is cancelled by the margin, so nothing moves. */
+.app-menu-trigger {
+  display: flex;
+  align-items: center;
+  margin: -4px -6px;
+  padding: 4px 6px;
+  border: 0;
+  border-radius: 12px;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-shadow: inherit;
+}
+
+.app-menu-trigger:hover,
+.app-menu-trigger[aria-expanded='true'] {
+  background: rgb(255 255 255 / 0.08);
+}
+
+.app-menu-trigger:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.account-trigger {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  margin: 0 -6px 0 auto;
+  padding: 3px 0 3px 8px;
+  border: 0;
+  border-radius: 10px;
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-size: 17.5px;
+  text-shadow: inherit;
+}
+
+.account-trigger:hover {
+  background: rgb(255 255 255 / 0.08);
+}
+
+.account-trigger:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.account-handle {
+  min-width: 0;
+  max-width: 190px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.account-chevron {
+  flex: none;
+}
+
+/* ---------- Heading and editor ---------- */
+
+.composer-title {
+  margin-top: 33px;
+  font-size: var(--fs-heading);
+  font-weight: var(--fw-bold);
+  line-height: 32px;
+  letter-spacing: -0.012em;
+}
+
+.post-editor-card {
+  margin-top: 14px;
+  height: 128px;
+  transition:
+    border-color 120ms ease,
+    background-color 120ms ease;
+}
+
+.post-editor-card:focus-within {
+  border-color: rgb(255 255 255 / 0.36);
+}
+
+.post-editor {
+  display: block;
+  width: 100%;
+  height: 100%;
+  padding: 16px 18px;
+  border: 0;
+  background: none;
+  color: var(--text-primary);
+  caret-color: #fff;
+  font: inherit;
+  font-size: var(--fs-lg);
+  line-height: 26px;
+  text-shadow: inherit;
+  resize: none;
+  outline: none;
+  user-select: text;
+}
+
+.post-editor::placeholder {
+  color: var(--text-tertiary);
+}
+
+.post-editor-emoji {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  opacity: 0.7;
+}
+
+.post-editor-emoji:hover,
+.post-editor-emoji:focus-visible {
+  opacity: 1;
+}
+
+/* ---------- Attachments ---------- */
+
+.attachment-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 13px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.attachment-card {
+  display: flex;
+  align-items: center;
+  height: 100px;
+  padding-right: 17px;
+}
+
+.attachment-thumb {
+  position: relative;
+  flex: none;
+  width: 154px;
+  height: 100px;
+  margin: -1px 0 -1px -1px;
+  overflow: hidden;
+  border-radius: var(--radius-thumb);
+}
+
+.attachment-thumb::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  box-shadow:
+    inset 0 0 0 1px rgb(255 255 255 / 0.38),
+    inset 0 1px 6px rgb(255 255 255 / 0.25);
+  pointer-events: none;
+}
+
+.attachment-composition {
+  width: 100%;
+  height: 100%;
+}
+
+/* With reorder controls the card needs room for ↑/↓: they stack, and the thumbnail narrows a little. */
+.attachment-list-reorderable .attachment-card {
+  padding-right: 12px;
+}
+
+.attachment-list-reorderable .attachment-thumb {
+  width: 128px;
+}
+
+.attachment-list-reorderable .attachment-edit {
+  margin-left: 12px;
+}
+
+.attachment-move {
+  display: flex;
+  flex-direction: column;
+}
+
+/* More than two cards scroll inside the panel, so the window never outgrows the screen.
+   The scrollbar sits in the panel's side inset, so the cards keep their width. */
+.attachment-list-scroll {
+  max-height: 270px;
+  margin-right: -10px;
+  padding-right: 10px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.attachment-list-scroll::-webkit-scrollbar {
+  width: 6px;
+}
+
+.attachment-list-scroll::-webkit-scrollbar-thumb {
+  border-radius: 3px;
+  background: rgb(255 255 255 / 0.28);
+}
+
+.attachment-drop-target > .attachment-card {
+  border-color: rgb(255 255 255 / 0.6);
+}
+
+.media-thumb {
+  position: relative;
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.media-thumb-image {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.media-thumb-tile {
+  display: block;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(135deg, rgb(255 255 255 / 0.16), rgb(255 255 255 / 0.04));
+}
+
+.media-thumb-video {
+  position: absolute;
+  left: 8px;
+  bottom: 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 7px;
+  border-radius: var(--radius-pill);
+  background: rgb(0 0 0 / 0.5);
+  font-size: var(--fs-xs);
+  font-variant-numeric: tabular-nums;
+}
+
+.composer-warning {
+  display: flex;
+  margin-top: 10px;
+}
+
+.composer-errors {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 10px;
+  color: var(--warning);
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.composer-errors p {
+  margin: 0;
+}
+
+.attachment-edit {
+  min-width: 0;
+  margin-left: 16px;
+  font-size: 14.5px;
+  gap: 8px;
+}
+
+.attachment-edit .btn-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.attachment-actions {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+}
+
+/* ---------- Upload zone ---------- */
+
+.tooltip-anchor-block {
+  display: flex;
+  width: 100%;
+}
+
+/* The dashes are an SVG, for the reference's longer dash (CSS dashed borders are short). */
+.upload-zone {
+  --dashes: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'%3E%3Crect x='.75' y='.75' rx='15.25' style='width:calc(100%25 - 1.5px);height:calc(100%25 - 1.5px)' fill='none' stroke='%23fff' stroke-opacity='.42' stroke-width='1.5' stroke-dasharray='6 5'/%3E%3C/svg%3E");
+
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 13px;
+  width: 100%;
+  height: 95px;
+  margin-top: 13px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-thumb);
+  background: var(--dashes), rgb(255 255 255 / 0.025);
+  color: inherit;
+  font: inherit;
+  text-shadow: inherit;
+}
+
+.upload-zone:not([aria-disabled='true']):hover {
+  background: var(--dashes), rgb(255 255 255 / 0.07);
+}
+
+.upload-zone-active,
+.upload-zone-active:not([aria-disabled='true']):hover {
+  background: var(--dashes), rgb(255 255 255 / 0.14);
+}
+
+:root[data-contrast='more'] .upload-zone {
+  --dashes: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'%3E%3Crect x='.75' y='.75' rx='15.25' style='width:calc(100%25 - 1.5px);height:calc(100%25 - 1.5px)' fill='none' stroke='%23fff' stroke-opacity='.65' stroke-width='1.5' stroke-dasharray='6 5'/%3E%3C/svg%3E");
+}
+
+@media (prefers-contrast: more) {
+  .upload-zone {
+    --dashes: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'%3E%3Crect x='.75' y='.75' rx='15.25' style='width:calc(100%25 - 1.5px);height:calc(100%25 - 1.5px)' fill='none' stroke='%23fff' stroke-opacity='.65' stroke-width='1.5' stroke-dasharray='6 5'/%3E%3C/svg%3E");
+  }
+}
+
+.upload-zone:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+/* Inert (preview mode, or the draft is still loading): a touch quieter, and its tooltip says why. */
+.upload-zone[aria-disabled='true'] > * {
+  opacity: 0.85;
+}
+
+.upload-zone-plus {
+  display: grid;
+  place-items: center;
+  width: 31px;
+  height: 31px;
+  border-radius: 50%;
+  background: var(--glass-control-fill);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.22);
+}
+
+.upload-zone-label {
+  font-size: 15px;
+}
+
+/* ---------- Action row ---------- */
+
+.action-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 42px;
+  margin-top: 17px;
+}
+
+.char-count {
+  font-size: 14.5px;
+  color: var(--text-tertiary);
+  font-variant-numeric: tabular-nums;
+}
+
+.char-count-over {
+  color: var(--warning);
+  font-weight: var(--fw-semibold);
+}
+
+.action-row-notice {
+  display: flex;
+  justify-content: flex-end;
+  flex: 1;
+  min-width: 0;
+}
+
+.post-button {
+  min-width: 137px;
+  gap: 14px;
+  font-size: 17px;
+}
+
+.composer-divider {
+  margin-top: 16px;
+}
+
+/* ---------- Reminder row ---------- */
+
+.reminder-row {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  height: 21px;
+  margin-top: 19px;
+  color: var(--text-secondary);
+  font-size: var(--fs-sm);
+}
+
+.reminder-row svg {
+  flex: none;
+  margin-left: 1px;
+}
+
+.reminder-row-button {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: var(--fs-sm);
+  text-shadow: inherit;
+}
+
+.reminder-row-muted {
+  color: var(--text-tertiary);
+}
+
+/* ---------- Sheets: publish options, history, onboarding, settings ---------- */
+
+.sheet-lede {
+  margin: 0;
+  font-size: var(--fs-md);
+  color: var(--text-secondary);
+}
+
+.sheet-note,
+.sheet-empty {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--text-tertiary);
+}
+
+.publish-options {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.publish-option {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 14px;
+  border: 1px solid var(--glass-card-border);
+  border-radius: var(--radius-control);
+  background: var(--glass-card-fill);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  text-decoration: none;
+  text-shadow: inherit;
+  cursor: default;
+}
+
+.publish-option:not([aria-disabled='true']):hover {
+  background: var(--glass-control-hover);
+}
+
+.publish-option:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.publish-option[aria-disabled='true'] {
+  opacity: 0.55;
+}
+
+.publish-option-icon {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--glass-control-fill);
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-semibold);
+}
+
+.publish-option-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.publish-option-label {
+  font-size: var(--fs-md);
+  font-weight: var(--fw-semibold);
+}
+
+.publish-option-detail {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.publish-outcome {
+  align-self: flex-start;
+  white-space: normal;
+}
+
+.history-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.history-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.history-item {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  padding: 8px;
+  border: 1px solid var(--glass-card-border);
+  border-radius: var(--radius-control);
+  background: var(--glass-card-fill);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  text-shadow: inherit;
+}
+
+.history-item:hover {
+  background: var(--glass-control-hover);
+}
+
+.history-item:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.history-thumb {
+  flex: none;
+  width: 56px;
+  height: 40px;
+  overflow: hidden;
+  border-radius: 8px;
+  background: rgb(255 255 255 / 0.06);
+}
+
+.history-thumb img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.history-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.history-preview {
+  overflow: hidden;
+  font-size: 15px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.history-meta {
+  font-size: var(--fs-xs);
+  color: var(--text-tertiary);
+}
+
+.onboarding-lede {
+  margin: 0;
+  font-size: 22px;
+  font-weight: var(--fw-semibold);
+  letter-spacing: -0.01em;
+}
+
+.onboarding-text {
+  margin: 10px 0 0;
+  font-size: 15px;
+  line-height: 1.45;
+  color: var(--text-secondary);
+}
+
+.onboarding-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.onboarding-progress {
+  font-size: 13px;
+  color: var(--text-tertiary);
+}
+
+.onboarding-skip {
+  margin-left: auto;
+}
+
+.settings-section,
+.settings-section-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* A section whose component renders nothing (e.g. Status with no providers) is hidden. */
+.settings-section:has(> .settings-section-body:empty) {
+  display: none;
+}
+
+.status-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.status-chips-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.status-chips-detail {
+  font-size: var(--fs-xs);
+  color: var(--text-tertiary);
+}
+
+.status-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+}
+
+.status-dot-ok {
+  background: #8ee6b0;
+}
+
+.status-dot-busy {
+  background: #fff;
+  animation: status-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes status-pulse {
+  50% {
+    opacity: 0.35;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .status-dot-busy {
+    animation: none;
+  }
+}
+
+/* ---------- X publishing (T9): job row, reconcile sheet, setup ---------- */
+
+.publish-status {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 12px;
+  padding: 8px 8px 8px 14px;
+  border: 1px solid var(--glass-card-border);
+  border-radius: var(--radius-control);
+  background: var(--glass-card-fill);
+  font-size: 13.5px;
+}
+
+.publish-status-warning .publish-status-label {
+  color: var(--warning);
+}
+
+.publish-status-text {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+}
+
+.publish-status-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  line-height: 1.35;
+}
+
+.publish-status-draft {
+  overflow: hidden;
+  color: var(--text-tertiary);
+  font-size: var(--fs-xs);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.publish-status-bar {
+  display: block;
+  height: 3px;
+  overflow: hidden;
+  border-radius: 2px;
+  background: rgb(255 255 255 / 0.16);
+}
+
+.publish-status-bar > span {
+  display: block;
+  width: var(--progress);
+  height: 100%;
+  border-radius: inherit;
+  background: rgb(255 255 255 / 0.85);
+  transition: width 200ms ease;
+}
+
+.publish-status-actions {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 2px;
+}
+
+.publish-status-action {
+  height: 30px;
+  padding: 0 10px;
+  gap: 6px;
+  font-size: 13.5px;
+}
+
+.reconcile-post {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 12px 14px;
+  border: 1px solid var(--glass-card-border);
+  border-radius: var(--radius-control);
+  background: var(--glass-card-fill);
+  font-size: var(--fs-sm);
+  line-height: 1.4;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.reconcile-meta {
+  color: var(--text-tertiary);
+  font-size: var(--fs-xs);
+}
+
+.reconcile-check:empty {
+  display: none;
+}
+
+.reconcile-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.x-setup {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.x-setup-text {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.x-setup-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 0;
+  padding-left: 20px;
+  font-size: var(--fs-sm);
+  line-height: 1.4;
+}
+
+.x-setup-steps a {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  color: inherit;
+}
+
+.x-setup-accounts {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.x-setup-account {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.x-setup-handle {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  font-size: var(--fs-sm);
+}
+
+.x-setup-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+/* A long notice ("Connected as @…") truncates instead of running over the counter. */
+.action-row-notice > .status-chip {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.x-setup-port {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.x-setup-note {
+  margin: 0;
+  color: var(--text-tertiary);
+  font-size: var(--fs-xs);
+  line-height: 1.35;
+}

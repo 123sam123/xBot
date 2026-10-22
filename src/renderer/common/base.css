@@ -1,0 +1,32 @@
+/* Loaded once per page: the design system's tokens, material and components. */
+@import '../design-system/tokens.css';
+@import '../design-system/glass.css';
+@import '../design-system/components.css';
+
+:root {
+  color-scheme: dark;
+  font-family: var(--font-ui);
+  color: var(--text-primary);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+html,
+body {
+  margin: 0;
+  background: transparent;
+  user-select: none;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+h1,
+h2,
+h3,
+p {
+  margin: 0;
+}

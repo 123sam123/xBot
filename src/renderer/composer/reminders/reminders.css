@@ -1,0 +1,114 @@
+/* Reminders (T8): the row's idea and hint, the reminder menu's header, and
+   the hours, days and shortcut fields. Fields reuse the design system's
+   .field / .field-input and small buttons T6's .ai-status-action; nothing
+   here restyles a shared component. */
+
+/* ---------- Row ---------- */
+
+.reminder-row-label {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.reminder-row-hint {
+  margin: 6px 0 0 34px;
+  font-size: var(--fs-xs);
+  color: var(--warning);
+}
+
+/* ---------- Menu header ---------- */
+
+.reminder-menu-status {
+  color: var(--text-primary);
+}
+
+.reminder-menu-idea {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  line-height: 1.35;
+}
+
+.reminder-menu-hint {
+  color: var(--warning);
+}
+
+/* ---------- Fields ---------- */
+
+.reminder-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.reminder-hours {
+  display: flex;
+  gap: 12px;
+}
+
+.reminder-time .field-input {
+  /* Room for a 12-hour "09:00 AM" and the picker icon. */
+  width: 124px;
+  flex: none;
+  font-variant-numeric: tabular-nums;
+  color-scheme: dark;
+}
+
+.reminder-note {
+  margin: 0;
+  font-size: var(--fs-xs);
+  line-height: 1.4;
+  color: var(--text-tertiary);
+}
+
+.reminder-note-error {
+  color: var(--warning);
+}
+
+.reminder-days {
+  display: flex;
+  gap: 6px;
+}
+
+.reminder-day {
+  width: 32px;
+  height: 30px;
+  padding: 0;
+  border: 0;
+  border-radius: 9px;
+  background: rgb(0 0 0 / 0.16);
+  box-shadow: inset 0 0 0 0.5px rgb(255 255 255 / 0.18);
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: var(--fs-xs);
+}
+
+.reminder-day-on {
+  background: rgb(255 255 255 / 0.9);
+  color: var(--text-on-frost);
+}
+
+.reminder-day:focus-visible,
+.reminder-shortcut:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.reminder-shortcut {
+  flex: none;
+  min-width: 96px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.reminder-shortcut[data-recording] {
+  box-shadow: var(--focus-ring);
+  color: var(--text-secondary);
+}
+
+.reminder-test {
+  align-self: flex-start;
+}

@@ -1,0 +1,820 @@
+/* Media Studio. 790×635 by default, resizable down to 720×560. */
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+.studio {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+}
+
+/* ---------- Top bar (drags the frameless window; .btn opts out) ---------- */
+
+.studio-bar {
+  -webkit-app-region: drag;
+  flex: none;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  height: 88px;
+  padding: 10px 28px 0 24px;
+}
+
+.studio-back {
+  justify-self: start;
+  gap: 12px;
+  font-size: 16.5px;
+}
+
+.studio-title {
+  position: relative;
+  font-size: var(--fs-title);
+  font-weight: var(--fw-semibold);
+  letter-spacing: -0.01em;
+}
+
+.studio-badge {
+  position: absolute;
+  left: calc(100% + 10px);
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+/* Near the minimum width the undo/redo/more buttons need the room on the right. */
+@media (max-width: 760px) {
+  .studio-badge {
+    left: auto;
+    right: calc(100% + 10px);
+  }
+}
+
+.studio-bar-end {
+  justify-self: end;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.studio-add {
+  min-width: 116px;
+  padding: 0 18px;
+}
+
+.studio-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  -webkit-app-region: no-drag;
+}
+
+.studio-actions .btn-icon-bare[aria-disabled='true'] {
+  opacity: 0.4;
+}
+
+/* ---------- Canvas ---------- */
+
+.studio-canvas {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  margin: 0 39px;
+  overflow: hidden;
+  border-radius: var(--radius-canvas);
+  background: rgb(255 255 255 / 0.06);
+}
+
+.studio-canvas::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  box-shadow:
+    inset 0 0 0 1px rgb(255 255 255 / 0.28),
+    inset 0 1px 8px rgb(255 255 255 / 0.18);
+  pointer-events: none;
+}
+
+.studio-canvas-drop::after {
+  box-shadow:
+    inset 0 0 0 2px rgb(255 255 255 / 0.8),
+    inset 0 1px 8px rgb(255 255 255 / 0.18);
+}
+
+/* The composition at the chosen zoom, centred; it scrolls when larger than the area. */
+.studio-viewport {
+  position: absolute;
+  inset: 0;
+  overflow: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgb(255 255 255 / 0.35) transparent;
+}
+
+.studio-viewport-inner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 100%;
+  min-height: 100%;
+  width: max-content;
+}
+
+/* A video shown read-only: FFmpeg is missing (T5). */
+.studio-target {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.studio-empty {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  color: var(--text-tertiary);
+  font-size: var(--fs-md);
+}
+
+.studio-empty-action {
+  padding: 0 18px;
+}
+
+.studio-toast {
+  position: absolute;
+  top: 10px;
+  left: 50%;
+  z-index: 1;
+  max-width: calc(100% - 40px);
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
+/* ---------- Video (T5) ---------- */
+
+/* The <video> under the canvas's frame layer, exactly as FFmpeg composites the export. */
+.video-stage {
+  position: relative;
+  flex: none;
+  overflow: hidden;
+}
+
+.video-stage-video {
+  position: absolute;
+  object-fit: fill;
+  background: #000;
+  pointer-events: none;
+}
+
+.video-stage-canvas {
+  position: relative;
+}
+
+.video-stage-note {
+  position: absolute;
+  left: 50%;
+  bottom: 12px;
+  transform: translateX(-50%);
+  padding: 4px 10px;
+  border-radius: 10px;
+  background: rgb(0 0 0 / 0.55);
+  font-size: var(--fs-xs);
+  white-space: nowrap;
+}
+
+/* "Video editing needs FFmpeg": over the read-only video (clear of its controls), or slim over a video document. */
+.studio-ffmpeg {
+  position: absolute;
+  left: 50%;
+  top: 12px;
+  z-index: 1;
+  width: min(440px, calc(100% - 40px));
+  transform: translateX(-50%);
+}
+
+.ffmpeg-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px 18px;
+}
+
+.ffmpeg-card-compact {
+  gap: 6px;
+  padding: 10px 14px;
+}
+
+.ffmpeg-card-title {
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-medium);
+}
+
+.ffmpeg-card-text {
+  font-size: var(--fs-xs);
+  color: var(--text-secondary);
+  user-select: text;
+}
+
+.ffmpeg-card-text a {
+  color: inherit;
+  text-decoration: underline;
+}
+
+.ffmpeg-card-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 2px;
+}
+
+.ffmpeg-card-button {
+  height: 30px;
+  min-width: 0;
+  padding: 0 14px;
+  font-size: var(--fs-xs);
+}
+
+.ffmpeg-card-note {
+  font-size: var(--fs-xs);
+  color: var(--text-tertiary);
+}
+
+.studio-export-status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* The toast ignores the pointer; its Cancel doesn't. */
+.studio-cancel {
+  height: 28px;
+  padding: 0 10px;
+  font-size: var(--fs-xs);
+  pointer-events: auto;
+}
+
+.studio-toast .status-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+}
+
+.studio-toast .status-dot-busy {
+  background: #fff;
+  animation: studio-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes studio-pulse {
+  50% {
+    opacity: 0.35;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .studio-toast .status-dot-busy {
+    animation: none;
+  }
+}
+
+/* ---------- Crop mode ---------- */
+
+.crop-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding-bottom: 64px; /* CONTROLS_CLEARANCE: the Crop popover's row */
+  overflow: hidden;
+  touch-action: none;
+}
+
+.crop-stage {
+  position: relative;
+  flex: none;
+}
+
+.crop-image {
+  display: block;
+  width: 100%;
+  height: 100%;
+  user-select: none;
+}
+
+.crop-rect {
+  position: absolute;
+  box-shadow:
+    0 0 0 1.5px #fff,
+    0 0 0 9999px rgb(0 0 0 / 0.55);
+  cursor: move;
+}
+
+.crop-grid {
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(to right, transparent calc(100% / 3 - 0.5px), rgb(255 255 255 / 0.45) calc(100% / 3 - 0.5px), rgb(255 255 255 / 0.45) calc(100% / 3 + 0.5px), transparent calc(100% / 3 + 0.5px), transparent calc(200% / 3 - 0.5px), rgb(255 255 255 / 0.45) calc(200% / 3 - 0.5px), rgb(255 255 255 / 0.45) calc(200% / 3 + 0.5px), transparent calc(200% / 3 + 0.5px)),
+    linear-gradient(to bottom, transparent calc(100% / 3 - 0.5px), rgb(255 255 255 / 0.45) calc(100% / 3 - 0.5px), rgb(255 255 255 / 0.45) calc(100% / 3 + 0.5px), transparent calc(100% / 3 + 0.5px), transparent calc(200% / 3 - 0.5px), rgb(255 255 255 / 0.45) calc(200% / 3 - 0.5px), rgb(255 255 255 / 0.45) calc(200% / 3 + 0.5px), transparent calc(200% / 3 + 0.5px));
+  pointer-events: none;
+}
+
+.crop-handle {
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  margin: -7px 0 0 -7px;
+  border-radius: 3px;
+  background: #fff;
+  box-shadow: 0 1px 3px rgb(0 0 0 / 0.35);
+}
+
+.crop-handle-nw { left: 0; top: 0; cursor: nwse-resize; }
+.crop-handle-n { left: 50%; top: 0; cursor: ns-resize; }
+.crop-handle-ne { left: 100%; top: 0; cursor: nesw-resize; }
+.crop-handle-e { left: 100%; top: 50%; cursor: ew-resize; }
+.crop-handle-se { left: 100%; top: 100%; cursor: nwse-resize; }
+.crop-handle-s { left: 50%; top: 100%; cursor: ns-resize; }
+.crop-handle-sw { left: 0; top: 100%; cursor: nesw-resize; }
+.crop-handle-w { left: 0; top: 50%; cursor: ew-resize; }
+
+/* ---------- Floating toolbar: overlaps the canvas bottom by 9 px ---------- */
+
+.studio-toolbar-row {
+  position: relative;
+  flex: none;
+  height: 63px;
+}
+
+.studio-toolbar {
+  position: absolute;
+  left: 50%;
+  top: -9px;
+  display: flex;
+  align-items: center;
+  width: 583px;
+  height: 72px;
+  padding: 0 7px;
+  border-radius: 36px;
+  transform: translateX(-50%);
+}
+
+.tool-slot {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  height: 100%;
+}
+
+.tool-slot .tooltip-anchor {
+  flex: 1;
+}
+
+.tool-divider {
+  flex: none;
+  width: 1px;
+  height: 30px;
+  background: var(--divider);
+}
+
+.tool {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 59px;
+  margin: 0 3px;
+  padding: 0;
+  border: 0;
+  border-radius: 22px;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-shadow: inherit;
+}
+
+.tool:not([aria-disabled='true']):hover {
+  background: rgb(255 255 255 / 0.1);
+}
+
+.tool:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.tool[aria-disabled='true'] {
+  opacity: 0.45;
+}
+
+.tool-active,
+.tool-active:not([aria-disabled='true']):hover {
+  background: var(--glass-active-fill);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.28),
+    inset 0 0 0 0.5px rgb(255 255 255 / 0.22);
+}
+
+.tool-label {
+  font-size: var(--fs-xs);
+}
+
+/* ---------- Tool popovers ---------- */
+
+.tool-popover {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 196px;
+  padding: 13px 18px 13px 19px;
+}
+
+.tool-popover .slider {
+  min-width: 0;
+}
+
+.tool-popover-background .swatches {
+  gap: 6px;
+}
+
+.tool-popover-title {
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-medium);
+  line-height: 20px;
+}
+
+.tool-popover-adornment {
+  flex: none;
+  color: rgb(255 255 255 / 0.9);
+}
+
+/* Every tool except the compact Background view has room for labelled rows. */
+.tool-popover-wide {
+  width: 268px;
+}
+
+.tool-popover-crop {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+}
+
+.tool-popover-crop .segmented {
+  flex: none;
+}
+
+.tool-popover-background:has(.tool-popover-more-section) {
+  width: 268px;
+}
+
+.tool-popover-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+/* The "More" toggle sits inside the title's 20 px line, so the compact view keeps the reference's size. */
+.tool-popover-more {
+  margin: -2px -6px -2px 0;
+  padding: 1px 3px;
+  color: var(--text-secondary);
+}
+
+.tool-popover-more-open {
+  background: rgb(255 255 255 / 0.14);
+}
+
+.tool-popover-more-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-top: 2px;
+}
+
+.tool-field {
+  display: grid;
+  grid-template-columns: 58px 1fr;
+  align-items: center;
+  gap: 10px;
+}
+
+.tool-field-label {
+  font-size: var(--fs-xs);
+  color: var(--text-secondary);
+}
+
+.tool-field-colors {
+  display: flex;
+  gap: 8px;
+}
+
+.tool-field-pair {
+  display: flex;
+  gap: 12px;
+}
+
+/* Up to five options share a popover row. */
+.tool-popover .segment {
+  padding: 0 6px;
+}
+
+.tool-popover .toggle-row {
+  gap: 12px;
+}
+
+.tool-popover .toggle-label {
+  font-size: var(--fs-xs);
+}
+
+.tool-popover .toggle {
+  transform: scale(0.85);
+  transform-origin: right center;
+}
+
+.tool-popover-note {
+  font-size: var(--fs-xs);
+  color: var(--text-tertiary);
+}
+
+.tool-popover-warning {
+  color: var(--text-primary);
+}
+
+.tool-popover-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.tool-popover-actions-end {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.tool-popover-action {
+  height: 30px;
+  padding: 0 8px;
+  font-size: var(--fs-xs);
+}
+
+.tool-popover-apply {
+  height: 30px;
+  min-width: 0;
+  padding: 0 14px;
+  font-size: var(--fs-xs);
+}
+
+.preset-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 180px;
+  margin: 0;
+  padding: 0;
+  overflow: auto;
+  list-style: none;
+}
+
+.preset-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.preset-apply {
+  flex: 1;
+  min-width: 0;
+  height: 30px;
+  padding: 0 8px;
+  overflow: hidden;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-size: var(--fs-sm);
+  text-align: left;
+  text-overflow: ellipsis;
+  text-shadow: inherit;
+  white-space: nowrap;
+}
+
+.preset-apply:hover,
+.preset-apply:focus-visible {
+  outline: none;
+  background: rgb(255 255 255 / 0.12);
+}
+
+/* ---------- Timeline ---------- */
+
+.timeline {
+  flex: none;
+  display: flex;
+  align-items: center;
+  height: 65px;
+  margin: 11px 24px 0;
+  padding: 0 8px 0 20px;
+}
+
+.timeline-time {
+  flex: none;
+  width: 92px;
+  margin-left: 14px;
+  font-size: 13.5px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.timeline-strip {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  height: 37px;
+  margin-left: 12px;
+}
+
+/* Frames outside the trim range fade, letting the glass show through (no tint of our own). */
+.timeline-frames {
+  display: flex;
+  gap: 2px;
+  height: 100%;
+  overflow: hidden;
+  border-radius: 8px;
+  mask-image: linear-gradient(
+    to right,
+    rgb(0 0 0 / 0.42) var(--trim-start),
+    #000 var(--trim-start),
+    #000 var(--trim-end),
+    rgb(0 0 0 / 0.42) var(--trim-end)
+  );
+}
+
+.timeline-frames img {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 2px;
+}
+
+.timeline-trim {
+  position: absolute;
+  top: -5px;
+  bottom: -5px;
+  border: 3px solid #fff;
+  border-radius: 10px;
+  box-shadow:
+    0 0 0 0.5px rgb(0 0 0 / 0.18),
+    0 2px 8px rgb(0 0 0 / 0.22);
+}
+
+.trim-handle {
+  position: absolute;
+  top: 50%;
+  width: 4px;
+  height: 15px;
+  border-radius: 2px;
+  background: rgb(255 255 255 / 0.95);
+  box-shadow: 0 0 0 0.5px rgb(0 0 0 / 0.25);
+  transform: translateY(-50%);
+}
+
+.trim-handle-start {
+  left: 3px;
+}
+
+.trim-handle-end {
+  right: 3px;
+}
+
+/* Draggable handles (T5): a wider grip over each edge, the bar drawn where it always was. */
+.timeline-strip-interactive {
+  cursor: pointer;
+  touch-action: none;
+}
+
+.trim-grip {
+  position: absolute;
+  top: -3px;
+  bottom: -3px;
+  z-index: 1;
+  width: 18px;
+  cursor: ew-resize;
+  touch-action: none;
+}
+
+.trim-grip-start {
+  left: -6px;
+}
+
+.trim-grip-end {
+  right: -6px;
+}
+
+.trim-grip .trim-handle-start {
+  left: 9px;
+}
+
+.trim-grip .trim-handle-end {
+  right: 9px;
+}
+
+.trim-grip:focus-visible {
+  outline: none;
+}
+
+.trim-grip:focus-visible .trim-handle {
+  box-shadow: var(--focus-ring);
+}
+
+.timeline-playhead {
+  pointer-events: none;
+}
+
+.timeline-mute {
+  flex: none;
+  margin-left: 10px;
+}
+
+.timeline-playhead {
+  position: absolute;
+  top: -10px;
+  bottom: -10px;
+  width: 2px;
+  margin-left: -1px;
+  border-radius: 1px;
+  background: #fff;
+  box-shadow: 0 0 3px rgb(0 0 0 / 0.25);
+}
+
+.timeline-playhead::before,
+.timeline-playhead::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  width: 8px;
+  height: 8px;
+  margin-left: -4px;
+  border-radius: 50%;
+  background: #fff;
+}
+
+.timeline-playhead::before {
+  top: -3px;
+}
+
+.timeline-playhead::after {
+  bottom: -3px;
+}
+
+/* ---------- Footer ---------- */
+
+.studio-footer {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 65px;
+  margin-top: auto;
+  padding: 0 44px 0 42px;
+}
+
+.studio-dims {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: var(--fs-sm);
+  font-variant-numeric: tabular-nums;
+}
+
+.studio-dims-button {
+  margin-left: -6px;
+  padding: 0 6px;
+}
+
+.studio-view {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.studio-view .divider-vertical {
+  height: 26px;
+}
+
+.studio-view-button {
+  gap: 8px;
+  padding: 0 4px;
+  font-size: var(--fs-sm);
+}

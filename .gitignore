@@ -1,0 +1,12 @@
+node_modules/
+out/
+dist/
+test-results/
+playwright-report/
+*.log
+.env
+.env.*
+!.env.example
+.DS_Store
+# Per-machine Claude Code settings
+.claude/settings.local.json
