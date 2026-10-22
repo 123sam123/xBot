@@ -97,9 +97,9 @@ imported by every aggregator, so **a sibling ticket edits only its own files**:
 | `drafts`, `media` | T3 (XBOT-6F4GAC). T3 also added, additively and for the reasons in "Drafts and media": `emojiPanel` and the status calls to `app`, `showEmojiPanel` and `ui.onboardingSeen` to `windows`, the quit flush to `app.ts`, the menu-bar drop to `tray.ts`, the refocus to `hold.ts`, and the Studio hand-off view to `studio/` |
 | `studio` | T4 (XBOT-1N58PP) images; T5 (XBOT-G66JJK) video. T4 also added, additively and for the reasons in "Studio": `importLoose` and an exported `MediaRejected` to the media service, the Studio's quit flush to `app.ts`, full screen to `windows/studio.ts`, moved `useFileDrop` to `renderer/common/`, and the design-system pieces listed under "Components". T5 also added, additively and for the reasons in "Studio video": `services/ffmpeg/` (registered in `services/index.ts` before `media`); the optional `MediaTools.inspectVideo` hook, used by `media/service.ts`, `tools.ts` and `index.ts`; `ffmpeg.org` and `brew.sh` in `security.ts`; `{ hole }` in `drawComposition`; `previewLayout`, `useDevicePixelRatio` and `hole` in `CompositionCanvas`; `SpeakerIcon` and `SpeakerMutedIcon`; and `launch(userData, env?)` in `tests/e2e/studio-harness.ts` |
 | `ai` | T6 (XBOT-4BCGOR). T6 also added, additively: the `aiMenu` slot to `ComposerHeader`, `focusSection` to `SettingsSheet`, the ✦ menu, AI status row and suggestions sheet to `composer/App.tsx`, `src/shared/aiEndpoint.ts` and `src/shared/aiCopy.ts`, and the tighter dev CSP in `electron.vite.config.ts` (see "Local AI") |
-| `projects` | T7 (XBOT-5UVE6R) |
+| `projects` | T7 (XBOT-5UVE6R). T7 also added, additively and for the reasons in "Project context": `generateTask` (with `buildTaskMessages` in `prompts.ts`, an exported `toFormat` in `schemas.ts` and an `'ideas'` running action) to the AI service, the `ideas` slot to `ComposerHeader`, `LightbulbIcon`, the `projects` sheet and Ideas wiring to `composer/App.tsx` (whose AI apply path became the shared `applyText`), `src/shared/ideaCopy.ts`, and the `ignore` devDependency |
 | `reminders` (+ launch at login, global shortcut) | T8 (XBOT-8V5WV5) |
-| `x` | T9 (XBOT-OE2XV9) |
+| `x` | T9 (XBOT-OE2XV9). T9 also added, additively and for the reasons in "X publishing": the X wait in `app.ts`'s first `before-quit`, `openExternalIfAllowed` exported from `security.ts`, `db/durable.ts`, the design system's `TextField`, and props on `AccountMenu`, `ComposerHeader`, `ActionRow` and `PublishSheet` |
 | `backup` (+ README, preview mode fixtures, packaging) | T10 (XBOT-1DDYA1). T2 created `src/renderer/preview/` and `resources/fixtures/`; T10 extends them. |
 
 Shared files that several tickets may still touch, so coordinate:
@@ -158,9 +158,10 @@ if (!result.ok) showError(result.error);
 Its event map is merged from every domain's `<Domain>Events` interface:
 `draft:changed`, `draft:studio-target`, `drafts:flush-requested`,
 `media:imported`, `studio:opened`, `studio:flush-requested`, `studio:fullscreen`,
-`status:changed`, `post:published`, `export:progress` (T5: `{ job }`, a video
-export job's state), `studio:ffmpeg`, `settings:changed`,
-`ui:open-settings`, `ai:state`, `ai:progress` and `ai:pull-progress` exist
+`status:changed`, `post:published`, `x:accounts-changed`, `x:job-changed`,
+`export:progress` (T5: `{ job }`, a video export job's state), `studio:ffmpeg`,
+`settings:changed`, `ui:open-settings`, `ai:state`, `ai:progress`,
+`ai:pull-progress`, `projects:changed` and `projects:ideas-changed` exist
 today. An event listed in a
 domain's `<domain>ForwardedEvents` is forwarded to every window automatically.
 
@@ -212,6 +213,12 @@ domain's `<domain>ForwardedEvents` is forwarded to every window automatically.
     branch) are logged and ignored.
 - Modules under `db/` import no `electron`, so Vitest can load them.
 - Store multi-row writes in one `db.transaction(...)` (atomic draft updates).
+- **Durable writes.** `synchronous=NORMAL` lets a power cut roll back the last
+  WAL commits. A write that must survive one before something irreversible
+  happens (T9: "a create-post request is about to be sent") goes through
+  `durable(db, fn)` (`db/durable.ts`): `synchronous=FULL` and `fullfsync=ON`
+  for that one transaction. SQLite refuses the pragma inside a transaction, so
+  `durable` is never called from inside one.
 
 ## userData and modes
 
@@ -255,7 +262,9 @@ Defined by `src/main/index.ts` and `src/main/app.ts`:
 both toggle the composer. The first `before-quit` is prevented: main asks the
 composer to save text, and the Studio to save edits, still inside their
 autosave debounce and waits for both acks (each at most 1 s, skipped in preview
-or when that page is not loaded), then
+or when that page is not loaded) and, only while a create-post request is in
+flight, for X to answer it (at most 10 s, `settleXForQuit`; past that the
+request is aborted and launch reconciles the job), then
 quits again. That second `before-quit` marks the app as quitting, and only then
 do windows really close. `will-quit` disposes services, then closes the DB.
 `window-all-closed` is ignored, since a menu-bar app runs without windows.
@@ -461,7 +470,9 @@ Prop changes are additive only; siblings build against these.
   on pointer-up and key-up, so a drag is one undo step), `SwatchGroup`,
   `Segmented` (radiogroups; an option may be `disabled` with a `reason`
   tooltip), `Toggle` (`role="switch"`), `TextField({ label, value, onChange,
-  onCommit? })` (commits on blur and Enter), `NumberField({ label, value, min,
+  onCommit?, stacked?, description?, error?, readOnly?, selectOnFocus?, code? })`
+  (commits on blur and Enter; T9 added `stacked` (label above a full-width
+  input) through `code`), `NumberField({ label, value, min,
   max, onChange })` (whole numbers, clamped on blur and Enter), `ColorField`
   (the system colour picker in a swatch), and the inline SVG icons in
   `icons.tsx`.
@@ -471,10 +482,13 @@ Prop changes are additive only; siblings build against these.
 ### Surfaces and their props
 
 - **Composer** (`composer/`):
-  - `ComposerHeader({ account, onConnect?, menuItems?, aiMenu? })`: the xBot mark and
+  - `ComposerHeader({ account, onConnect?, menuItems?, aiMenu?, ideas?, accountEntries?, onAccountAction? })`: the xBot mark and
     name are the app menu's trigger (New draft, Draft history…, Settings…);
-    `aiMenu` (a node, T6's ✦ button) sits just left of the account control;
-    `AccountMenu({ account: { kind: 'disconnected' } | { kind: 'connected' | 'preview', handle } })`;
+    `aiMenu` (a node, T6's ✦ button) sits just left of the account control,
+    and `ideas` (T7's bulb) just left of that;
+    `AccountMenu({ account: { kind: 'disconnected' | 'connecting' } | { kind: 'connected', handle, reconnect? } | { kind: 'preview', handle }, entries?, onAction? })`.
+    `entries` (T9, `composer/account/accountMenu.ts`) lists the real accounts with
+    switch / add / reconnect / disconnect actions;
   - `PostEditor({ value, onChange, readOnly?, maxLength?, saveState?, onEmoji?, editorRef? })`.
     `maxLength` is only the 25 000-character storage bound; the counter shows
     X's over-limit state. The count is X's weighted length
@@ -482,11 +496,16 @@ Prop changes are additive only; siblings build against these.
   - `AttachmentList({ attachments, onRemove(id), onReorder(from, to), onEditInStudio(id) })`:
     drag or ↑/↓ to reorder; more than two cards scroll inside the panel;
   - `UploadZone({ onAdd?, disabledReason?, dragActive?, busy? })`;
-  - `ActionRow({ count, limit, canPost, postDisabledReason?, onPost, notice? })`;
+  - `ActionRow({ count, limit, canPost, postDisabledReason?, onPost, notice?, busy? })`;
+    `busy` reads "Posting…";
+  - `publish/PublishStatus({ job, now, draftLabel?, onAction })` (T9): the job row
+    above the action row;
   - `ReminderRow({ label, muted?, onClick? })`;
   - sheets, one open at a time: `OnboardingSheet`, `SettingsSheet({ open, onClose, focusSection? })`
     (`settings/`; `focusSection` scrolls that section into view), `HistorySheet`,
-    `PublishSheet`, `SuggestionsSheet` (`composer/ai/`, see "Local AI").
+    `PublishSheet({ lede?, onConnect?, … })` (post it yourself), `SuggestionsSheet`
+    (`composer/ai/`, see "Local AI"), `publish/ReconcileSheet` (T9: "Did it post?")
+    and `ProjectsSheet` (`composer/ideas/`, see "Project context").
 
   In normal mode the draft is persisted (`composer/useDraft.ts`, see "Drafts
   and media"); preview mode keeps its fixed sample in local state.
@@ -505,11 +524,15 @@ Prop changes are additive only; siblings build against these.
 - `common/CompositionPreview({ composition, source, fit?, className?, testId? })`
   draws a shared `Composition` with the Studio's canvas renderer, contained in
   or covering its box (the composer's preview-mode thumbnail).
-- **Honest states.** In normal mode the header reads "Connect X". Until T9,
-  Post opens the publish-options sheet (Copy text / Export media / Open X); it
-  is disabled with a reason while the draft loads ("Loading your draft…"), when
-  the draft is empty ("Write something or add media first") and over the limit
-  ("Over the 280-character limit"). The Studio's tools and "Add to post" are
+- **Honest states.** In normal mode the header reads "Connect X" until an
+  account is connected, then its real handle. Without an account, Post opens
+  the publish-options sheet (Copy text / Export media / Open X, plus Connect X);
+  with one, it starts a publish job (see "X publishing"). Post is disabled with
+  a reason while the draft loads ("Loading your draft…"), when the draft is
+  empty ("Write something or add media first"), over the limit ("Over the
+  280-character limit"), when X would refuse the media (`src/shared/xRules.ts`),
+  while media is being added, and while the draft's post is on its way or
+  waiting to be checked. The Studio's tools and "Add to post" are
   disabled with a reason until an image or video is open (a video needs FFmpeg),
   and the reminder row says reminders aren't set up. The sample handle and media
   exist only in preview mode, labelled "Preview", where Post says "Posting is
@@ -780,10 +803,12 @@ verified Ollama API, setup, troubleshooting and known limits are in
   ahead of background ones and pre-empt a running background job; every
   request can be cancelled by `requestId`, queued or running. Cancel aborts
   the fetch, which stops generation in Ollama.
-- **For T7.** Call `ai().generate({ requestId, action: 'story', sources:
-  [{ name, kind: 'project', text }, …], priority: 'background' })` from main.
-  It resolves `{ status: 'done', options }` or `{ status: 'cancelled' }`
-  (pre-empted by the user), and throws an `IpcError` whose code and text come
+- **For T7.** T7 ended up using `ai().generateTask()` (see "Project
+  context"): its own instructions and schema through this queue, model
+  checks, memory rules and DATA fencing. `generate({ action: 'story' })`
+  remains the composer's "Suggest a post". `generate` resolves `{ status:
+  'done', options }` or `{ status: 'cancelled' }` (pre-empted by the user);
+  both throw an `IpcError` whose code and text come
   from `src/shared/aiCopy.ts`: `ollama_unavailable`, `model_needed`,
   `model_unverifiable`, `remote_refused`, `endpoint_*`, `ai_timeout`,
   `ai_stopped`, `ai_input_too_long`, `ai_would_evict`, `ai_malformed`,
@@ -799,6 +824,142 @@ verified Ollama API, setup, troubleshooting and known limits are in
   ready", "Ollama not running" or "Model needed". Preview mode never probes
   and has no AI.
 
+## Project context
+
+T7 (XBOT-5UVE6R): the folders the user approves, what is read from them,
+and the story ideas found in them (SPEC §11, §12 and §19's project
+privacy). Migration `202610220300_projects_context.sql`. Everything under
+`services/projects/` except `index.ts` is electron-free.
+
+- **Tables.** `projects` (one approved folder: its path and realpath, brief,
+  options, scan state, Git checkpoint, cached digest and doc cache),
+  `project_events` (what scans and notes found: `commit`, `doc`, `files`,
+  `note`; unique per scope by fingerprint through an `ifnull(project_id, '')`
+  index, since a note may have no project), `suggestions` (ideas with their
+  sources, claims and status) and `dismissed_suggestions` (keys and texts of
+  dismissed stories, not tied to a project, so re-adding a folder never
+  brings one back).
+- **Reading** (`safeFs.ts`, `ignoreRules.ts`). Paths are relative to the
+  folder's realpath; `..`, absolute paths and NUL are refused before any fs
+  call. Symlinked folders are never entered; every opened file must resolve
+  inside the folder, pass the ignore rules under every name it goes by, be
+  a regular single-link file that isn't an iCloud placeholder, and match its
+  `lstat` after `open(O_NOFOLLOW | O_NONBLOCK)`. Budgets per scan: 256 KB a
+  file, 2 MB, 2000 listed entries, 5 s; hitting one marks the scan partial.
+  The built-in deny list (secrets, keys, dumps, dependencies, build output,
+  editor churn, media, binaries) comes first; each `.gitignore`,
+  `.git/info/exclude` and `.xbotignore` is its own layer and a path is out
+  when any layer says so, so a `!` never re-includes across files. What is
+  read: README, and with "Read docs" the changelog and `docs/` (12 files,
+  newest first), package manifests, and Git metadata; without Git, also the
+  names of recently changed source and doc files (one event a day).
+- **Git** (`git.ts`). Only when `<root>/.git` is a real directory owned by
+  the user with every part inside it (`commondir`, alternates, linked
+  worktrees and symlinked parts make the folder non-Git). An absolute git
+  binary (`/usr/bin/git` on macOS only when `xcode-select -p` succeeds, so
+  the CLT installer never pops up), an argument array, `--git-dir`, an env
+  built from scratch, and `-c` overrides for every setting a repository can
+  use to run a program. `GIT_ALLOW_PROTOCOL=none` is the control that stops
+  a repo-level `protocol.ext.allow=always` partial-clone remote (`-c
+  protocol.allow=never` alone does not; `GIT_NO_LAZY_FETCH` helps from git
+  2.44 and distro backports). Read commands only: `rev-parse`,
+  `merge-base`, `log -z --numstat` (newest 30 since the checkpoint; 7 days
+  on a first scan or after a rebase) and, with diff excerpts on, `show
+  --submodule=short` limited to allowed paths. Never `status`, a
+  working-tree diff, npm or a project script.
+  `tests/unit/projects-safety.test.ts` arms a repository with fsmonitor,
+  hooks, a gpg signature, textconv, a submodule diff and a lazy-fetch
+  remote, checks each fires for plain git, and that none fires for xBot.
+- **Redaction** (`redact.ts`): token patterns, private-key blocks, URL
+  credentials, secret-named assignments and high-entropy runs become
+  `[redacted]`. Whole buffers are redacted before any excerpt is cut, at
+  ingest and again in `buildIdeaSources()`, the one place project text
+  becomes model input.
+- **Scans** (`scanner.ts`, `service.ts`). On adding a folder and on
+  Rescan, at launch for folders not read in 15 min, and every 15 min after
+  (a folder macOS denied waits for Rescan). One at a time across folders;
+  Git first, with its own 3 s; results written in one transaction with
+  `INSERT OR IGNORE`, so unchanged history adds nothing. The digest
+  (README excerpt and manifests) is stored with the hash of its inputs.
+  The checkpoint moves only when a `log` call finished.
+- **Ideas** (`ideas.ts`, `suggestions.ts`). Sources go to the model as DATA
+  blocks: `BRIEF`, `F1…` (confirmed facts) and `N1…` (notes) are the user's
+  words; `DIGEST` and `E1…` (commits, docs, files) come from the folder.
+  Each group has a share of the prompt budget, activity first. The answer
+  (`{ ideas: [{ kind, text, sources, claims: [{ text, basis }] }] }`, 3 or
+  2 by context size) is checked by xBot: an idea must cite an included
+  event or note (not just changed file names), a number in none of the
+  blocks discards it, a claim is confirmed only when its basis is a user
+  block that says it, commit-only "shipped/works" wording and unknown URLs
+  or @mentions become claims to confirm, banned phrases discard. `auto`
+  (the Ideas popover opening, T8) uses only events no generation has used;
+  `force` ("Refresh ideas", a new note) uses the recent ones; with nothing
+  useful the answer is `needs_context` and no AI call is made. A failed
+  background run marks its events attempted so it isn't repeated every
+  interval. Duplicates are skipped by fingerprint; dismissed stories by key
+  or text similarity.
+- **For T8.** `projects().hasNewActivitySince(ts)` (useful events recorded
+  after `ts`, never a commit's own date), `suggestions().getTopRelevant()`
+  and `suggestions().refresh('auto', 'background')`, from
+  `services/projects`.
+- **Renderer** (`composer/ideas/`): the header bulb and the Ideas popover
+  (cards, "Confirm before posting", "Why this suggestion?", Use through the
+  composer's undoable `applyText`, Dismiss, the "What did you build today?"
+  note), the projects sheet with the brief editor, and onboarding step
+  `projects` (30). The folder picker runs in main; `folderPolicy.ts`
+  refuses `/`, the home folder and its ancestors, private and system
+  folders, whole disks and xBot's data folder. Preview mode reads nothing.
+
+## X publishing
+
+T9 (XBOT-OE2XV9). Migration `202610221200_x_publish.sql`; the verified X API
+behaviour, setup and troubleshooting are in [`X.md`](X.md).
+
+- **Files.** `services/x/`: `api.ts` (the X API over an injected fetch; zod
+  at the boundary; the only error it throws is a sanitised `XApiError`),
+  `oauth.ts` + `loopback.ts` (PKCE S256 sign-in), `accounts.ts` (rows and
+  tokens), `vault.ts` (safeStorage), `publish.ts` (the job state machine),
+  `reconcile.ts` (finding a post on X), `errors.ts` (the error catalog),
+  `service.ts` (the facade), `handlers.ts` (the `x:*` IPC table). Only
+  `index.ts` imports `electron` (`net.fetch` with `credentials: 'omit'`,
+  `safeStorage`, `shell` through `openExternalIfAllowed`, the composer's
+  hide/show). Rules shared with the renderer are zod-free in
+  `src/shared/xRules.ts`.
+- **Tables.** `x_accounts` (one row per X user; `token_blob` is safeStorage
+  ciphertext; `client_id` is the app the tokens were issued to; at most one
+  `is_active`), `publish_jobs` (one per Post ↑, with its frozen account,
+  text and idempotency key), `publish_job_media` (the frozen media in order;
+  its `media_id` is the foreign key that keeps T3's GC away from a file a job
+  may still upload, nulled once the job is published, canceled or dismissed)
+  and `publish_job_events` (every transition).
+- **States.** `queued → uploading → processing → publishing → published`, plus
+  `failed`, `canceled` and `needs_reconciliation`; the active set (one per
+  draft, a partial unique index) is everything but `published`, `failed` and
+  `canceled`. Every transition is a compare-and-swap `UPDATE … WHERE status = ?`
+  logged in `publish_job_events` and pushed as `x:job-changed`. Jobs upload
+  one at a time; reconcile and Retry post are serialised per job.
+- **Never twice.** The same draft content maps to one job (repeat clicks get
+  it back). The move into `publishing` is a durable write made before the
+  create request; a timeout, network error, 5xx or quit after it leaves the
+  job `needs_reconciliation` (`uncertain_since`), and nothing sends that
+  create again except an explicit Retry post, which first looks on X. Launch
+  turns `publishing` into `needs_reconciliation` and earlier interrupted states
+  into `failed` (`x_interrupted`); nothing is resumed on its own.
+- **Seams for siblings.**
+  - T4/T5: `createPublisher({ resolvePostMedia })` decides which file is
+    uploaded for a frozen attachment: the attachment's own media file. T4's
+    "Add to post" swaps the rendered export into the attachment, so an edit is
+    what gets posted; an edited attachment that has not been added to the post
+    posts its current media.
+  - T10: `x_accounts.token_blob` only decrypts on the Mac that wrote it. A backup
+    should leave it out; a restored account reads as "Reconnect".
+- **Settings.** `x.clientId` (the user's OAuth 2.0 Client ID; '' until set) and
+  `x.callbackPort` (default 47813; the callback is
+  `http://127.0.0.1:<port>/callback`). Settings → X (`settings/sections/x.tsx`)
+  and onboarding step 5 (`onboarding/steps/x.tsx`) share `composer/account/XSetup.tsx`.
+- **Status chip** (`id: 'x'`, from the database only): X not set up / X
+  disconnected / X: @handle / Reconnect X / Posting to X / A post needs checking.
+
 ## Registries
 
 Later tickets add onboarding steps, settings sections and status chips by
@@ -809,8 +970,8 @@ adding their own files; nobody edits a shared list.
   `import.meta.glob`. The sheet shows, in order (`order`, then `id`), the steps
   whose ids are not in `ui.onboardingSeen`, on the composer's first load, never
   in preview. Moving past a step marks it seen; Skip, the close button and
-  Escape mark the whole run seen. Welcome is `order: 0`; suggested: Ollama 10,
-  model 20, folders 30, X 40, reminder hours 50.
+  Escape mark the whole run seen. Welcome is `order: 0`; Ollama 10, model 20,
+  project folders 30; suggested: X 40, reminder hours 50.
 - **Settings** (`renderer/settings/`): each `sections/<id>.tsx` default-exports
   `{ id, order, title, Component }`; the component reads its own state. A
   section that renders nothing is hidden. Built in: Status (0), Appearance (100).
@@ -871,11 +1032,17 @@ adding their own files; nobody edits a shared list.
   reads it.
 - **Credentials:** tokens are stored only through Electron `safeStorage`. If
   `safeStorage.isEncryptionAvailable()` is false, refuse to store them and say
-  why; never fall back to plaintext.
+  why; never fall back to plaintext. T9's vault (`services/x/vault.ts`) also
+  refuses Linux's `basic_text` backend (a hard-coded key), uses Electron 45's
+  async calls, and never touches safeStorage at launch (no Keychain prompt).
 - **Untrusted input:** treat project files, model output and X API responses as
   untrusted. Validate them with zod at the boundary.
 - **Network:** no local HTTP server, no telemetry, no remote AI. Network access
-  is only for explicitly requested model downloads and X.
+  is only for explicitly requested model downloads and X. The one exception to
+  "no local HTTP server" (SPEC §2 allows it for OAuth) is T9's sign-in
+  callback (`services/x/loopback.ts`): it binds `127.0.0.1` only, answers only
+  `GET /callback` with the expected `Host` and `state`, and lives only while a
+  sign-in waits (closed after the callback, on cancel, or after 5 min).
 
 ## Dependencies and the lockfile
 
@@ -890,12 +1057,15 @@ adding their own files; nobody edits a shared list.
   `pnpm-workspace.yaml`, and `pnpm ignored-builds` must list nothing.
 - pnpm 11 also refuses versions published in the last day
   (`minimumReleaseAge`). Commit whatever `minimumReleaseAgeExclude` entry it adds.
-- `twitter-text` (the counter) is bundled into the composer only. Its
+- `twitter-text` (the counter) is bundled into the composer and, since T9,
+  into main (validation before posting, URL matching for reconciliation). Its
+  core-js@2 polyfills patch no globals on Electron's V8 (checked). Its
   `core-js@2` dependency's postinstall only prints a banner, so it is listed
   as `core-js: false` under `allowBuilds`. Renderer code never imports values
   from contract files (they pull in zod); types only.
 - `pixelmatch` and `pngjs` are devDependencies for the Studio's export
   agreement tests only (T5's video tests use `pngjs` too).
+- `ignore` (gitignore matching for project folders) is bundled into main.
 - **Native modules** must ship N-API prebuilds, or be rebuilt for Electron. Add a
   `files` filter in `electron-builder.yml` so only the target platform's binary
   ships.

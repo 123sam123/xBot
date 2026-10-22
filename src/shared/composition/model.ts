@@ -120,7 +120,8 @@ export const CANVAS_LIMITS = { min: 64, max: MAX_OUTPUT_SIDE } as const;
 export const MAX_EXPORT_BYTES = 20 * 1024 * 1024;
 /**
  * Video exports fit the 1080p box (1920 × 1080, or 1080 × 1920 upright), at 1×:
- * the class X plays back. T9 checks X's own limits when posting.
+ * the class X plays back. X validates dimensions itself when it processes an
+ * upload (T9 reports its answer).
  */
 export const MAX_VIDEO_OUTPUT = { long: 1920, short: 1080 } as const;
 /** The shortest trim, or the whole clip when it is shorter. */

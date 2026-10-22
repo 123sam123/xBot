@@ -9,6 +9,7 @@ export function ActionRow({
   postDisabledReason,
   onPost,
   notice,
+  busy = false,
 }: {
   count: number;
   limit: number;
@@ -18,16 +19,19 @@ export function ActionRow({
   onPost(): void;
   /** A transient status, e.g. a StatusChip, shown beside the button. */
   notice?: ReactNode;
+  /** A post of this draft is on its way to X (T9): the button reads "Posting…". */
+  busy?: boolean;
 }) {
   const post = (
     <FrostedButton
       className="post-button"
       data-testid="post-button"
       disabled={!canPost}
-      iconAfter={<ArrowUpIcon size={21} strokeWidth={2.25} />}
+      aria-busy={busy || undefined}
+      iconAfter={busy ? undefined : <ArrowUpIcon size={21} strokeWidth={2.25} />}
       onClick={onPost}
     >
-      Post
+      {busy ? 'Posting…' : 'Post'}
     </FrostedButton>
   );
   return (

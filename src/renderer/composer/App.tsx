@@ -1,10 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
 import { aiCopy } from '../../shared/aiCopy';
 import type { AiAction, AiOption } from '../../shared/contracts/ai';
+import type { Idea } from '../../shared/contracts/projects';
 import type { Draft } from '../../shared/contracts/drafts';
 import type { IpcResult } from '../../shared/contracts/ipc';
 import type { ImportResult, MediaItem } from '../../shared/contracts/media';
+import type { PublishJob } from '../../shared/contracts/x';
 import { postLength } from '../../shared/postLength';
+import { isActiveStatus, mediaViolation } from '../../shared/xRules';
 import { CompositionPreview } from '../common/CompositionPreview';
 import { useAppInfo, useReadyMarker } from '../common/useAppInfo';
 import { useEscapeToHide } from '../common/useEscapeToHide';
@@ -14,6 +17,8 @@ import { OnboardingSheet } from '../onboarding/OnboardingSheet';
 import { unseenSteps } from '../onboarding/registry';
 import { PREVIEW_DRAFT_TEXT, PREVIEW_HANDLE, PREVIEW_REMINDER_LABEL, PREVIEW_SOURCE, PREVIEW_THUMBNAIL_COMPOSITION } from '../preview/fixtures';
 import { SettingsSheet } from '../settings/SettingsSheet';
+import { accountMenuEntries, accountTrigger, activeAccount, type AccountAction } from './account/accountMenu';
+import { connectX, useXState } from './account/useXState';
 import type { AccountState } from './AccountMenu';
 import { ActionRow } from './ActionRow';
 import {
@@ -33,8 +38,15 @@ import {
 import { AttachmentList, type ComposerAttachment } from './AttachmentList';
 import { ComposerHeader } from './ComposerHeader';
 import { HistorySheet } from './HistorySheet';
+import { IdeasMenu, ProjectsSheet, useIdeas, useProjects } from './ideas';
 import { MediaThumb } from './MediaThumb';
 import { PostEditor } from './PostEditor';
+import { shouldStartFreshDraft } from './publish/freshDraft';
+import type { JobAction } from './publish/jobView';
+import { pickJob } from './publish/jobView';
+import { PublishStatus } from './publish/PublishStatus';
+import { ReconcileSheet } from './publish/ReconcileSheet';
+import { useClock, usePublishJobs } from './publish/usePublishJobs';
 import { PublishSheet } from './PublishSheet';
 import { ReminderRow } from './ReminderRow';
 import { UploadZone } from './UploadZone';
@@ -43,16 +55,19 @@ import { useFileDrop } from '../common/useFileDrop';
 
 // The Write Post composer. In normal mode the draft and its media are
 // persisted (useDraft, window.xbot.drafts / .media); preview mode keeps T2's
-// fixed sample in local state. T8 wires the reminder row, T9 the X account
-// and real posting (until then Post opens the publish-options sheet). T6 adds
-// local AI: the ✦ menu, the suggestions sheet and the AI status row; an AI
-// change goes through the editor, so it autosaves and stays undoable.
+// fixed sample in local state. T8 wires the reminder row. T9: the header's X
+// account menu, and Post ↑ — a publish job with a connected account
+// (window.xbot.x), the post-it-yourself sheet without one. T6 adds local AI:
+// the ✦ menu, the suggestions sheet and the AI status row; an AI change goes
+// through the editor, so it autosaves and stays undoable. T7 adds project
+// ideas: the header's bulb and its popover, and the projects sheet; using an
+// idea goes through the same undoable path.
 
 const NOTICE_MS = 3200;
 /** The drafts contract's DRAFT_TEXT_MAX (not imported here: contract files bundle zod). */
 const TEXT_MAX = 25_000;
 
-type SheetId = 'onboarding' | 'history' | 'settings' | 'publish' | 'suggestions';
+type SheetId = 'onboarding' | 'history' | 'settings' | 'publish' | 'suggestions' | 'reconcile' | 'projects';
 
 /** Keeps the window exactly as tall as its content, so no empty region shows below it. */
 function useFitWindowToContent(ref: React.RefObject<HTMLElement | null>): void {
@@ -118,13 +133,15 @@ function move<T>(list: readonly T[], from: number, to: number): T[] {
   return next;
 }
 
-/** X's mix rules (T9 enforces them when posting): up to 4 images, or one video or GIF alone. */
+/** X's media rules (src/shared/xRules.ts, also enforced by main): up to 4 images, or one video or GIF alone, within X's sizes. */
 function mixWarning(media: readonly MediaItem[]): string | null {
-  const motion = media.filter((m) => m.kind === 'video' || m.mime === 'image/gif').length;
-  if (motion > 0 && media.length > 1) return 'X takes one video or GIF per post, on its own.';
-  if (media.length > 4) return 'X takes up to 4 images per post.';
-  return null;
+  return mediaViolation(media)?.message ?? null;
 }
+
+const firstLine = (text: string) => {
+  const line = text.split('\n').find((l) => l.trim() !== '')?.trim() ?? '';
+  return line.length > 40 ? `${line.slice(0, 39)}…` : line;
+};
 
 const folderName = (path: string) => path.split(/[\\/]/).filter(Boolean).at(-1) ?? path;
 
@@ -189,6 +206,15 @@ function Composer({ preview, emojiPanel, seenSteps }: { preview: boolean; emojiP
   /** The `aiRun.finished` count the user has seen, so "Suggestions ready" shows only for new results. */
   const [aiSeen, setAiSeen] = useState(0);
   const [settingsFocus, setSettingsFocus] = useState<string | undefined>(undefined);
+  const ideasState = useIdeas(!preview);
+  const projectList = useProjects(!preview) ?? [];
+
+  // X (T9): accounts, publish jobs, and the sheets they open.
+  const { state: xstate } = useXState(!preview);
+  const [posting, setPosting] = useState(false);
+  const [fallbackLede, setFallbackLede] = useState<string | null>(null);
+  const [reconcileJobId, setReconcileJobId] = useState<string | null>(null);
+  const freshDraftFor = useRef(new Set<string>());
 
   useHoldWhile(useAnyPopoverOpen() || sheet !== null);
   useReadyMarker(preview || draft !== null);
@@ -341,10 +367,11 @@ function Composer({ preview, emojiPanel, seenSteps }: { preview: boolean; emojiP
     setSheet(null);
     editor.current?.focus();
   };
-  const applyAi = (option: AiOption, target: 'whole' | 'selection'): string | null => {
+  /** Puts generated text in the post through the editor (autosaved, Cmd+Z reverts it) and keeps one undo entry. */
+  const applyText = (text: string, target: 'whole' | 'selection', selection: SelectionRef | null): string | null => {
     if (!draft) return aiCopy.menu.loading;
     const before = model.text;
-    const plan = planApply(before, option.text, target, aiRun.selection);
+    const plan = planApply(before, text, target, selection);
     if ('error' in plan) return plan.error;
     const el = editor.current;
     let after: string;
@@ -355,10 +382,16 @@ function Composer({ preview, emojiPanel, seenSteps }: { preview: boolean; emojiP
       model.setText(after);
     }
     setAiUndo({ draftId: draft.id, before, after });
+    return null;
+  };
+  const applyAi = (option: AiOption, target: 'whole' | 'selection'): string | null => {
+    const error = applyText(option.text, target, aiRun.selection);
+    if (error) return error;
     setAiSeen(aiRun.finished);
     setSheet(null);
     return null;
   };
+  const applyIdea = (idea: Idea): string | null => applyText(idea.text, 'whole', null);
   const undoAi = () => {
     if (!canUndo(aiUndo, draft?.id ?? null, model.text)) return;
     const el = editor.current;
@@ -391,8 +424,92 @@ function Composer({ preview, emojiPanel, seenSteps }: { preview: boolean; emojiP
     setSetting('ui.onboardingSeen', [...seen.current]);
   };
 
+  const onJobChanged = (job: PublishJob) => {
+    if (job.status === 'needs_reconciliation' && sheet === null) {
+      setReconcileJobId(job.id);
+      setSheet('reconcile');
+    }
+    const current = draft ? { draftId: draft.id, text: model.text, mediaIds: draft.attachments.map((a) => a.media.id) } : null;
+    if (!freshDraftFor.current.has(job.id) && shouldStartFreshDraft(job, current)) {
+      freshDraftFor.current.add(job.id);
+      void startNew();
+    }
+  };
+  const jobs = usePublishJobs(!preview, onJobChanged);
+  const now = useClock();
+  const shownJob = pickJob(jobs, draft?.id ?? null, now);
+  const draftJob = shownJob && draft && shownJob.draftId === draft.id ? shownJob : null;
+
+  const openXSettings = () => {
+    setSettingsFocus('x');
+    setSheet('settings');
+  };
+  const connect = async (reconnectAccountId?: string) => {
+    if (xstate && !xstate.clientIdSet) {
+      openXSettings();
+      return;
+    }
+    const outcome = await connectX(reconnectAccountId);
+    if (!outcome) return;
+    if (outcome.code === 'x_client_id_missing') openXSettings();
+    if (outcome.tone === 'warning') setErrors([outcome.text]);
+    else setNotice(outcome.text);
+  };
+  const reportError = (result: { ok: boolean; error?: { message: string } }) => {
+    if (!result.ok && result.error) setErrors([result.error.message]);
+  };
+  const onAccountAction = (action: AccountAction) => {
+    if (action.kind === 'connect') void connect();
+    else if (action.kind === 'reconnect') void connect(action.accountId);
+    else if (action.kind === 'cancel-connect') void window.xbot.x.cancelConnect();
+    else if (action.kind === 'switch') void window.xbot.x.switchAccount(action.accountId).then(reportError);
+    else if (action.kind === 'disconnect') void window.xbot.x.disconnect(action.accountId).then(reportError);
+    else openXSettings();
+  };
+  const onJobAction = (action: JobAction, job: PublishJob) => {
+    if (action === 'cancel') void window.xbot.x.cancelJob(job.id).then(reportError);
+    else if (action === 'retry') void window.xbot.x.retryJob(job.id).then(reportError);
+    else if (action === 'dismiss') void window.xbot.x.dismissJob(job.id).then(reportError);
+    else if (action === 'reconnect') void connect(xstate?.accounts.find((a) => a.handle === job.accountHandle)?.id);
+    else if (action === 'fallback') {
+      setFallbackLede(`${job.error?.message ?? 'X didn’t take this post.'} You can post it yourself.`);
+      setSheet('publish');
+    } else if (action === 'check') {
+      setReconcileJobId(job.id);
+      setSheet('reconcile');
+    }
+  };
+
+  /** Post ↑: with a connected account, one publish job for the saved draft; without one, the post-it-yourself sheet. */
+  const post = async () => {
+    if (preview) {
+      setNotice('Posting is off in preview');
+      return;
+    }
+    if (!draft || posting) return;
+    setErrors([]);
+    if (!activeAccount(xstate)) {
+      setFallbackLede(null);
+      setSheet('publish');
+      return;
+    }
+    setPosting(true);
+    try {
+      if (!(await model.flush())) {
+        setErrors(['Your latest text isn’t saved yet. Try again.']);
+        return;
+      }
+      const result = await window.xbot.x.post({ draftId: draft.id, text: model.text, attachmentIds: draft.attachments.map((a) => a.id) });
+      if (!result.ok) setErrors([result.error.message]);
+    } finally {
+      setPosting(false);
+    }
+  };
+
   const { weightedLength, overLimit, limit } = postLength(text);
   const hasContent = text.trim() !== '' || attachments.length > 0;
+  const warning = preview ? null : mixWarning(media);
+  const jobBusy = posting || (draftJob !== null && isActiveStatus(draftJob.status) && draftJob.status !== 'needs_reconciliation');
   const postDisabledReason = preview
     ? overLimit
       ? `Over the ${limit}-character limit`
@@ -405,9 +522,22 @@ function Composer({ preview, emojiPanel, seenSteps }: { preview: boolean; emojiP
         ? 'Write something or add media first'
         : overLimit
           ? `Over the ${limit}-character limit`
-          : undefined;
+          : warning
+            ? warning
+            : importing
+              ? 'Adding media…'
+              : jobBusy
+                ? 'This draft is being posted'
+                : draftJob?.status === 'needs_reconciliation'
+                  ? 'Check X for this post first'
+                  : undefined;
 
-  const account: AccountState = preview ? { kind: 'preview', handle: PREVIEW_HANDLE } : { kind: 'disconnected' };
+  const trigger = accountTrigger(xstate);
+  const account: AccountState = preview
+    ? { kind: 'preview', handle: PREVIEW_HANDLE }
+    : trigger.kind === 'connected'
+      ? { kind: 'connected', handle: trigger.handle, reconnect: trigger.reconnect }
+      : trigger;
   const unavailableInPreview = preview ? 'Not available in preview' : undefined;
   const menuItems: MenuItem[] = [
     { id: 'new-draft', label: 'New draft', detail: unavailableInPreview, disabled: preview || !draft, onSelect: () => void startNew() },
@@ -421,7 +551,6 @@ function Composer({ preview, emojiPanel, seenSteps }: { preview: boolean; emojiP
       },
     },
   ];
-  const warning = preview ? null : mixWarning(media);
 
   return (
     <>
@@ -429,6 +558,19 @@ function Composer({ preview, emojiPanel, seenSteps }: { preview: boolean; emojiP
         account={account}
         menuItems={menuItems}
         aiMenu={<AiMenu state={aiState} context={aiContext} onOpen={captureSelection} onAction={runAi} onSettings={openAiSettings} />}
+        ideas={
+          <IdeasMenu
+            state={ideasState}
+            projects={projectList}
+            aiState={aiState}
+            preview={preview}
+            onUse={applyIdea}
+            onProjects={() => setSheet('projects')}
+            onAiSetup={openAiSettings}
+          />
+        }
+        accountEntries={preview ? undefined : accountMenuEntries(xstate)}
+        onAccountAction={onAccountAction}
       />
       <h1 className="composer-title">Write Post</h1>
       <PostEditor
@@ -461,13 +603,20 @@ function Composer({ preview, emojiPanel, seenSteps }: { preview: boolean; emojiP
         </div>
       )}
       <AiStatusRow status={aiStatus} />
+      <PublishStatus
+        job={shownJob}
+        now={now}
+        draftLabel={shownJob && shownJob !== draftJob ? `“${firstLine(shownJob.frozenText) || 'Media only'}”` : null}
+        onAction={onJobAction}
+      />
       <ActionRow
         count={weightedLength}
         limit={limit}
         canPost={postDisabledReason === undefined}
         postDisabledReason={postDisabledReason}
-        onPost={preview ? () => setNotice('Posting is off in preview') : () => setSheet('publish')}
+        onPost={() => void post()}
         notice={notice && <StatusChip>{notice}</StatusChip>}
+        busy={jobBusy}
       />
       <Divider className="composer-divider" />
       <ReminderRow label={preview ? PREVIEW_REMINDER_LABEL : 'Reminders aren’t set up yet'} muted={!preview} />
@@ -494,15 +643,26 @@ function Composer({ preview, emojiPanel, seenSteps }: { preview: boolean; emojiP
         onApply={applyAi}
         onSetup={openAiSettings}
       />
+      <ProjectsSheet open={sheet === 'projects'} onClose={() => setSheet(null)} projects={projectList} preview={preview} />
       <HistorySheet open={sheet === 'history'} onClose={() => setSheet(null)} onRestore={(id) => void restore(id)} />
       <PublishSheet
         open={sheet === 'publish'}
         onClose={() => setSheet(null)}
+        lede={fallbackLede ?? undefined}
+        onConnect={
+          preview || activeAccount(xstate)
+            ? undefined
+            : () => {
+                setSheet(null);
+                void connect();
+              }
+        }
         hasText={text.trim() !== ''}
         mediaCount={attachments.length}
         onCopy={copyText}
         onExport={exportMedia}
       />
+      <ReconcileSheet job={sheet === 'reconcile' ? (jobs.find((j) => j.id === reconcileJobId) ?? null) : null} onClose={() => setSheet(null)} />
     </>
   );
 }

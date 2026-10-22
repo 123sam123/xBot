@@ -209,5 +209,7 @@ and the canvas with the same hole.
   Mac runs 8.x/9.x. Before relying on it, run the video tests there:
   `XBOT_REQUIRE_FFMPEG=1 pnpm exec vitest run tests/unit/video-*.test.ts`.
 - **X's size limits:** video exports are capped to the 1080p box (1920 × 1080,
-  or 1080 × 1920 upright). X's API docs list tighter "advanced" dimensions,
-  and T9 checks X's limits when posting.
+  or 1080 × 1920 upright). X's API docs also list a tighter "advanced"
+  dimension range (32×32–1280×1024). T9 checks the file size and the media mix
+  before posting, but X checks dimensions itself when it processes the upload,
+  and T9's publish job reports what X says.
