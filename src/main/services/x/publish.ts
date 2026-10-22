@@ -229,6 +229,7 @@ export function createPublisher(deps: PublisherDeps): Publisher {
       error,
       attempts: r.attempts,
       uncertain: r.uncertain_since !== null,
+      dismissed: r.dismissed_at !== null,
       createdAt: r.created_at,
       updatedAt: r.updated_at,
     };

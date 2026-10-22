@@ -25,6 +25,11 @@ export function isActiveStatus(status: JobStatus): boolean {
 
 export type MediaCategory = 'tweet_image' | 'tweet_gif' | 'tweet_video';
 
+/** X OAuth 2.0 Client IDs are URL-safe base64. */
+export const CLIENT_ID_PATTERN = /^[A-Za-z0-9._~-]{8,128}$/;
+/** The callback port xBot listens on (http://127.0.0.1:<port>/callback) unless Settings → X says otherwise. */
+export const DEFAULT_CALLBACK_PORT = 47813;
+
 /** X's `tweet_image` cap. */
 export const X_IMAGE_MAX_BYTES = 5 * 1024 * 1024;
 /** X's `tweet_gif` cap. */
@@ -54,17 +59,8 @@ export interface PostViolation {
 
 const megabytes = (bytes: number) => `${(bytes / (1024 * 1024)).toFixed(1).replace(/\.0$/, '')} MB`;
 
-/**
- * Why X would refuse this post, or null. Checked before a job exists and before
- * any upload: X takes up to 4 images, or 1 GIF, or 1 video, alone; and 280
- * weighted characters (twitter-text). Video length depends on the account, so
- * X decides that one.
- */
-export function postViolation(text: string, media: readonly PostMediaFacts[]): PostViolation | null {
-  const length = postLength(text);
-  if (length.weightedLength === 0 && media.length === 0) return { code: 'x_empty_post', message: 'Write something or add media first.' };
-  if (length.overLimit) return { code: 'x_text_too_long', message: `Over the ${length.limit}-character limit.` };
-
+/** Why X would refuse this media set (mix, count, size), or null. */
+export function mediaViolation(media: readonly PostMediaFacts[]): PostViolation | null {
   const motion = media.filter((m) => mediaCategory(m) !== 'tweet_image');
   if (motion.length > 0 && media.length > 1) return { code: 'x_media_mix', message: 'X takes one video or GIF per post, on its own.' };
   if (media.length > X_MAX_IMAGES) return { code: 'x_too_many_media', message: `X takes up to ${X_MAX_IMAGES} images per post.` };
@@ -79,4 +75,17 @@ export function postViolation(text: string, media: readonly PostMediaFacts[]): P
     }
   }
   return null;
+}
+
+/**
+ * Why X would refuse this post, or null. Checked before a job exists and before
+ * any upload: X takes up to 4 images, or 1 GIF, or 1 video, alone; and 280
+ * weighted characters (twitter-text). Video length depends on the account, so
+ * X decides that one.
+ */
+export function postViolation(text: string, media: readonly PostMediaFacts[]): PostViolation | null {
+  const length = postLength(text);
+  if (length.weightedLength === 0 && media.length === 0) return { code: 'x_empty_post', message: 'Write something or add media first.' };
+  if (length.overLimit) return { code: 'x_text_too_long', message: `Over the ${length.limit}-character limit.` };
+  return mediaViolation(media);
 }

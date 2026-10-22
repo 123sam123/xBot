@@ -477,3 +477,63 @@
   outline: none;
   box-shadow: var(--focus-ring);
 }
+
+/* ---------- Text field (T9) ---------- */
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+}
+
+.field-label {
+  font-size: var(--fs-sm);
+}
+
+.field-input {
+  width: 100%;
+  height: 36px;
+  padding: 0 12px;
+  border: 1px solid var(--glass-card-border);
+  border-radius: var(--radius-control);
+  background: var(--glass-card-fill);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: var(--fs-sm);
+  text-shadow: inherit;
+}
+
+.field-input::placeholder {
+  color: var(--text-tertiary);
+}
+
+.field-input:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.field-input[readonly] {
+  color: var(--text-secondary);
+}
+
+.field-input-code {
+  font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+  font-size: 13px;
+}
+
+.field-description,
+.field-error {
+  font-size: var(--fs-xs);
+  line-height: 1.35;
+  color: var(--text-secondary);
+}
+
+.field-error,
+.field-invalid .field-label {
+  color: var(--warning);
+}
+
+.badge-warning {
+  color: var(--warning);
+}

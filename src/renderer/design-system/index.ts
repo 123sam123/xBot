@@ -8,6 +8,7 @@ export { Menu, type MenuItem, type MenuProps } from './Menu';
 export { Popover, placeFloating, useFloatingPosition, type Placement, type PopoverProps } from './Popover';
 export { createPopoverManager, popovers, type PopoverId, type PopoverManager } from './popoverManager';
 export { Sheet } from './Sheet';
+export { TextField, type TextFieldProps } from './TextField';
 export { cx, Divider, GlassCard, GlassPanel, StatusChip } from './Surfaces';
 export { Tooltip } from './Tooltip';
 export { applyMaterialFromLocation, useAppearance } from './useAppearance';

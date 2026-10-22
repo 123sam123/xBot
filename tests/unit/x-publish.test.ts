@@ -207,7 +207,7 @@ describe('isolation', () => {
     await h.addImages(2);
 
     let switched = false;
-    h.api.on('POST /2/media/upload/:id/append', (req) => {
+    h.api.on('POST /2/media/upload/:id/append', () => {
       if (!switched) {
         switched = true;
         h.service.switchAccount(b); // mid-job

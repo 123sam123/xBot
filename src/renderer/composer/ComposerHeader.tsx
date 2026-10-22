@@ -1,5 +1,6 @@
 import { useRef } from 'react';
 import { AppMark, Menu, popovers, usePopoverOpen, type MenuItem } from '../design-system';
+import type { AccountAction, AccountMenuEntry } from './account/accountMenu';
 import { AccountMenu, type AccountState } from './AccountMenu';
 
 const APP_MENU_ID = 'app-menu';
@@ -12,10 +13,15 @@ export function ComposerHeader({
   account,
   onConnect,
   menuItems = [],
+  accountEntries,
+  onAccountAction,
 }: {
   account: AccountState;
   onConnect?: () => void;
   menuItems?: readonly MenuItem[];
+  /** The real X accounts' menu (T9); see AccountMenu. */
+  accountEntries?: readonly AccountMenuEntry[];
+  onAccountAction?(action: AccountAction): void;
 }) {
   const anchor = useRef<HTMLButtonElement>(null);
   const open = usePopoverOpen(APP_MENU_ID);
@@ -35,7 +41,7 @@ export function ComposerHeader({
         <span className="composer-name">xBot</span>
       </button>
       <Menu id={APP_MENU_ID} anchor={anchor} label="xBot" items={menuItems} placement="bottom-start" testId="app-menu" />
-      <AccountMenu account={account} onConnect={onConnect} />
+      <AccountMenu account={account} onConnect={onConnect} entries={accountEntries} onAction={onAccountAction} />
     </header>
   );
 }

@@ -2,7 +2,7 @@
 // of them, the IPC payloads, settings, events and the bridge API. Tokens, OAuth
 // codes and verifiers never appear here. See docs/X.md.
 import { z } from 'zod';
-import type { JobStatus } from '../xRules';
+import { CLIENT_ID_PATTERN, DEFAULT_CALLBACK_PORT, type JobStatus } from '../xRules';
 import { defineSetting, type SettingsShape } from './define';
 import type { IpcResult } from './ipc';
 
@@ -51,6 +51,8 @@ export interface PublishJob {
   attempts: number;
   /** A create was sent whose outcome is unknown: check X before posting again. */
   uncertain: boolean;
+  /** The user dismissed it; it no longer shows. */
+  dismissed: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -66,10 +68,7 @@ export interface ConnectResult {
   notice: string | null;
 }
 
-/** X OAuth 2.0 Client IDs are URL-safe base64; '' until the user pastes one. */
-export const CLIENT_ID_PATTERN = /^[A-Za-z0-9._~-]{8,128}$/;
-export const DEFAULT_CALLBACK_PORT = 47813;
-
+// '' until the user pastes a Client ID.
 export const xSettings = {
   'x.clientId': defineSetting(z.union([z.literal(''), z.string().regex(CLIENT_ID_PATTERN)]), ''),
   'x.callbackPort': defineSetting(z.number().int().min(1024).max(65535), DEFAULT_CALLBACK_PORT),
