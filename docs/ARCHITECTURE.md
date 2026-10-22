@@ -35,7 +35,7 @@ src/
     ipc/                     core.ts (pure), register.ts (handle()), index.ts, <domain>.ts
     protocols/media.ts       xbot-media://
     db/                      index.ts, migrate.ts, migrations/*.sql
-    services/                index.ts, types.ts, <domain>/index.ts
+    services/                index.ts, types.ts, <domain>/index.ts; ffmpeg/ (T5, see "Studio video")
   preload/                   index.ts (window.xbot), invoke.ts, api/<domain>.ts
   shared/contracts/          <domain>.ts, <domain>.channels.ts, ipc.ts, define.ts,
                              bridge.ts, events.ts, settings.ts (aggregators)
@@ -53,7 +53,7 @@ resources/                   tray.svg → trayTemplate.png / @2x (pnpm icons)
 scripts/                     capture-ui.ts (pnpm capture), render-fixtures.ts, capture-stage.cjs,
                              fixtures/*.html (the fixtures' sources), render-icons.mjs
 tests/unit/  tests/e2e/
-docs/                        SPEC.md, ARCHITECTURE.md, OLLAMA.md, reference/ (+ captures/)
+docs/                        SPEC.md, ARCHITECTURE.md, OLLAMA.md, FFMPEG.md, reference/ (+ captures/)
 ```
 
 ## Process boundaries
@@ -95,7 +95,7 @@ imported by every aggregator, so **a sibling ticket edits only its own files**:
 | `app`, `windows`, `settings`, `events` | T1 (XBOT-O61LM8), the scaffold |
 | renderer design system, both surfaces | T2 (XBOT-6AU4BQ) |
 | `drafts`, `media` | T3 (XBOT-6F4GAC). T3 also added, additively and for the reasons in "Drafts and media": `emojiPanel` and the status calls to `app`, `showEmojiPanel` and `ui.onboardingSeen` to `windows`, the quit flush to `app.ts`, the menu-bar drop to `tray.ts`, the refocus to `hold.ts`, and the Studio hand-off view to `studio/` |
-| `studio` | T4 (XBOT-1N58PP) images; T5 (XBOT-G66JJK) video. T4 also added, additively and for the reasons in "Studio": `importLoose` and an exported `MediaRejected` to the media service, the Studio's quit flush to `app.ts`, full screen to `windows/studio.ts`, moved `useFileDrop` to `renderer/common/`, and the design-system pieces listed under "Components" |
+| `studio` | T4 (XBOT-1N58PP) images; T5 (XBOT-G66JJK) video. T4 also added, additively and for the reasons in "Studio": `importLoose` and an exported `MediaRejected` to the media service, the Studio's quit flush to `app.ts`, full screen to `windows/studio.ts`, moved `useFileDrop` to `renderer/common/`, and the design-system pieces listed under "Components". T5 also added, additively and for the reasons in "Studio video": `services/ffmpeg/` (registered in `services/index.ts` before `media`); the optional `MediaTools.inspectVideo` hook, used by `media/service.ts`, `tools.ts` and `index.ts`; `ffmpeg.org` and `brew.sh` in `security.ts`; `{ hole }` in `drawComposition`; `previewLayout`, `useDevicePixelRatio` and `hole` in `CompositionCanvas`; `SpeakerIcon` and `SpeakerMutedIcon`; and `launch(userData, env?)` in `tests/e2e/studio-harness.ts` |
 | `ai` | T6 (XBOT-4BCGOR). T6 also added, additively: the `aiMenu` slot to `ComposerHeader`, `focusSection` to `SettingsSheet`, the ✦ menu, AI status row and suggestions sheet to `composer/App.tsx`, `src/shared/aiEndpoint.ts` and `src/shared/aiCopy.ts`, and the tighter dev CSP in `electron.vite.config.ts` (see "Local AI") |
 | `projects` | T7 (XBOT-5UVE6R). T7 also added, additively and for the reasons in "Project context": `generateTask` (with `buildTaskMessages` in `prompts.ts`, an exported `toFormat` in `schemas.ts` and an `'ideas'` running action) to the AI service, the `ideas` slot to `ComposerHeader`, `LightbulbIcon`, the `projects` sheet and Ideas wiring to `composer/App.tsx` (whose AI apply path became the shared `applyText`), `src/shared/ideaCopy.ts`, and the `ignore` devDependency |
 | `reminders` (+ launch at login, global shortcut) | T8 (XBOT-8V5WV5) |
@@ -159,9 +159,10 @@ Its event map is merged from every domain's `<Domain>Events` interface:
 `draft:changed`, `draft:studio-target`, `drafts:flush-requested`,
 `media:imported`, `studio:opened`, `studio:flush-requested`, `studio:fullscreen`,
 `status:changed`, `post:published`, `x:accounts-changed`, `x:job-changed`,
-`export:progress`, `settings:changed`, `ui:open-settings`, `ai:state`,
-`ai:progress`, `ai:pull-progress`, `projects:changed` and
-`projects:ideas-changed` exist today. An event listed in a
+`export:progress` (T5: `{ job }`, a video export job's state), `studio:ffmpeg`,
+`settings:changed`, `ui:open-settings`, `ai:state`, `ai:progress`,
+`ai:pull-progress`, `projects:changed` and `projects:ideas-changed` exist
+today. An event listed in a
 domain's `<domain>ForwardedEvents` is forwarded to every window automatically.
 
 ## Settings
@@ -180,6 +181,11 @@ domain's `<domain>ForwardedEvents` is forwarded to every window automatically.
   moved past or skipped; see "Registries".
 - `studio.currentDocumentId` (in `studio.ts`) is the document the Studio
   reopens after a restart.
+- The user's FFmpeg (Locate FFmpeg…, T5) is deliberately **not** a registry
+  setting. `settings:set` accepts any registry key, and the renderer must
+  never choose what main spawns. The ffmpeg service keeps it in the `settings`
+  table under `studio.ffmpegPath`, which is not in the registry, and only the
+  native picker writes it.
 
 ## Database
 
@@ -509,7 +515,10 @@ Prop changes are additive only; siblings build against these.
   - `StudioToolbar({ items, active, onSelect })`;
   - `ToolPopovers` (Background, Frame, Padding, Shadow, Crop), `OutputPopover`,
     `PresetsPopover`, `CropOverlay`;
-  - `Timeline({ duration, current, trim, frames, playing, onTogglePlay })`;
+  - `Timeline({ duration, current, trim, frames, playing, onTogglePlay, label?, onSeek?, onTrim?, onTrimEnd?, minTrim?, muted?, onToggleMute?, muteDisabledReason? })`.
+    Without the optional handlers it only shows (preview mode's sample).
+    `onSeek` scrubs, `onTrim` drags the handles and takes arrow keys (0.1 s,
+    Shift 1 s), and `onToggleMute` adds the mute button;
   - `StudioFooter({ dimensions, fit, zoom, onFit?, onZoom?, dimsAnchor?, onDimensions?, fullscreen?, onFullscreen? })`;
     `fit` is null while a zoom level is chosen.
 - `common/CompositionPreview({ composition, source, fit?, className?, testId? })`
@@ -524,7 +533,7 @@ Prop changes are additive only; siblings build against these.
   280-character limit"), when X would refuse the media (`src/shared/xRules.ts`),
   while media is being added, and while the draft's post is on its way or
   waiting to be checked. The Studio's tools and "Add to post" are
-  disabled with a reason until an image is open (and for a video, until T5),
+  disabled with a reason until an image or video is open (a video needs FFmpeg),
   and the reminder row says reminders aren't set up. The sample handle and media
   exist only in preview mode, labelled "Preview", where Post says "Posting is
   off in preview" and adding media is off.
@@ -576,9 +585,17 @@ T3 (XBOT-6F4GAC). Migration `202610212200_drafts_media.sql`.
   `importLoose({ name, path })` (T4) runs the same path without attaching, for
   the Studio's sources, background images and exports; it throws
   `MediaRejected` with the sentence the user sees.
+- **Video check** (T5). When FFmpeg is there, a video's temp copy also goes
+  through `MediaTools.inspectVideo` before anything is stored: ffprobe must
+  find a real video stream and decode its first frame. A damaged `moov`,
+  frames that don't decode, or an MP4 with no picture is refused. The row
+  then takes ffprobe's display size and duration (an existing row matched by
+  sha256 is updated too). The check waits for an FFmpeg detection still
+  running. Without FFmpeg the box check stands alone, so the composer
+  attaches MP4/MOV as before.
 - **Thumbnails.** QuickLook (`nativeImage.createThumbnailFromPath`, 10 s
-  timeout) on macOS; otherwise `nativeImage` for PNG / JPEG, ffmpeg for video
-  if one is installed, a video tile, or the image itself. T5 refines video.
+  timeout) on macOS; otherwise `nativeImage` for PNG / JPEG, the located
+  FFmpeg's first frame for video, a video tile, or the image itself.
 - **Ownership and cleanup.** Every table that refers to media must do so with
   a declared foreign key to `media(id)`; every file at the root of `media/` and
   in `media/thumbs/` belongs to a media row. Other files go in subfolders. At
@@ -598,16 +615,19 @@ T4 (XBOT-1N58PP): non-destructive screenshot editing. Migration
 - **One composition** (`src/shared/composition/`). `model.ts` holds the
   `Composition` type: source (media id and size), crop (fractions of the
   source) and its aspect lock, frame, canvas ratio, padding, shadow,
-  background, output format and scale, and an optional `video` block reserved
-  for T5. It also holds the defaults, the curated gradients (T2's CSS ported
+  background, output format and scale, and an optional `video` block
+  (`trimStartMs`, `trimEndMs`, `muted`), present exactly when the source is a
+  video (T5). It also holds the defaults, the curated gradients (T2's CSS ported
   stop for stop), the shadow presets, the chrome constants and the style
   helpers. `schema.ts` is its zod schema (main only; compile-time checks keep
   the two identical). Units are resolution-independent: with W the cropped
   source width and S the longer side of the framed picture, padding is a
   fraction of S, and radius, shadow blur and distance are fractions of W.
-- **One geometry.** `layout.ts`'s pure `computeLayout(comp, { scale, maxSide })`
-  returns every rect in output px: canvas (integers), frame, chrome and its
-  parts, content and the source crop. It fits the padded frame uniformly into
+- **One geometry.** `layout.ts`'s pure `computeLayout(comp, { scale, maxSide, maxShortSide? })`
+  returns every rect in output px: canvas (integers, even for a video), frame,
+  chrome and its parts, content and the source crop. `exportLayout(comp)` is
+  the layout an export renders. The footer, the Output popover, both renderers
+  and main's checks use it. It fits the padded frame uniformly into
   the canvas, so the content always keeps the crop's aspect. Sizes over 8192 px
   a side are scaled down uniformly and flagged `capped`. Output size at 1×:
   `original` is the padded frame at source resolution; 16:9, 1:1 and 4:5 are
@@ -638,7 +658,7 @@ T4 (XBOT-1N58PP): non-destructive screenshot editing. Migration
   attachment's linked document, else the document of the export it holds,
   else a new document linked at once. Picking or dropping an image in the
   Studio reopens the newest document for that image (or for the export it
-  is), else creates one. A video opens read-only (`{ view }`) until T5.
+  is), else creates one. Videos too (see "Studio video").
   `studio.currentDocumentId` brings the document back after a restart.
 - **Saving.** The renderer keeps undoable snapshots (100) and saves through
   one serial queue, 500 ms after the last change and at once on hide, before
@@ -646,13 +666,103 @@ T4 (XBOT-1N58PP): non-destructive screenshot editing. Migration
   revision. A slider drag or a typing run is one undo step.
 - **Add to post** (`studio:add-to-post`, on the drafts queue): main saves the
   composition, checks the bytes' real format and size against
-  `computeLayout`, imports them (`importLoose`, at most 20 MB), records the
+  `exportLayout`, imports them (`importLoose`, at most 20 MB), records the
   export, and on the current draft swaps it into the attachment that opened
   the document (else the one linked to it), keeping its position, or appends a
   linked attachment; export rows no draft uses any more are deleted. The
   Studio then hides and the composer shows; `draft:changed` reloads its
   attachments and never touches its text. X takes images up to about 5 MB, so
   T9 checks the size when posting.
+
+## Studio video
+
+T5 (XBOT-G66JJK): playback, trim, mute and MP4 export through local FFmpeg.
+The packaging and licence decision, setup and troubleshooting are in
+[`FFMPEG.md`](FFMPEG.md): v1 uses the FFmpeg the user installs, and bundles
+none. Migration `202610221200_studio_export_jobs.sql`.
+
+- **FFmpeg** (`services/ffmpeg/`, electron-free apart from `index.ts`).
+  - `locate.ts` searches, in order: the user's pick, `<resources>/ffmpeg/`,
+    `/opt/homebrew/bin`, `/usr/local/bin`, then `PATH`. It runs `-version` and
+    `-encoders` in the background with a 15 s timeout. It needs FFmpeg 4.4 or
+    later with libx264 (preferred) or `h264_videotoolbox`, plus `aac` and an
+    ffprobe. Otherwise it reports a `missing` status with a reason and the fix.
+  - `probe.ts`: ffprobe JSON (zod-parsed) and the first-frame decode check.
+  - `export.ts`: the pure argument builder.
+  - `frames.ts`: filmstrip frames.
+  - `run.ts`: `execFile` with an argument array, never a shell.
+  - `XBOT_E2E_NO_FFMPEG=1` (unpackaged only) simulates a Mac without FFmpeg.
+- **Composition and geometry.**
+  - A video's canvas has even sides (4:2:0).
+  - A video exports at 1× inside the 1080p box (`MAX_VIDEO_OUTPUT`: 1920 ×
+    1080, or 1080 × 1920 upright). Its `output.format` and `output.scale` are
+    ignored.
+  - The trim is whole milliseconds, at least `MIN_TRIM_MS` (500, or the whole
+    clip), validated against the clip in main.
+  - `videoPlacement(layout, source)` is where FFmpeg puts the video: the
+    content rect rounded outward to whole pixels and clamped to the canvas,
+    with an integer source crop.
+- **The frame layer.** `drawComposition(…, { hole: true })` draws background,
+  shadow, frame and chrome, cuts the content out (inside the frame's rounded
+  clip), then strokes the border.
+  - The preview stacks it as the export does: `VideoStage` puts a `<video>`
+    *under* a `CompositionCanvas` drawn with the hole, sized `source × k` and
+    offset by `−crop × k`, so the crop fills the content rect at one scale.
+  - Layout rects map to CSS px by `canvas.width / cssWidth`, never by the
+    device pixel ratio, because the backing store is capped.
+  - `useCompositionAssets` never decodes a video source.
+  - `renderVideoLayer` encodes the same layer as an RGBA PNG at the export
+    size.
+- **Documents.** A video document stores ffprobe's facts in
+  `studio_documents.source_video_json`: display size (rotation and SAR
+  applied), the video stream's duration, fps, streams and colour. These are
+  `StudioDocument.video`.
+  - Saves validate against that record, never against `media.width`/`height`:
+    same source, trim inside the clip, `video` present.
+  - The open paths are async: probe outside the transaction, then create and
+    link inside one. Opens are numbered, so a slow open that a newer one
+    overtook is dropped.
+  - Without FFmpeg a video opens as a read-only `{ view }`, whose attachment is
+    now nullable. When `studio:ffmpeg` turns `ready`, main re-runs that open
+    and emits `studio:opened`.
+  - "Replace source…" is images only. The "None" background is disabled for
+    video, and main refuses a transparent video export.
+- **Export jobs** (`services/studio/exports.ts`, table `export_jobs`).
+  - `studio:export-video` saves, checks the layer PNG (IHDR size against
+    `exportLayout`, colour type 6) and queues a job. It resolves
+    `{ job, revision }`.
+  - Jobs run one at a time, in order. A second export of a document already
+    queued or running is refused.
+  - FFmpeg runs off the drafts queue at `nice` 10. Only the import of the
+    finished MP4 (`importLoose`) and the attach go on the drafts queue. The
+    attach is the same path as images, refactored into `attachExport`. The
+    MP4 goes to the draft the user asked from (else the current one).
+  - Progress (`-progress pipe:1`, `out_time_us` over the trim length, clamped)
+    goes to the row and to `export:progress { job }`. The "Export running"
+    chip comes from status provider `studio-export` (order 91).
+  - Cancel (`studio:cancel-export`) sends SIGTERM, then SIGKILL after 3 s. It
+    resolves once FFmpeg has exited, and `tmp/<job>.mp4` and
+    `tmp/<job>.layer.png` are deleted however a job ends.
+  - Quitting SIGKILLs FFmpeg and records `canceled` before the database
+    closes.
+  - At startup, jobs left `queued` or `running` become `failed`. A leftover
+    FFmpeg is killed if `ps` shows it is still writing that job's output (pids
+    get reused). Finished jobs older than 30 days are pruned.
+  - `export_id` points at `studio_exports` (now also `mp4`), never at
+    `media`, so a job doesn't pin its output from the media cleanup.
+  - `XBOT_E2E_FFMPEG_REALTIME=1` (unpackaged only) adds `-re`, so an export
+    takes as long as its trim.
+- **Studio UI** (`renderer/studio/`).
+  - Hooks: `useVideoPlayback` (play inside the trim, pause at its end, muted
+    as the export will be) and `useFilmstrip` (`studio:filmstrip` JPEG bytes
+    as `blob:` URLs; `xbot-media:` serves only the media folder).
+  - Components: `FfmpegCard` (with `useFfmpegStatus`) and `VideoStage`.
+  - "Add to post" reads "Exporting… N%". A chip with Cancel sits over the
+    canvas. A running job doesn't set `busy`, so editing stays live.
+  - On success the Studio hides only while it is visible and still shows that
+    document. Otherwise `draft:changed` just swaps the attachment in.
+  - The Output popover shows MP4, the size, the clip length and the sound.
+  - HDR sources get a notice: there is no tone mapping.
 
 ## Local AI
 
@@ -871,7 +981,9 @@ adding their own files; nobody edits a shared list.
   or null from cached state, and calls `statusChanged()` when it moves. The
   renderer reads `app.getStatus()` and the `status:changed` event
   (`status/useIntegrationStatus.ts`); Settings → Status shows the chips, so the
-  default view stays as in the reference.
+  default view stays as in the reference. Ids in use: T3's `media-export`
+  (90), and T5's `studio-export` (91, "Export running") and `ffmpeg` (92,
+  "FFmpeg not found" plus the fix).
 
 ## Security rules
 
@@ -899,7 +1011,7 @@ adding their own files; nobody edits a shared list.
   - `<webview>` is blocked;
   - `setWindowOpenHandler` always denies.
   - Links to the allowlist (`https:` on `x.com`, `twitter.com`, `ollama.com`,
-    `github.com` and their subdomains) open in the user's browser through
+    `github.com`, `ffmpeg.org`, `brew.sh` and their subdomains) open in the user's browser through
     `shell.openExternal`. Extend the list in `security.ts`, not per call site.
 - **Permissions:** every permission request and check is denied. So clipboard
   writes go through an IPC call to Electron's `clipboard` module in main, not
@@ -952,7 +1064,7 @@ adding their own files; nobody edits a shared list.
   as `core-js: false` under `allowBuilds`. Renderer code never imports values
   from contract files (they pull in zod); types only.
 - `pixelmatch` and `pngjs` are devDependencies for the Studio's export
-  agreement e2e test only.
+  agreement tests only (T5's video tests use `pngjs` too).
 - `ignore` (gitignore matching for project folders) is bundled into main.
 - **Native modules** must ship N-API prebuilds, or be rebuilt for Electron. Add a
   `files` filter in `electron-builder.yml` so only the target platform's binary
@@ -980,6 +1092,16 @@ adding their own files; nobody edits a shared list.
   `XBOT_USER_DATA_DIR`. In unpackaged runs only, `XBOT_E2E=1` exposes
   `globalThis.__xbotTest` (`toggleComposer`, `openStudio`), so tests can drive
   the real code paths.
+- The video tests (T5) run real FFmpeg:
+  - `tests/unit/video-{export,import}.test.ts` run on the electron-free
+    pipeline, with fixtures made by lavfi in `beforeAll`, never committed;
+  - `tests/e2e/studio-video.spec.ts` drives the real Studio. It writes
+    `test-results/captures/studio-video.png`.
+
+  They skip with a message when FFmpeg is missing, and
+  `XBOT_REQUIRE_FFMPEG=1` turns that skip into a failure. The helpers are in
+  `tests/unit/helpers/video.ts` (services) and `videoFixtures.ts` (fixtures
+  and readers, also used by the e2e, so they import no database code).
 - The Studio specs (`tests/e2e/studio-*.spec.ts`, helpers in
   `studio-harness.ts`) also pass `--force-device-scale-factor=1`, so a 100 %
   preview canvas has the export's pixel size, wait for the preview canvas's

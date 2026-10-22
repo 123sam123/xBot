@@ -7,11 +7,12 @@ import { _electron as electron, expect, type ElectronApplication, type Page } fr
 
 export const root = resolve(__dirname, '../..');
 
-export function launch(userData: string): Promise<ElectronApplication> {
+/** `env` adds test seams, e.g. XBOT_E2E_NO_FFMPEG or XBOT_E2E_FFMPEG_REALTIME (T5). */
+export function launch(userData: string, env: Record<string, string> = {}): Promise<ElectronApplication> {
   return electron.launch({
     args: ['.', '--force-device-scale-factor=1', ...(process.platform === 'linux' ? ['--no-sandbox'] : [])],
     cwd: root,
-    env: { ...process.env, XBOT_E2E: '1', XBOT_USER_DATA_DIR: userData },
+    env: { ...process.env, XBOT_E2E: '1', XBOT_USER_DATA_DIR: userData, ...env },
   });
 }
 

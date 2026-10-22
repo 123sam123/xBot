@@ -3,6 +3,7 @@
 import { aiModule } from './ai';
 import { backupModule } from './backup';
 import { draftsModule } from './drafts';
+import { ffmpegModule } from './ffmpeg';
 import { mediaModule } from './media';
 import { projectsModule } from './projects';
 import { remindersModule } from './reminders';
@@ -14,6 +15,8 @@ import { xModule } from './x';
 const modules: readonly ServiceModule[] = [
   settingsModule,
   draftsModule,
+  // T5: FFmpeg comes before media, whose posters and import probe use it.
+  ffmpegModule,
   mediaModule,
   studioModule,
   aiModule,

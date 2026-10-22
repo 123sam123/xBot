@@ -5,7 +5,8 @@ import { log } from './log';
 // pages, no new windows, no <webview>, no permissions. Links to a short list of
 // https hosts open in the user's browser instead.
 
-const EXTERNAL_HOSTS = new Set(['x.com', 'twitter.com', 'ollama.com', 'github.com']);
+// ffmpeg.org and brew.sh: the Studio's "how to get FFmpeg" links (T5).
+const EXTERNAL_HOSTS = new Set(['x.com', 'twitter.com', 'ollama.com', 'github.com', 'ffmpeg.org', 'brew.sh']);
 
 export function isAllowedExternalUrl(raw: string): boolean {
   try {

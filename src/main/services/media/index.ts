@@ -1,6 +1,7 @@
 // Owned by T3 (XBOT-6F4GAC). Already wired into services/index.ts (after drafts, which it attaches to).
 import { registerStatusProvider } from '../../status';
 import { drafts } from '../drafts';
+import { ffmpeg } from '../ffmpeg';
 import type { ServiceModule } from '../types';
 import { createMediaService, type MediaService } from './service';
 import { electronMediaTools } from './tools';
@@ -16,7 +17,7 @@ export function media(): MediaService {
 export const mediaModule: ServiceModule = {
   name: 'media',
   async init(ctx) {
-    instance = createMediaService({ db: ctx.db, paths: ctx.paths, log: ctx.log, tools: electronMediaTools(ctx.log), drafts: drafts() });
+    instance = createMediaService({ db: ctx.db, paths: ctx.paths, log: ctx.log, tools: electronMediaTools(ctx.log, ffmpeg()), drafts: drafts() });
     await instance.init();
     unregisterStatus = registerStatusProvider({
       id: 'media-export',
