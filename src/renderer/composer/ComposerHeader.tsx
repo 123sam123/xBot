@@ -8,13 +8,15 @@ const APP_MENU_ID = 'app-menu';
 /**
  * The header. The xBot mark and name are the app menu's trigger (New draft,
  * Draft history…, Settings…), so the default view stays as in the reference.
- * `aiMenu` (T6's ✦ button) sits just left of the account control.
+ * `aiMenu` (T6's ✦ button) sits just left of the account control, and
+ * `ideas` (T7's bulb) just left of that.
  */
 export function ComposerHeader({
   account,
   onConnect,
   menuItems = [],
   aiMenu,
+  ideas,
   accountEntries,
   onAccountAction,
 }: {
@@ -22,6 +24,7 @@ export function ComposerHeader({
   onConnect?: () => void;
   menuItems?: readonly MenuItem[];
   aiMenu?: ReactNode;
+  ideas?: ReactNode;
   /** The real X accounts' menu (T9); see AccountMenu. */
   accountEntries?: readonly AccountMenuEntry[];
   onAccountAction?(action: AccountAction): void;
@@ -44,6 +47,7 @@ export function ComposerHeader({
         <span className="composer-name">xBot</span>
       </button>
       <Menu id={APP_MENU_ID} anchor={anchor} label="xBot" items={menuItems} placement="bottom-start" testId="app-menu" />
+      {ideas}
       {aiMenu}
       <AccountMenu account={account} onConnect={onConnect} entries={accountEntries} onAction={onAccountAction} />
     </header>

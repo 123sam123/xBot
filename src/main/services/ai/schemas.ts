@@ -33,7 +33,8 @@ export interface OutputSpec<S extends z.ZodType> {
 /** Every output here is an object of strings. */
 export type AnyOutputSpec = OutputSpec<z.ZodType<Record<string, string>>>;
 
-function toFormat(schema: z.ZodType): object {
+/** A zod schema as the JSON Schema Ollama's `format` takes. */
+export function toFormat(schema: z.ZodType): object {
   const json = z.toJSONSchema(schema) as Record<string, unknown>;
   delete json.$schema;
   return json;

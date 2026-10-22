@@ -137,6 +137,11 @@ export const MoreIcon = icon(
 
 export const SparkleIcon = icon('SparkleIcon', <path d="M12 3.5l1.9 5.4 5.6 1.6-5.6 1.6L12 17.5l-1.9-5.4-5.6-1.6 5.6-1.6z" />);
 
+export const LightbulbIcon = icon(
+  'LightbulbIcon',
+  <path d="M9.5 18h5M10.25 21h3.5M12 3a6 6 0 0 0-3.6 10.8c.7.55 1.1 1.3 1.1 2.1V16h5v-.1c0-.8.4-1.55 1.1-2.1A6 6 0 0 0 12 3z" />,
+);
+
 export const GridIcon = icon(
   'GridIcon',
   <>

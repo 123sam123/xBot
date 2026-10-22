@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { aiCopy } from '../../shared/aiCopy';
 import type { AiAction, AiOption } from '../../shared/contracts/ai';
+import type { Idea } from '../../shared/contracts/projects';
 import type { Draft } from '../../shared/contracts/drafts';
 import type { IpcResult } from '../../shared/contracts/ipc';
 import type { ImportResult, MediaItem } from '../../shared/contracts/media';
@@ -37,6 +38,7 @@ import {
 import { AttachmentList, type ComposerAttachment } from './AttachmentList';
 import { ComposerHeader } from './ComposerHeader';
 import { HistorySheet } from './HistorySheet';
+import { IdeasMenu, ProjectsSheet, useIdeas, useProjects } from './ideas';
 import { MediaThumb } from './MediaThumb';
 import { PostEditor } from './PostEditor';
 import { shouldStartFreshDraft } from './publish/freshDraft';
@@ -57,13 +59,15 @@ import { useFileDrop } from '../common/useFileDrop';
 // account menu, and Post ↑ — a publish job with a connected account
 // (window.xbot.x), the post-it-yourself sheet without one. T6 adds local AI:
 // the ✦ menu, the suggestions sheet and the AI status row; an AI change goes
-// through the editor, so it autosaves and stays undoable.
+// through the editor, so it autosaves and stays undoable. T7 adds project
+// ideas: the header's bulb and its popover, and the projects sheet; using an
+// idea goes through the same undoable path.
 
 const NOTICE_MS = 3200;
 /** The drafts contract's DRAFT_TEXT_MAX (not imported here: contract files bundle zod). */
 const TEXT_MAX = 25_000;
 
-type SheetId = 'onboarding' | 'history' | 'settings' | 'publish' | 'suggestions' | 'reconcile';
+type SheetId = 'onboarding' | 'history' | 'settings' | 'publish' | 'suggestions' | 'reconcile' | 'projects';
 
 /** Keeps the window exactly as tall as its content, so no empty region shows below it. */
 function useFitWindowToContent(ref: React.RefObject<HTMLElement | null>): void {
@@ -202,6 +206,8 @@ function Composer({ preview, emojiPanel, seenSteps }: { preview: boolean; emojiP
   /** The `aiRun.finished` count the user has seen, so "Suggestions ready" shows only for new results. */
   const [aiSeen, setAiSeen] = useState(0);
   const [settingsFocus, setSettingsFocus] = useState<string | undefined>(undefined);
+  const ideasState = useIdeas(!preview);
+  const projectList = useProjects(!preview) ?? [];
 
   // X (T9): accounts, publish jobs, and the sheets they open.
   const { state: xstate } = useXState(!preview);
@@ -361,10 +367,11 @@ function Composer({ preview, emojiPanel, seenSteps }: { preview: boolean; emojiP
     setSheet(null);
     editor.current?.focus();
   };
-  const applyAi = (option: AiOption, target: 'whole' | 'selection'): string | null => {
+  /** Puts generated text in the post through the editor (autosaved, Cmd+Z reverts it) and keeps one undo entry. */
+  const applyText = (text: string, target: 'whole' | 'selection', selection: SelectionRef | null): string | null => {
     if (!draft) return aiCopy.menu.loading;
     const before = model.text;
-    const plan = planApply(before, option.text, target, aiRun.selection);
+    const plan = planApply(before, text, target, selection);
     if ('error' in plan) return plan.error;
     const el = editor.current;
     let after: string;
@@ -375,10 +382,16 @@ function Composer({ preview, emojiPanel, seenSteps }: { preview: boolean; emojiP
       model.setText(after);
     }
     setAiUndo({ draftId: draft.id, before, after });
+    return null;
+  };
+  const applyAi = (option: AiOption, target: 'whole' | 'selection'): string | null => {
+    const error = applyText(option.text, target, aiRun.selection);
+    if (error) return error;
     setAiSeen(aiRun.finished);
     setSheet(null);
     return null;
   };
+  const applyIdea = (idea: Idea): string | null => applyText(idea.text, 'whole', null);
   const undoAi = () => {
     if (!canUndo(aiUndo, draft?.id ?? null, model.text)) return;
     const el = editor.current;
@@ -545,6 +558,17 @@ function Composer({ preview, emojiPanel, seenSteps }: { preview: boolean; emojiP
         account={account}
         menuItems={menuItems}
         aiMenu={<AiMenu state={aiState} context={aiContext} onOpen={captureSelection} onAction={runAi} onSettings={openAiSettings} />}
+        ideas={
+          <IdeasMenu
+            state={ideasState}
+            projects={projectList}
+            aiState={aiState}
+            preview={preview}
+            onUse={applyIdea}
+            onProjects={() => setSheet('projects')}
+            onAiSetup={openAiSettings}
+          />
+        }
         accountEntries={preview ? undefined : accountMenuEntries(xstate)}
         onAccountAction={onAccountAction}
       />
@@ -619,6 +643,7 @@ function Composer({ preview, emojiPanel, seenSteps }: { preview: boolean; emojiP
         onApply={applyAi}
         onSetup={openAiSettings}
       />
+      <ProjectsSheet open={sheet === 'projects'} onClose={() => setSheet(null)} projects={projectList} preview={preview} />
       <HistorySheet open={sheet === 'history'} onClose={() => setSheet(null)} onRestore={(id) => void restore(id)} />
       <PublishSheet
         open={sheet === 'publish'}
