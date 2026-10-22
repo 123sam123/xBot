@@ -4,8 +4,9 @@ import { ArrowUpRightIcon, CheckIcon, ImageIcon, Sheet, StatusChip } from '../de
 type Outcome = { tone: 'neutral' | 'warning'; text: string } | null;
 
 /**
- * Post without an X account (T9 swaps in real publishing): copy the text,
- * export the media to a folder, and open X's composer in the browser.
+ * Post it yourself: copy the text, export the media to a folder, and open X's
+ * composer in the browser. Shown when no X account is connected, and when X
+ * refused a post for a reason xBot can't fix (no credits, no access, Reconnect).
  */
 export function PublishSheet({ open, onClose, ...options }: { open: boolean; onClose(): void } & PublishOptionsProps) {
   return (
@@ -16,6 +17,10 @@ export function PublishSheet({ open, onClose, ...options }: { open: boolean; onC
 }
 
 interface PublishOptionsProps {
+  /** Why the sheet opened; defaults to "X isn't connected". */
+  lede?: string;
+  /** Offers "Connect X" (T9) when set. */
+  onConnect?: () => void;
   hasText: boolean;
   mediaCount: number;
   /** Resolves to an error message, or null once the text is on the clipboard. */
@@ -25,7 +30,7 @@ interface PublishOptionsProps {
 }
 
 /** Mounted only while the sheet is open, so "Copied" and results start fresh each time. */
-function PublishOptions({ hasText, mediaCount, onCopy, onExport }: PublishOptionsProps) {
+function PublishOptions({ lede, onConnect, hasText, mediaCount, onCopy, onExport }: PublishOptionsProps) {
   const [copied, setCopied] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [outcome, setOutcome] = useState<Outcome>(null);
@@ -49,7 +54,7 @@ function PublishOptions({ hasText, mediaCount, onCopy, onExport }: PublishOption
   const files = mediaCount === 1 ? '1 file' : `${mediaCount} files`;
   return (
     <>
-      <p className="sheet-lede">X isn’t connected, so post it yourself.</p>
+      <p className="sheet-lede">{lede ?? 'X isn’t connected, so post it yourself.'}</p>
       <div className="publish-options">
         <button
           type="button"
@@ -93,6 +98,20 @@ function PublishOptions({ hasText, mediaCount, onCopy, onExport }: PublishOption
         </a>
       </div>
       <p className="sheet-note">X opens without your media. Attach the exported files there yourself.</p>
+      {onConnect && (
+        <>
+          <button type="button" className="publish-option" data-testid="publish-connect-x" onClick={onConnect}>
+            <span className="publish-option-icon" aria-hidden="true">
+              X
+            </span>
+            <span className="publish-option-text">
+              <span className="publish-option-label">Connect X</span>
+              <span className="publish-option-detail">Post from xBot with your own X developer app.</span>
+            </span>
+          </button>
+          <p className="sheet-note">X API usage may be billed to your own X developer account, separately from xBot’s free local AI.</p>
+        </>
+      )}
       {outcome && (
         <StatusChip tone={outcome.tone} className="publish-outcome">
           {outcome.text}

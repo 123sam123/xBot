@@ -99,7 +99,7 @@ imported by every aggregator, so **a sibling ticket edits only its own files**:
 | `ai` | T6 (XBOT-4BCGOR). T6 also added, additively: the `aiMenu` slot to `ComposerHeader`, `focusSection` to `SettingsSheet`, the ✦ menu, AI status row and suggestions sheet to `composer/App.tsx`, `src/shared/aiEndpoint.ts` and `src/shared/aiCopy.ts`, and the tighter dev CSP in `electron.vite.config.ts` (see "Local AI") |
 | `projects` | T7 (XBOT-5UVE6R). T7 also added, additively and for the reasons in "Project context": `generateTask` (with `buildTaskMessages` in `prompts.ts`, an exported `toFormat` in `schemas.ts` and an `'ideas'` running action) to the AI service, the `ideas` slot to `ComposerHeader`, `LightbulbIcon`, the `projects` sheet and Ideas wiring to `composer/App.tsx` (whose AI apply path became the shared `applyText`), `src/shared/ideaCopy.ts`, and the `ignore` devDependency |
 | `reminders` (+ launch at login, global shortcut) | T8 (XBOT-8V5WV5) |
-| `x` | T9 (XBOT-OE2XV9) |
+| `x` | T9 (XBOT-OE2XV9). T9 also added, additively and for the reasons in "X publishing": the X wait in `app.ts`'s first `before-quit`, `openExternalIfAllowed` exported from `security.ts`, `db/durable.ts`, the design system's `TextField`, and props on `AccountMenu`, `ComposerHeader`, `ActionRow` and `PublishSheet` |
 | `backup` (+ README, preview mode fixtures, packaging) | T10 (XBOT-1DDYA1). T2 created `src/renderer/preview/` and `resources/fixtures/`; T10 extends them. |
 
 Shared files that several tickets may still touch, so coordinate:
@@ -158,9 +158,10 @@ if (!result.ok) showError(result.error);
 Its event map is merged from every domain's `<Domain>Events` interface:
 `draft:changed`, `draft:studio-target`, `drafts:flush-requested`,
 `media:imported`, `studio:opened`, `studio:flush-requested`, `studio:fullscreen`,
-`status:changed`, `post:published`, `export:progress`, `settings:changed`,
-`ui:open-settings`, `ai:state`, `ai:progress`, `ai:pull-progress`,
-`projects:changed` and `projects:ideas-changed` exist today. An event listed in a
+`status:changed`, `post:published`, `x:accounts-changed`, `x:job-changed`,
+`export:progress`, `settings:changed`, `ui:open-settings`, `ai:state`,
+`ai:progress`, `ai:pull-progress`, `projects:changed` and
+`projects:ideas-changed` exist today. An event listed in a
 domain's `<domain>ForwardedEvents` is forwarded to every window automatically.
 
 ## Settings
@@ -206,6 +207,12 @@ domain's `<domain>ForwardedEvents` is forwarded to every window automatically.
     branch) are logged and ignored.
 - Modules under `db/` import no `electron`, so Vitest can load them.
 - Store multi-row writes in one `db.transaction(...)` (atomic draft updates).
+- **Durable writes.** `synchronous=NORMAL` lets a power cut roll back the last
+  WAL commits. A write that must survive one before something irreversible
+  happens (T9: "a create-post request is about to be sent") goes through
+  `durable(db, fn)` (`db/durable.ts`): `synchronous=FULL` and `fullfsync=ON`
+  for that one transaction. SQLite refuses the pragma inside a transaction, so
+  `durable` is never called from inside one.
 
 ## userData and modes
 
@@ -249,7 +256,9 @@ Defined by `src/main/index.ts` and `src/main/app.ts`:
 both toggle the composer. The first `before-quit` is prevented: main asks the
 composer to save text, and the Studio to save edits, still inside their
 autosave debounce and waits for both acks (each at most 1 s, skipped in preview
-or when that page is not loaded), then
+or when that page is not loaded) and, only while a create-post request is in
+flight, for X to answer it (at most 10 s, `settleXForQuit`; past that the
+request is aborted and launch reconciles the job), then
 quits again. That second `before-quit` marks the app as quitting, and only then
 do windows really close. `will-quit` disposes services, then closes the DB.
 `window-all-closed` is ignored, since a menu-bar app runs without windows.
@@ -455,7 +464,9 @@ Prop changes are additive only; siblings build against these.
   on pointer-up and key-up, so a drag is one undo step), `SwatchGroup`,
   `Segmented` (radiogroups; an option may be `disabled` with a `reason`
   tooltip), `Toggle` (`role="switch"`), `TextField({ label, value, onChange,
-  onCommit? })` (commits on blur and Enter), `NumberField({ label, value, min,
+  onCommit?, stacked?, description?, error?, readOnly?, selectOnFocus?, code? })`
+  (commits on blur and Enter; T9 added `stacked` (label above a full-width
+  input) through `code`), `NumberField({ label, value, min,
   max, onChange })` (whole numbers, clamped on blur and Enter), `ColorField`
   (the system colour picker in a swatch), and the inline SVG icons in
   `icons.tsx`.
@@ -465,11 +476,13 @@ Prop changes are additive only; siblings build against these.
 ### Surfaces and their props
 
 - **Composer** (`composer/`):
-  - `ComposerHeader({ account, onConnect?, menuItems?, aiMenu?, ideas? })`: the xBot mark and
+  - `ComposerHeader({ account, onConnect?, menuItems?, aiMenu?, ideas?, accountEntries?, onAccountAction? })`: the xBot mark and
     name are the app menu's trigger (New draft, Draft history…, Settings…);
     `aiMenu` (a node, T6's ✦ button) sits just left of the account control,
     and `ideas` (T7's bulb) just left of that;
-    `AccountMenu({ account: { kind: 'disconnected' } | { kind: 'connected' | 'preview', handle } })`;
+    `AccountMenu({ account: { kind: 'disconnected' | 'connecting' } | { kind: 'connected', handle, reconnect? } | { kind: 'preview', handle }, entries?, onAction? })`.
+    `entries` (T9, `composer/account/accountMenu.ts`) lists the real accounts with
+    switch / add / reconnect / disconnect actions;
   - `PostEditor({ value, onChange, readOnly?, maxLength?, saveState?, onEmoji?, editorRef? })`.
     `maxLength` is only the 25 000-character storage bound; the counter shows
     X's over-limit state. The count is X's weighted length
@@ -477,12 +490,16 @@ Prop changes are additive only; siblings build against these.
   - `AttachmentList({ attachments, onRemove(id), onReorder(from, to), onEditInStudio(id) })`:
     drag or ↑/↓ to reorder; more than two cards scroll inside the panel;
   - `UploadZone({ onAdd?, disabledReason?, dragActive?, busy? })`;
-  - `ActionRow({ count, limit, canPost, postDisabledReason?, onPost, notice? })`;
+  - `ActionRow({ count, limit, canPost, postDisabledReason?, onPost, notice?, busy? })`;
+    `busy` reads "Posting…";
+  - `publish/PublishStatus({ job, now, draftLabel?, onAction })` (T9): the job row
+    above the action row;
   - `ReminderRow({ label, muted?, onClick? })`;
   - sheets, one open at a time: `OnboardingSheet`, `SettingsSheet({ open, onClose, focusSection? })`
     (`settings/`; `focusSection` scrolls that section into view), `HistorySheet`,
-    `PublishSheet`, `SuggestionsSheet` (`composer/ai/`, see "Local AI"),
-    `ProjectsSheet` (`composer/ideas/`, see "Project context").
+    `PublishSheet({ lede?, onConnect?, … })` (post it yourself), `SuggestionsSheet`
+    (`composer/ai/`, see "Local AI"), `publish/ReconcileSheet` (T9: "Did it post?")
+    and `ProjectsSheet` (`composer/ideas/`, see "Project context").
 
   In normal mode the draft is persisted (`composer/useDraft.ts`, see "Drafts
   and media"); preview mode keeps its fixed sample in local state.
@@ -498,11 +515,15 @@ Prop changes are additive only; siblings build against these.
 - `common/CompositionPreview({ composition, source, fit?, className?, testId? })`
   draws a shared `Composition` with the Studio's canvas renderer, contained in
   or covering its box (the composer's preview-mode thumbnail).
-- **Honest states.** In normal mode the header reads "Connect X". Until T9,
-  Post opens the publish-options sheet (Copy text / Export media / Open X); it
-  is disabled with a reason while the draft loads ("Loading your draft…"), when
-  the draft is empty ("Write something or add media first") and over the limit
-  ("Over the 280-character limit"). The Studio's tools and "Add to post" are
+- **Honest states.** In normal mode the header reads "Connect X" until an
+  account is connected, then its real handle. Without an account, Post opens
+  the publish-options sheet (Copy text / Export media / Open X, plus Connect X);
+  with one, it starts a publish job (see "X publishing"). Post is disabled with
+  a reason while the draft loads ("Loading your draft…"), when the draft is
+  empty ("Write something or add media first"), over the limit ("Over the
+  280-character limit"), when X would refuse the media (`src/shared/xRules.ts`),
+  while media is being added, and while the draft's post is on its way or
+  waiting to be checked. The Studio's tools and "Add to post" are
   disabled with a reason until an image is open (and for a video, until T5),
   and the reminder row says reminders aren't set up. The sample handle and media
   exist only in preview mode, labelled "Preview", where Post says "Posting is
@@ -779,6 +800,56 @@ privacy). Migration `202610220300_projects_context.sql`. Everything under
   refuses `/`, the home folder and its ancestors, private and system
   folders, whole disks and xBot's data folder. Preview mode reads nothing.
 
+## X publishing
+
+T9 (XBOT-OE2XV9). Migration `202610221200_x_publish.sql`; the verified X API
+behaviour, setup and troubleshooting are in [`X.md`](X.md).
+
+- **Files.** `services/x/`: `api.ts` (the X API over an injected fetch; zod
+  at the boundary; the only error it throws is a sanitised `XApiError`),
+  `oauth.ts` + `loopback.ts` (PKCE S256 sign-in), `accounts.ts` (rows and
+  tokens), `vault.ts` (safeStorage), `publish.ts` (the job state machine),
+  `reconcile.ts` (finding a post on X), `errors.ts` (the error catalog),
+  `service.ts` (the facade), `handlers.ts` (the `x:*` IPC table). Only
+  `index.ts` imports `electron` (`net.fetch` with `credentials: 'omit'`,
+  `safeStorage`, `shell` through `openExternalIfAllowed`, the composer's
+  hide/show). Rules shared with the renderer are zod-free in
+  `src/shared/xRules.ts`.
+- **Tables.** `x_accounts` (one row per X user; `token_blob` is safeStorage
+  ciphertext; `client_id` is the app the tokens were issued to; at most one
+  `is_active`), `publish_jobs` (one per Post ↑, with its frozen account,
+  text and idempotency key), `publish_job_media` (the frozen media in order;
+  its `media_id` is the foreign key that keeps T3's GC away from a file a job
+  may still upload, nulled once the job is published, canceled or dismissed)
+  and `publish_job_events` (every transition).
+- **States.** `queued → uploading → processing → publishing → published`, plus
+  `failed`, `canceled` and `needs_reconciliation`; the active set (one per
+  draft, a partial unique index) is everything but `published`, `failed` and
+  `canceled`. Every transition is a compare-and-swap `UPDATE … WHERE status = ?`
+  logged in `publish_job_events` and pushed as `x:job-changed`. Jobs upload
+  one at a time; reconcile and Retry post are serialised per job.
+- **Never twice.** The same draft content maps to one job (repeat clicks get
+  it back). The move into `publishing` is a durable write made before the
+  create request; a timeout, network error, 5xx or quit after it leaves the
+  job `needs_reconciliation` (`uncertain_since`), and nothing sends that
+  create again except an explicit Retry post, which first looks on X. Launch
+  turns `publishing` into `needs_reconciliation` and earlier interrupted states
+  into `failed` (`x_interrupted`); nothing is resumed on its own.
+- **Seams for siblings.**
+  - T4/T5: `createPublisher({ resolvePostMedia })` decides which file is
+    uploaded for a frozen attachment: the attachment's own media file. T4's
+    "Add to post" swaps the rendered export into the attachment, so an edit is
+    what gets posted; an edited attachment that has not been added to the post
+    posts its current media.
+  - T10: `x_accounts.token_blob` only decrypts on the Mac that wrote it. A backup
+    should leave it out; a restored account reads as "Reconnect".
+- **Settings.** `x.clientId` (the user's OAuth 2.0 Client ID; '' until set) and
+  `x.callbackPort` (default 47813; the callback is
+  `http://127.0.0.1:<port>/callback`). Settings → X (`settings/sections/x.tsx`)
+  and onboarding step 5 (`onboarding/steps/x.tsx`) share `composer/account/XSetup.tsx`.
+- **Status chip** (`id: 'x'`, from the database only): X not set up / X
+  disconnected / X: @handle / Reconnect X / Posting to X / A post needs checking.
+
 ## Registries
 
 Later tickets add onboarding steps, settings sections and status chips by
@@ -849,11 +920,17 @@ adding their own files; nobody edits a shared list.
   reads it.
 - **Credentials:** tokens are stored only through Electron `safeStorage`. If
   `safeStorage.isEncryptionAvailable()` is false, refuse to store them and say
-  why; never fall back to plaintext.
+  why; never fall back to plaintext. T9's vault (`services/x/vault.ts`) also
+  refuses Linux's `basic_text` backend (a hard-coded key), uses Electron 45's
+  async calls, and never touches safeStorage at launch (no Keychain prompt).
 - **Untrusted input:** treat project files, model output and X API responses as
   untrusted. Validate them with zod at the boundary.
 - **Network:** no local HTTP server, no telemetry, no remote AI. Network access
-  is only for explicitly requested model downloads and X.
+  is only for explicitly requested model downloads and X. The one exception to
+  "no local HTTP server" (SPEC §2 allows it for OAuth) is T9's sign-in
+  callback (`services/x/loopback.ts`): it binds `127.0.0.1` only, answers only
+  `GET /callback` with the expected `Host` and `state`, and lives only while a
+  sign-in waits (closed after the callback, on cancel, or after 5 min).
 
 ## Dependencies and the lockfile
 
@@ -868,7 +945,9 @@ adding their own files; nobody edits a shared list.
   `pnpm-workspace.yaml`, and `pnpm ignored-builds` must list nothing.
 - pnpm 11 also refuses versions published in the last day
   (`minimumReleaseAge`). Commit whatever `minimumReleaseAgeExclude` entry it adds.
-- `twitter-text` (the counter) is bundled into the composer only. Its
+- `twitter-text` (the counter) is bundled into the composer and, since T9,
+  into main (validation before posting, URL matching for reconciliation). Its
+  core-js@2 polyfills patch no globals on Electron's V8 (checked). Its
   `core-js@2` dependency's postinstall only prints a banner, so it is listed
   as `core-js: false` under `allowBuilds`. Renderer code never imports values
   from contract files (they pull in zod); types only.
