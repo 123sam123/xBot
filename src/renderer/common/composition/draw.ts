@@ -4,9 +4,17 @@ import { brightnessWash, CHROME, GRADIENTS, SHADOW_COLOR, type Composition, type
 // The one draw routine behind the Studio preview and the exported PNG/JPEG.
 // It draws only the composition, in output px straight from `computeLayout`:
 // no transform is ever applied while a shadow is set (canvas shadows ignore
-// the transform), and the source is drawn with one uniform scale.
+// the transform), and the source is drawn with one uniform scale. For a video
+// (T5) it draws the frame layer instead: everything but the source, with a
+// transparent hole where the video shows through, both in the preview (the
+// <video> sits under the canvas) and in the PNG FFmpeg lays over the video.
 
 export type Ctx2D = CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D;
+
+export interface DrawOptions {
+  /** Cut the content out (after the chrome, before the border): the video frame layer. */
+  hole?: boolean;
+}
 
 export interface CompositionAssets {
   /** The decoded source; until it loads, the frame is drawn empty. */
@@ -37,7 +45,7 @@ function path(d: string): Path2D {
 
 const rgba = ([r, g, b]: readonly [number, number, number], alpha: number) => `rgba(${r},${g},${b},${alpha})`;
 
-export function drawComposition(ctx: Ctx2D, comp: Composition, layout: Layout, assets: CompositionAssets): void {
+export function drawComposition(ctx: Ctx2D, comp: Composition, layout: Layout, assets: CompositionAssets, options: DrawOptions = {}): void {
   ctx.save();
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.clearRect(0, 0, layout.canvas.width, layout.canvas.height);
@@ -45,7 +53,7 @@ export function drawComposition(ctx: Ctx2D, comp: Composition, layout: Layout, a
   ctx.imageSmoothingQuality = 'high';
   drawBackground(ctx, comp, layout, assets);
   drawShadows(ctx, layout);
-  drawFrame(ctx, comp, layout, assets);
+  drawFrame(ctx, comp, layout, assets, options);
   ctx.restore();
 }
 
@@ -161,7 +169,7 @@ function drawShadows(ctx: Ctx2D, layout: Layout): void {
   }
 }
 
-function drawFrame(ctx: Ctx2D, comp: Composition, layout: Layout, assets: CompositionAssets): void {
+function drawFrame(ctx: Ctx2D, comp: Composition, layout: Layout, assets: CompositionAssets, options: DrawOptions): void {
   const { frame, content, sourceCrop } = layout;
   const theme = CHROME.themes[comp.frame.theme];
   ctx.save();
@@ -170,7 +178,13 @@ function drawFrame(ctx: Ctx2D, comp: Composition, layout: Layout, assets: Compos
   ctx.fillStyle = '#fff';
   ctx.fillRect(frame.x, frame.y, frame.width, frame.height);
   drawChrome(ctx, comp, layout);
-  if (assets.source) {
+  if (options.hole) {
+    // Still inside the frame's clip, so the hole has the frame's rounded corners.
+    ctx.globalCompositeOperation = 'destination-out';
+    ctx.fillStyle = '#000';
+    ctx.fillRect(content.x, content.y, content.width, content.height);
+    ctx.globalCompositeOperation = 'source-over';
+  } else if (assets.source) {
     ctx.drawImage(assets.source, sourceCrop.x, sourceCrop.y, sourceCrop.width, sourceCrop.height, content.x, content.y, content.width, content.height);
   }
   ctx.restore();

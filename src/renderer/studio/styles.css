@@ -123,7 +123,7 @@ body,
   width: max-content;
 }
 
-/* A video opened from the composer: read-only until T5 (XBOT-G66JJK). */
+/* A video shown read-only: FFmpeg is missing (T5). */
 .studio-target {
   position: absolute;
   inset: 0;
@@ -156,6 +156,132 @@ body,
   max-width: calc(100% - 40px);
   transform: translateX(-50%);
   pointer-events: none;
+}
+
+/* ---------- Video (T5) ---------- */
+
+/* The <video> under the canvas's frame layer, exactly as FFmpeg composites the export. */
+.video-stage {
+  position: relative;
+  flex: none;
+  overflow: hidden;
+}
+
+.video-stage-video {
+  position: absolute;
+  object-fit: fill;
+  background: #000;
+  pointer-events: none;
+}
+
+.video-stage-canvas {
+  position: relative;
+}
+
+.video-stage-note {
+  position: absolute;
+  left: 50%;
+  bottom: 12px;
+  transform: translateX(-50%);
+  padding: 4px 10px;
+  border-radius: 10px;
+  background: rgb(0 0 0 / 0.55);
+  font-size: var(--fs-xs);
+  white-space: nowrap;
+}
+
+/* "Video editing needs FFmpeg": over the read-only video (clear of its controls), or slim over a video document. */
+.studio-ffmpeg {
+  position: absolute;
+  left: 50%;
+  top: 12px;
+  z-index: 1;
+  width: min(440px, calc(100% - 40px));
+  transform: translateX(-50%);
+}
+
+.ffmpeg-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px 18px;
+}
+
+.ffmpeg-card-compact {
+  gap: 6px;
+  padding: 10px 14px;
+}
+
+.ffmpeg-card-title {
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-medium);
+}
+
+.ffmpeg-card-text {
+  font-size: var(--fs-xs);
+  color: var(--text-secondary);
+  user-select: text;
+}
+
+.ffmpeg-card-text a {
+  color: inherit;
+  text-decoration: underline;
+}
+
+.ffmpeg-card-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 2px;
+}
+
+.ffmpeg-card-button {
+  height: 30px;
+  min-width: 0;
+  padding: 0 14px;
+  font-size: var(--fs-xs);
+}
+
+.ffmpeg-card-note {
+  font-size: var(--fs-xs);
+  color: var(--text-tertiary);
+}
+
+.studio-export-status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* The toast ignores the pointer; its Cancel doesn't. */
+.studio-cancel {
+  height: 28px;
+  padding: 0 10px;
+  font-size: var(--fs-xs);
+  pointer-events: auto;
+}
+
+.studio-toast .status-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+}
+
+.studio-toast .status-dot-busy {
+  background: #fff;
+  animation: studio-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes studio-pulse {
+  50% {
+    opacity: 0.35;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .studio-toast .status-dot-busy {
+    animation: none;
+  }
 }
 
 /* ---------- Crop mode ---------- */
@@ -570,6 +696,55 @@ body,
 
 .trim-handle-end {
   right: 3px;
+}
+
+/* Draggable handles (T5): a wider grip over each edge, the bar drawn where it always was. */
+.timeline-strip-interactive {
+  cursor: pointer;
+  touch-action: none;
+}
+
+.trim-grip {
+  position: absolute;
+  top: -3px;
+  bottom: -3px;
+  z-index: 1;
+  width: 18px;
+  cursor: ew-resize;
+  touch-action: none;
+}
+
+.trim-grip-start {
+  left: -6px;
+}
+
+.trim-grip-end {
+  right: -6px;
+}
+
+.trim-grip .trim-handle-start {
+  left: 9px;
+}
+
+.trim-grip .trim-handle-end {
+  right: 9px;
+}
+
+.trim-grip:focus-visible {
+  outline: none;
+}
+
+.trim-grip:focus-visible .trim-handle {
+  box-shadow: var(--focus-ring);
+}
+
+.timeline-playhead {
+  pointer-events: none;
+}
+
+.timeline-mute {
+  flex: none;
+  margin-left: 10px;
 }
 
 .timeline-playhead {

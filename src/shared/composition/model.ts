@@ -75,10 +75,12 @@ export interface Output {
   scale: 1 | 2;
 }
 
-/** Reserved for T5 (XBOT-G66JJK). */
+/** A video source's trim and sound (T5). Present exactly when the source is a video. */
 export interface VideoSettings {
+  /** The part of the source exported, ms from its start. */
   trimStartMs: number;
   trimEndMs: number;
+  /** Drop the audio from the export (and the preview). */
   muted: boolean;
 }
 
@@ -116,6 +118,14 @@ export const MAX_EDIT_PIXELS = 50_000_000;
 export const CANVAS_LIMITS = { min: 64, max: MAX_OUTPUT_SIDE } as const;
 /** An export is imported as media, whose image limit is 20 MB. */
 export const MAX_EXPORT_BYTES = 20 * 1024 * 1024;
+/**
+ * Video exports fit the 1080p box (1920 × 1080, or 1080 × 1920 upright), at 1×:
+ * the class X plays back. X validates dimensions itself when it processes an
+ * upload (T9 reports its answer).
+ */
+export const MAX_VIDEO_OUTPUT = { long: 1920, short: 1080 } as const;
+/** The shortest trim, or the whole clip when it is shorter. */
+export const MIN_TRIM_MS = 500;
 
 export const RATIOS: Record<Exclude<CanvasRatio, 'original' | 'custom'>, number> = {
   '16:9': 16 / 9,
@@ -278,7 +288,8 @@ export function defaultStyle(): Style {
   };
 }
 
-export function defaultComposition(source: SourceRef): Composition {
+/** A new document's composition; a video source (with its duration) also gets the whole clip, with sound. */
+export function defaultComposition(source: SourceRef, video?: { durationMs: number }): Composition {
   return {
     v: 1,
     source: { ...source },
@@ -286,7 +297,21 @@ export function defaultComposition(source: SourceRef): Composition {
     cropAspect: 'original',
     ...defaultStyle(),
     output: { format: 'png', scale: 1 },
+    ...(video ? { video: { trimStartMs: 0, trimEndMs: video.durationMs, muted: false } } : {}),
   };
+}
+
+/** The shortest trim a clip of `durationMs` allows. */
+export function minTrimMs(durationMs: number): number {
+  return Math.min(MIN_TRIM_MS, durationMs);
+}
+
+/** Keeps a trim inside the clip and at least `minTrimMs` long; whole milliseconds. */
+export function clampTrim(video: VideoSettings, durationMs: number): VideoSettings {
+  const min = minTrimMs(durationMs);
+  const start = Math.round(Math.min(Math.max(0, video.trimStartMs), durationMs - min));
+  const end = Math.round(Math.min(durationMs, Math.max(start + min, video.trimEndMs)));
+  return { ...video, trimStartMs: start, trimEndMs: end };
 }
 
 /** Just the style fields (a Composition is a Style plus source, crop, output and video). */

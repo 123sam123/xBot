@@ -37,6 +37,8 @@ export interface StudioEditor {
   /** Saves pending edits, then runs `task` in the save queue with the revision to build on. */
   afterSaves<T extends { revision: number }>(task: (documentId: string, revision: number) => Promise<IpcResult<T>>): Promise<IpcResult<T>>;
   open(document: StudioDocument): void;
+  /** Opens what a pick or a drop became: a document, or a read-only video (FFmpeg missing). */
+  openSession(opened: { document: StudioDocument } | { view: StudioView }): void;
   addMedia(item: MediaItem): void;
   error: string | null;
   setError(message: string | null): void;
@@ -52,6 +54,8 @@ const PREVIEW_DOCUMENT: StudioDocument = {
   sourceMissing: false,
   background: null,
   gif: false,
+  video: null,
+  exportJob: null,
   updatedAt: '',
 };
 
@@ -184,6 +188,28 @@ export function useStudioEditor(preview: boolean): StudioEditor {
     [flush, load],
   );
 
+  const showView = useCallback(
+    (next: StudioView) => {
+      void flush();
+      latest.current = { documentId: null, dirty: false };
+      historyRef.current = null;
+      setHistory(null);
+      setDocument(null);
+      setView(next);
+      setStatus('view');
+    },
+    [flush],
+  );
+
+  const openSession = useCallback(
+    (opened: { document: StudioDocument } | { view: StudioView }) => {
+      setError(null);
+      if ('document' in opened) open(opened.document);
+      else showView(opened.view);
+    },
+    [open, showView],
+  );
+
   // The document to show: the sample in preview, else main's session, kept current by `studio:opened`.
   useEffect(() => {
     if (preview) return;
@@ -208,14 +234,7 @@ export function useStudioEditor(preview: boolean): StudioEditor {
       void flush();
       setError(null);
       if ('document' in opened) load(opened.document);
-      else {
-        latest.current = { documentId: null, dirty: false };
-        historyRef.current = null;
-        setHistory(null);
-        setDocument(null);
-        setView(opened.view);
-        setStatus('view');
-      }
+      else showView(opened.view);
     });
     const offFlush = window.xbot.events.on('studio:flush-requested', () => {
       void flush().then(() => window.xbot.studio.flushed());
@@ -234,7 +253,7 @@ export function useStudioEditor(preview: boolean): StudioEditor {
       window.document.removeEventListener('visibilitychange', onVisibility);
       window.clearTimeout(timer.current);
     };
-  }, [preview, load, flush]);
+  }, [preview, load, flush, showView]);
 
   return {
     status,
@@ -252,6 +271,7 @@ export function useStudioEditor(preview: boolean): StudioEditor {
     flush,
     afterSaves,
     open,
+    openSession,
     addMedia,
     error,
     setError,

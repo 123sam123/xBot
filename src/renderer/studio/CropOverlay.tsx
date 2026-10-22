@@ -10,7 +10,7 @@ const CONTROLS_CLEARANCE = 64;
 /**
  * Crop mode: the whole source, fitted to the canvas area, dimmed outside the
  * crop rect. The rect moves by dragging it and resizes by its eight handles;
- * nothing is changed until Apply.
+ * nothing is changed until Apply. A video shows its frame at `videoTime`.
  */
 export function CropOverlay({
   overlayRef,
@@ -19,9 +19,12 @@ export function CropOverlay({
   crop,
   ratio,
   onChange,
+  videoTime,
 }: {
   overlayRef: RefObject<HTMLDivElement | null>;
   url: string;
+  /** Set for a video source: the frame to crop against, seconds. */
+  videoTime?: number;
   source: Pick<SourceRef, 'width' | 'height'>;
   crop: Rect;
   /** The aspect lock in source px, or null for free. */
@@ -75,7 +78,20 @@ export function CropOverlay({
     <div ref={overlayRef} className="crop-overlay" data-testid="crop-overlay">
       {scale > 0 && (
         <div className="crop-stage" style={{ width: image.width, height: image.height }}>
-          <img className="crop-image" src={url} alt="" draggable={false} />
+          {videoTime === undefined ? (
+            <img className="crop-image" src={url} alt="" draggable={false} />
+          ) : (
+            <video
+              className="crop-image"
+              src={url}
+              muted
+              playsInline
+              preload="auto"
+              onLoadedMetadata={(event) => {
+                event.currentTarget.currentTime = videoTime;
+              }}
+            />
+          )}
           <div
             className="crop-rect"
             style={rect}

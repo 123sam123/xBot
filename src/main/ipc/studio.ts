@@ -5,27 +5,32 @@ import { z } from 'zod';
 import type { MediaItem } from '../../shared/contracts/media';
 import {
   addToPostSchema,
+  documentIdSchema,
+  exportVideoSchema,
+  jobIdSchema,
   pickMediaSchema,
   presetIdSchema,
   saveCompositionSchema,
   savePresetSchema,
   studioImportSchema,
-  type StudioDocument,
   type StudioImportResult,
 } from '../../shared/contracts/studio';
 import { studioChannels } from '../../shared/contracts/studio.channels';
 import { appEvents } from '../events';
 import { isPreviewMode } from '../paths';
 import { draftsQueue } from '../services/drafts/queue';
+import { ffmpeg } from '../services/ffmpeg';
 import { media } from '../services/media';
 import { MediaRejected } from '../services/media/service';
-import { currentSession, openedFromAttachment, setStudioDocument, studio } from '../services/studio';
+import { adoptOpened, beginOpen, currentSession, isLatestOpen, openedFromAttachment, studio } from '../services/studio';
+import type { Opened } from '../services/studio/service';
 import { studioWindow, toggleStudioFullscreen } from '../windows/studio';
 import { IpcError } from './core';
 import { handle } from './register';
 
 const IMAGE_FILTERS = [{ name: 'Images', extensions: ['png', 'jpg', 'jpeg', 'gif', 'webp'] }];
-const ONE_AT_A_TIME = 'Media Studio edits one image at a time.';
+const MEDIA_FILTERS = [{ name: 'Images and video', extensions: ['png', 'jpg', 'jpeg', 'gif', 'webp', 'mp4', 'mov', 'm4v'] }];
+const ONE_AT_A_TIME = 'Media Studio edits one image or video at a time.';
 
 let flushAck: (() => void) | null = null;
 
@@ -49,19 +54,19 @@ export function requestStudioFlush(timeoutMs: number): Promise<void> {
   });
 }
 
-/** An image picker parented to the Studio. `dialog` is read at call time so tests can stub it. */
-async function pickImagePath(title: string): Promise<string | null> {
+/** A file picker parented to the Studio. `dialog` is read at call time so tests can stub it. */
+async function pickPath(title: string, filters: OpenDialogOptions['filters']): Promise<string | null> {
   const win = studioWindow();
-  const options: OpenDialogOptions = { title, buttonLabel: 'Open', properties: ['openFile'], filters: IMAGE_FILTERS };
+  const options: OpenDialogOptions = { title, buttonLabel: 'Open', properties: ['openFile'], filters };
   const result = win && !win.isDestroyed() ? await dialog.showOpenDialog(win, options) : await dialog.showOpenDialog(options);
   return result.canceled ? null : (result.filePaths[0] ?? null);
 }
 
 /** Imports one file as loose media (no draft), on the drafts/media queue. */
-async function importImage(name: string, path: string): Promise<MediaItem> {
+async function importMedia(name: string, path: string, imagesOnly: boolean): Promise<MediaItem> {
   try {
     const item = await draftsQueue(() => media().importLoose({ name, path }));
-    if (item.kind !== 'image') throw new IpcError('not_an_image', 'Media Studio edits images. Add videos from Write Post.');
+    if (imagesOnly && item.kind !== 'image') throw new IpcError('not_an_image', 'Choose an image here.');
     return item;
   } catch (err) {
     if (err instanceof MediaRejected) throw new IpcError('media_rejected', err.message);
@@ -69,25 +74,27 @@ async function importImage(name: string, path: string): Promise<MediaItem> {
   }
 }
 
-function open(item: MediaItem): StudioDocument {
-  const document = studio().openForMedia(item);
-  setStudioDocument(document.id, null);
-  return document;
+/** Opens `item` in the Studio: a document, or a read-only video while FFmpeg is missing. */
+async function open(item: MediaItem): Promise<Opened> {
+  const ticket = beginOpen();
+  const opened = await studio().openForMedia(item);
+  if (!isLatestOpen(ticket)) throw new IpcError('superseded', 'Another file opened first.');
+  return adoptOpened(opened, null);
 }
 
 export function registerStudioIpc(): void {
   handle(studioChannels.current, z.undefined(), () => currentSession());
 
   handle(studioChannels.pick, z.undefined(), async () => {
-    const path = await pickImagePath('Open an image');
-    return path ? open(await importImage(basename(path), path)) : null;
+    const path = await pickPath('Open an image or video', MEDIA_FILTERS);
+    return path ? open(await importMedia(basename(path), path, false)) : null;
   });
 
   handle(studioChannels.import, studioImportSchema, async ({ files }): Promise<StudioImportResult> => {
     const ignored: StudioImportResult['ignored'] = [];
-    let document: StudioDocument | null = null;
+    let opened: Opened | null = null;
     for (const file of files) {
-      if (document) {
+      if (opened) {
         ignored.push({ name: file.name, message: ONE_AT_A_TIME });
         continue;
       }
@@ -96,14 +103,14 @@ export function registerStudioIpc(): void {
         continue;
       }
       try {
-        document = open(await importImage(file.name, file.path));
+        opened = await open(await importMedia(file.name, file.path, false));
       } catch (err) {
         if (!(err instanceof IpcError)) throw err;
         ignored.push({ name: file.name, message: err.message });
       }
     }
-    if (!document) throw new IpcError(ignored.length === 1 ? 'media_rejected' : 'no_image', ignored[0]?.message ?? 'Drop an image to edit.');
-    return { document, ignored };
+    if (!opened) throw new IpcError(ignored.length === 1 ? 'media_rejected' : 'no_media', ignored[0]?.message ?? 'Drop an image or a video to edit.');
+    return { opened, ignored };
   });
 
   handle(studioChannels.save, saveCompositionSchema, ({ documentId, baseRevision, composition }) =>
@@ -111,8 +118,8 @@ export function registerStudioIpc(): void {
   );
 
   handle(studioChannels.pickMedia, pickMediaSchema, async ({ purpose }) => {
-    const path = await pickImagePath(purpose === 'source' ? 'Replace the source image' : 'Choose a background image');
-    return path ? importImage(basename(path), path) : null;
+    const path = await pickPath(purpose === 'source' ? 'Replace the source image' : 'Choose a background image', IMAGE_FILTERS);
+    return path ? importMedia(basename(path), path, true) : null;
   });
 
   handle(studioChannels.listPresets, z.undefined(), () => studio().listPresets());
@@ -126,6 +133,26 @@ export function registerStudioIpc(): void {
     // Captured now: an "Edit in Studio ↗" while this waits must not redirect it.
     const openedFromAttachmentId = openedFromAttachment(payload.documentId);
     return draftsQueue(() => studio().addToPost({ ...payload, openedFromAttachmentId }));
+  });
+
+  handle(studioChannels.exportVideo, exportVideoSchema, (payload) =>
+    // Not on the drafts queue: only the finished MP4's import and attach go there.
+    studio().exportVideo({ ...payload, openedFromAttachmentId: openedFromAttachment(payload.documentId) }),
+  );
+
+  handle(studioChannels.cancelExport, jobIdSchema, ({ jobId }) => studio().cancelExport(jobId));
+
+  handle(studioChannels.filmstrip, documentIdSchema, ({ documentId }) => studio().filmstrip(documentId));
+
+  handle(studioChannels.ffmpegStatus, z.undefined(), () => ffmpeg().status());
+
+  // A read-only video view turns into a document once FFmpeg is ready (the
+  // studio module listens for `studio:ffmpeg`).
+  handle(studioChannels.ffmpegCheck, z.undefined(), () => ffmpeg().recheck());
+
+  handle(studioChannels.locateFfmpeg, z.undefined(), async () => {
+    const path = await pickPath('Locate FFmpeg', undefined);
+    return path ? ffmpeg().setUserPath(path) : null;
   });
 
   handle(studioChannels.toggleFullscreen, z.undefined(), () => toggleStudioFullscreen());
