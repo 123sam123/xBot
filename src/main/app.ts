@@ -10,6 +10,7 @@ import type { AppPaths } from './paths';
 import { handleMediaProtocol } from './protocols/media';
 import { installSecurityHandlers } from './security';
 import { disposeServices, initServices } from './services';
+import { settleXForQuit } from './services/x';
 import { onStatusChanged } from './status';
 import { createTray } from './tray';
 import { applyAppearance, markQuitting } from './windows/common';
@@ -19,6 +20,8 @@ import { createStudioWindow, openStudio } from './windows/studio';
 let db: Db | null = null;
 /** How long quitting waits for the composer to save typed text. */
 const QUIT_FLUSH_MS = 1000;
+/** How long quitting waits for X to answer a create-post request already sent. */
+const QUIT_X_MS = 10_000;
 
 function openAndMigrate(paths: AppPaths): Db | null {
   let opened: Db | null = null;
@@ -64,13 +67,14 @@ export async function startApp(paths: AppPaths): Promise<void> {
   app.on('second-instance', () => toggleComposer());
   app.on('activate', () => toggleComposer());
   // The first quit waits (at most QUIT_FLUSH_MS) for the composer to save text
-  // still inside its autosave debounce, then quits for real.
+  // still inside its autosave debounce, and (at most QUIT_X_MS, only while a
+  // create-post request is in flight) for X to answer, then quits for real.
   let flushedForQuit = false;
   app.on('before-quit', (event) => {
     if (!flushedForQuit) {
       flushedForQuit = true;
       event.preventDefault();
-      void requestDraftFlush(QUIT_FLUSH_MS).finally(() => app.quit());
+      void Promise.all([requestDraftFlush(QUIT_FLUSH_MS), settleXForQuit(QUIT_X_MS)]).finally(() => app.quit());
       return;
     }
     markQuitting();
