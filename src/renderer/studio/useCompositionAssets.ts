@@ -7,14 +7,15 @@ import type { History } from './history';
 
 const cache = createBitmapCache();
 
-/** The media ids a composition draws. */
+/** The media ids a composition draws as images. A video source isn't one: the stage's <video> shows it. */
 function mediaIds(comp: Composition): string[] {
-  return comp.background.type === 'image' ? [comp.source.mediaId, comp.background.mediaId] : [comp.source.mediaId];
+  const background = comp.background.type === 'image' ? [comp.background.mediaId] : [];
+  return comp.video ? background : [comp.source.mediaId, ...background];
 }
 
 export interface LoadedAssets {
   assets: CompositionAssets;
-  /** Every image the composition draws has decoded (or, for a background, failed and fallen back). */
+  /** Every image the composition draws has decoded (or, for a background, failed and fallen back). A video's source never decodes here. */
   ready: boolean;
   /** The source could not be decoded (missing or unreadable file). */
   sourceFailed: boolean;
@@ -61,14 +62,15 @@ export function useCompositionAssets(composition: Composition | null, media: Rea
   return useMemo(() => {
     if (!composition) return { assets: { source: null, background: null }, ready: false, sourceFailed: false };
     const sourceId = composition.source.mediaId;
+    const video = composition.video !== undefined;
     const backgroundId = composition.background.type === 'image' ? composition.background.mediaId : null;
-    const source = cache.peek(sourceId);
+    const source = video ? null : cache.peek(sourceId);
     const background = backgroundId ? cache.peek(backgroundId) : null;
     const backgroundSettled = !backgroundId || background !== null || failed.has(backgroundId) || !media.has(backgroundId);
     return {
       assets: { source, background },
-      ready: source !== null && backgroundSettled,
-      sourceFailed: failed.has(sourceId),
+      ready: (video || source !== null) && backgroundSettled,
+      sourceFailed: !video && failed.has(sourceId),
     };
     // `decoded` changes whenever a bitmap becomes ready.
     // eslint-disable-next-line react-hooks/exhaustive-deps

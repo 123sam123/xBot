@@ -1,12 +1,26 @@
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
-import { computeLayout } from '../../../shared/composition/layout';
+import { computeLayout, type Layout } from '../../../shared/composition/layout';
 import { outputSize, type Composition } from '../../../shared/composition/model';
 import { drawComposition, type CompositionAssets } from './draw';
 
 /** The preview's backing store is capped lower than an export: it only has to look sharp on screen. */
 const PREVIEW_MAX_SIDE = 4096;
 
-function useDevicePixelRatio(): number {
+/**
+ * The layout the preview draws at `displayScale` CSS px per 1× px, and the
+ * canvas's CSS size. A layout rect × (cssWidth / layout.canvas.width) is its
+ * place in CSS px (not ÷ devicePixelRatio: the backing store may be capped).
+ */
+export function previewLayout(composition: Composition, displayScale: number, dpr: number): { layout: Layout; cssWidth: number; cssHeight: number } {
+  const out = outputSize(composition);
+  return {
+    layout: computeLayout(composition, { scale: displayScale * dpr, maxSide: PREVIEW_MAX_SIDE }),
+    cssWidth: out.width * displayScale,
+    cssHeight: out.height * displayScale,
+  };
+}
+
+export function useDevicePixelRatio(): number {
   const [dpr, setDpr] = useState(() => window.devicePixelRatio || 1);
   useEffect(() => {
     const query = window.matchMedia(`(resolution: ${dpr}dppx)`);
@@ -38,6 +52,7 @@ export function CompositionCanvas({
   className,
   style,
   testId,
+  hole = false,
 }: {
   composition: Composition;
   assets: CompositionAssets;
@@ -47,6 +62,8 @@ export function CompositionCanvas({
   className?: string;
   style?: CSSProperties;
   testId?: string;
+  /** Draw a video's frame layer: the content is a hole the <video> under the canvas shows through. */
+  hole?: boolean;
 }) {
   const canvas = useRef<HTMLCanvasElement>(null);
   const dpr = useDevicePixelRatio();
@@ -58,21 +75,22 @@ export function CompositionCanvas({
     const frame = requestAnimationFrame(() => {
       const el = canvas.current;
       if (!el) return;
-      const layout = computeLayout(composition, { scale, maxSide: PREVIEW_MAX_SIDE });
+      const { layout } = previewLayout(composition, displayScale, dpr);
       if (el.width !== layout.canvas.width) el.width = layout.canvas.width;
       if (el.height !== layout.canvas.height) el.height = layout.canvas.height;
       const ctx = el.getContext('2d');
       if (!ctx) return;
-      drawComposition(ctx, composition, layout, assets);
+      drawComposition(ctx, composition, layout, assets, { hole });
       el.dataset.drawnKey = assetsReady ? key : '';
     });
     return () => cancelAnimationFrame(frame);
-  }, [composition, assets, assetsReady, scale, key]);
+  }, [composition, assets, assetsReady, displayScale, dpr, key, hole]);
 
   return (
     <canvas
       ref={canvas}
-      className={['composition-canvas', composition.background.type === 'transparent' && 'composition-canvas-transparent', className]
+      // CSS checks behind a hole would cover the video under it; a video can't be transparent anyway.
+      className={['composition-canvas', composition.background.type === 'transparent' && !hole && 'composition-canvas-transparent', className]
         .filter(Boolean)
         .join(' ')}
       style={{ width: out.width * displayScale, height: out.height * displayScale, ...style }}

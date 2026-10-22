@@ -117,7 +117,13 @@ function BackgroundTool({
               { value: 'gradient', label: 'Gradient' },
               { value: 'solid', label: 'Solid' },
               { value: 'image', label: 'Image', disabled: pickDisabledReason !== undefined, reason: pickDisabledReason },
-              { value: 'transparent', label: 'None' },
+              // MP4 has no alpha channel (T5).
+              {
+                value: 'transparent',
+                label: 'None',
+                disabled: composition.video !== undefined,
+                reason: composition.video ? 'Video can’t be transparent' : undefined,
+              },
             ]}
             value={bg.type}
             onChange={setType}

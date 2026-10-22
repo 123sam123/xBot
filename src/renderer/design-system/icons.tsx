@@ -91,6 +91,23 @@ export const PauseIcon = icon(
   </>,
 );
 
+/** Sound on (T5's timeline mute toggle). */
+export const SpeakerIcon = icon(
+  'SpeakerIcon',
+  <>
+    <path d="M4.5 9.5h3l4.5-4v13l-4.5-4h-3a1 1 0 0 1-1-1v-3a1 1 0 0 1 1-1z" />
+    <path d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11" />
+  </>,
+);
+
+export const SpeakerMutedIcon = icon(
+  'SpeakerMutedIcon',
+  <>
+    <path d="M4.5 9.5h3l4.5-4v13l-4.5-4h-3a1 1 0 0 1-1-1v-3a1 1 0 0 1 1-1z" />
+    <path d="M15.5 9.5l5 5M20.5 9.5l-5 5" />
+  </>,
+);
+
 export const SunIcon = icon(
   'SunIcon',
   <>
