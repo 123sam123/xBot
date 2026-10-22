@@ -294,8 +294,9 @@ export function createProjectsService(deps: ProjectsDeps) {
 
     /** For T8: was useful activity recorded after `since` (ms or ISO)? Uses when xBot recorded it, never a commit's own date. */
     hasNewActivitySince(since: number | string): boolean {
-      const iso = typeof since === 'number' ? new Date(since).toISOString() : new Date(since).toISOString();
-      return q.activitySince.get(iso) !== undefined;
+      const ms = typeof since === 'number' ? since : Date.parse(since);
+      // An unreadable time counts as "never": all recorded activity is new.
+      return q.activitySince.get(new Date(Number.isFinite(ms) ? ms : 0).toISOString()) !== undefined;
     },
 
     /** Starts the background scans: stale folders shortly after launch, then every 15 min. */
