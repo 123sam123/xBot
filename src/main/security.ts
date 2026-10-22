@@ -18,7 +18,8 @@ export function isAllowedExternalUrl(raw: string): boolean {
   }
 }
 
-function openExternalIfAllowed(url: string): void {
+/** Opens an allowlisted https URL in the user's browser; anything else is logged and dropped. */
+export function openExternalIfAllowed(url: string): void {
   if (isAllowedExternalUrl(url)) void shell.openExternal(url);
   else log.warn('security: blocked external URL', url);
 }

@@ -158,6 +158,12 @@ export function TextField({
   placeholder,
   maxLength,
   testId,
+  stacked,
+  description,
+  error,
+  readOnly,
+  selectOnFocus,
+  code,
 }: {
   label: string;
   value: string;
@@ -166,22 +172,45 @@ export function TextField({
   placeholder?: string;
   maxLength?: number;
   testId?: string;
+  /** The label above a full-width input, for long values such as URLs and ids (T9). */
+  stacked?: boolean;
+  /** A quieter line under the field (T9). */
+  description?: string;
+  /** Shown instead of the description, as an alert (T9). */
+  error?: string | null;
+  readOnly?: boolean;
+  /** Selects everything on focus, for a value meant to be copied with ⌘C (T9). */
+  selectOnFocus?: boolean;
+  /** Monospaced text, for ids and URLs (T9). */
+  code?: boolean;
 }) {
+  const noteId = useId();
+  const note = error ?? description;
   return (
-    <label className="field">
+    <label className={cx('field', stacked && 'field-stacked', error && 'field-invalid')}>
       <span className="field-label">{label}</span>
       <input
         type="text"
-        className="field-input"
+        className={cx('field-input', code && 'field-input-code')}
         value={value}
         placeholder={placeholder}
         maxLength={maxLength}
+        readOnly={readOnly}
         spellCheck={false}
+        autoComplete="off"
+        aria-invalid={error ? true : undefined}
+        aria-describedby={note ? noteId : undefined}
         data-testid={testId}
         onChange={(event) => onChange(event.target.value)}
         onBlur={(event) => onCommit?.(event.target.value)}
+        onFocus={selectOnFocus ? (event) => event.currentTarget.select() : undefined}
         onKeyDown={(event) => event.key === 'Enter' && onCommit?.(event.currentTarget.value)}
       />
+      {note && (
+        <span id={noteId} className={cx('field-note', error && 'field-note-error')} role={error ? 'alert' : undefined}>
+          {note}
+        </span>
+      )}
     </label>
   );
 }

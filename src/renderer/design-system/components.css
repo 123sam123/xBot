@@ -560,3 +560,54 @@
   outline: 2px solid #fff;
   outline-offset: 2px;
 }
+
+/* ---------- TextField additions (T9): stacked, a note or error, read-only, code ---------- */
+
+.field-stacked {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 5px;
+}
+
+.field-stacked .field-label {
+  font-size: var(--fs-sm);
+  color: var(--text-primary);
+}
+
+.field-stacked .field-input {
+  width: 100%;
+  height: 34px;
+  font-size: var(--fs-sm);
+}
+
+.field:has(> .field-note) {
+  flex-wrap: wrap;
+}
+
+.field-input::placeholder {
+  color: var(--text-tertiary);
+}
+
+.field-input[readonly] {
+  color: var(--text-secondary);
+}
+
+.field-input-code {
+  font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+}
+
+.field-note {
+  flex-basis: 100%;
+  font-size: var(--fs-xs);
+  line-height: 1.35;
+  color: var(--text-secondary);
+}
+
+.field-note-error,
+.field-invalid .field-label {
+  color: var(--warning);
+}
+
+.badge-warning {
+  color: var(--warning);
+}
