@@ -445,8 +445,130 @@ body,
   min-width: 0;
 }
 
+.tool-popover-background {
+  width: 320px;
+  max-height: 420px;
+  overflow-y: auto;
+}
+
 .tool-popover-background .swatches {
   gap: 6px;
+}
+
+/* ---------- Background type grid (Cap.so style) ---------- */
+
+.bg-type-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.bg-type-btn {
+  flex: none;
+  height: 28px;
+  padding: 0 12px;
+  border: 1px solid rgb(255 255 255 / 0.12);
+  border-radius: var(--radius-pill);
+  background: none;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: var(--fs-xs);
+  text-shadow: inherit;
+  white-space: nowrap;
+  cursor: default;
+}
+
+.bg-type-btn:hover:not(:disabled) {
+  background: rgb(255 255 255 / 0.08);
+}
+
+.bg-type-btn-active {
+  background: rgb(255 255 255 / 0.18);
+  color: var(--text-primary);
+  border-color: rgb(255 255 255 / 0.24);
+}
+
+.bg-type-btn:disabled {
+  opacity: 0.4;
+}
+
+/* ---------- Wallpaper picker ---------- */
+
+.wallpaper-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.wallpaper-categories {
+  display: flex;
+  gap: 6px;
+}
+
+.wallpaper-category {
+  height: 26px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: rgb(255 255 255 / 0.08);
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 11px;
+  font-weight: var(--fw-medium);
+  white-space: nowrap;
+  cursor: default;
+}
+
+.wallpaper-category:hover {
+  background: rgb(255 255 255 / 0.14);
+}
+
+.wallpaper-category-active {
+  background: rgb(255 255 255 / 0.22);
+  color: var(--text-primary);
+}
+
+.wallpaper-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.wallpaper-thumb {
+  position: relative;
+  padding: 0;
+  border: 2px solid transparent;
+  border-radius: 8px;
+  background: none;
+  overflow: hidden;
+  aspect-ratio: 214 / 130;
+  cursor: default;
+}
+
+.wallpaper-thumb:hover {
+  border-color: rgb(255 255 255 / 0.4);
+}
+
+.wallpaper-thumb:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 1px;
+}
+
+.wallpaper-thumb img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 6px;
+}
+
+.wallpaper-loading {
+  padding: 16px 0;
+  text-align: center;
+  font-size: var(--fs-xs);
+  color: var(--text-tertiary);
 }
 
 .tool-popover-title {
@@ -476,33 +598,6 @@ body,
   flex: none;
 }
 
-.tool-popover-background:has(.tool-popover-more-section) {
-  width: 268px;
-}
-
-.tool-popover-heading {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
-/* The "More" toggle sits inside the title's 20 px line, so the compact view keeps the reference's size. */
-.tool-popover-more {
-  margin: -2px -6px -2px 0;
-  padding: 1px 3px;
-  color: var(--text-secondary);
-}
-
-.tool-popover-more-open {
-  background: rgb(255 255 255 / 0.14);
-}
-
-.tool-popover-more-section {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  padding-top: 2px;
-}
 
 .tool-field {
   display: grid;

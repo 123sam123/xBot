@@ -17,8 +17,6 @@ import {
   ColorField,
   FrostedButton,
   GhostButton,
-  IconButton,
-  MoreIcon,
   NumberField,
   Popover,
   Segmented,
@@ -27,7 +25,6 @@ import {
   SwatchGroup,
   TextField,
   Toggle,
-  cx,
 } from '../design-system';
 
 export type ToolId = 'background' | 'frame' | 'padding' | 'shadow' | 'crop';
@@ -39,11 +36,9 @@ type Change = (next: Composition, gesture?: string) => void;
 interface ToolProps {
   composition: Composition;
   onChange: Change;
-  /** A slider drag or a typing run ended: the next change is a new undo step. */
   onCommit(): void;
 }
 
-/** A labelled row inside a tool popover. */
 function Field({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div className="tool-field">
@@ -53,9 +48,17 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
   );
 }
 
-
 function brightnessOf(background: Background): number {
   return background.type === 'transparent' ? 0.5 : background.brightness;
+}
+
+type BackgroundView = 'image' | 'gradient' | 'solid' | 'none';
+
+function viewForBg(bg: Background): BackgroundView {
+  if (bg.type === 'gradient') return 'gradient';
+  if (bg.type === 'solid') return 'solid';
+  if (bg.type === 'transparent') return 'none';
+  return 'image';
 }
 
 function BackgroundTool({
@@ -65,82 +68,74 @@ function BackgroundTool({
   onPickImage,
   pickDisabledReason,
 }: ToolProps & { onPickImage(): void; pickDisabledReason?: string }) {
-  const [more, setMore] = useState(false);
   const bg = composition.background;
+  const [view, setView] = useState<BackgroundView>(() => viewForBg(bg));
   const set = (background: Background, gesture?: string) => onChange({ ...composition, background }, gesture);
   const brightness = brightnessOf(bg);
 
-  const setType = (type: Background['type']) => {
-    if (type === bg.type) return;
-    if (type === 'gradient') set(gradientBackground('blue', brightness));
-    else if (type === 'solid') set({ type: 'solid', color: bg.type === 'gradient' ? bg.from : '#5867ec', brightness });
-    else if (type === 'transparent') set({ type: 'transparent' });
-    else if (!pickDisabledReason) onPickImage();
+  const switchView = (next: BackgroundView) => {
+    setView(next);
+    if (next === 'gradient' && bg.type !== 'gradient') set(gradientBackground('blue', brightness));
+    else if (next === 'solid' && bg.type !== 'solid') set({ type: 'solid', color: bg.type === 'gradient' ? bg.from : '#5867ec', brightness });
+    else if (next === 'none') set({ type: 'transparent' });
   };
 
   return (
     <>
-      <div className="tool-popover-heading">
-        <h2 className="tool-popover-title">Background</h2>
-        <IconButton
-          label={more ? 'Fewer background options' : 'More background options'}
-          size="sm"
-          bare
-          className={cx('tool-popover-more', more && 'tool-popover-more-open')}
-          aria-expanded={more}
-          data-testid="background-more"
-          onClick={() => setMore((value) => !value)}
+      <h2 className="tool-popover-title">Background</h2>
+      <div className="bg-type-grid">
+        <button type="button" className={`bg-type-btn${view === 'image' ? ' bg-type-btn-active' : ''}`} onClick={() => setView('image')}>
+          Image
+        </button>
+        <button
+          type="button"
+          className={`bg-type-btn${view === 'gradient' ? ' bg-type-btn-active' : ''}`}
+          onClick={() => switchView('gradient')}
         >
-          <MoreIcon size={18} />
-        </IconButton>
+          Gradient
+        </button>
+        <button
+          type="button"
+          className={`bg-type-btn${view === 'solid' ? ' bg-type-btn-active' : ''}`}
+          onClick={() => switchView('solid')}
+        >
+          Color
+        </button>
+        <button
+          type="button"
+          className={`bg-type-btn${view === 'none' ? ' bg-type-btn-active' : ''}`}
+          disabled={composition.video !== undefined}
+          onClick={() => switchView('none')}
+        >
+          None
+        </button>
       </div>
-      <SwatchGroup
-        label="Background colour"
-        options={GRADIENT_PRESETS.map((id) => ({ id, label: GRADIENTS[id].label, paint: GRADIENTS[id].swatch }))}
-        value={bg.type === 'gradient' && bg.preset ? bg.preset : ''}
-        onChange={(id) => set(gradientBackground(id as (typeof GRADIENT_PRESETS)[number], brightness))}
-      />
-      <Slider
-        label="Background brightness"
-        value={brightness}
-        disabled={bg.type === 'transparent'}
-        onChange={(value) => bg.type !== 'transparent' && set({ ...bg, brightness: value }, 'background-brightness')}
-        onCommit={onCommit}
-        endAdornment={<SunIcon size={20} className="tool-popover-adornment" />}
-        testId="background-brightness"
-      />
-      {more && (
-        <div className="tool-popover-more-section">
-          <Segmented<Background['type']>
-            label="Background type"
-            options={[
-              { value: 'gradient', label: 'Gradient' },
-              { value: 'solid', label: 'Solid' },
-              { value: 'image', label: 'Image', disabled: pickDisabledReason !== undefined, reason: pickDisabledReason },
-              // MP4 has no alpha channel (T5).
-              {
-                value: 'transparent',
-                label: 'None',
-                disabled: composition.video !== undefined,
-                reason: composition.video ? 'Video can’t be transparent' : undefined,
-              },
-            ]}
-            value={bg.type}
-            onChange={setType}
-            testId="background-type"
+
+      {view === 'image' && (
+        <>
+          <GhostButton className="tool-popover-action" disabled={pickDisabledReason !== undefined} onClick={onPickImage}>
+            Choose image...
+          </GhostButton>
+          {bg.type === 'image' && (
+            <Field label="Blur">
+              <Slider label="Background blur" min={0} max={0.1} step={0.001} value={bg.blur} onChange={(blur) => set({ ...bg, blur }, 'background-blur')} onCommit={onCommit} />
+            </Field>
+          )}
+        </>
+      )}
+
+      {view === 'gradient' && (
+        <>
+          <SwatchGroup
+            label="Background colour"
+            options={GRADIENT_PRESETS.map((id) => ({ id, label: GRADIENTS[id].label, paint: GRADIENTS[id].swatch }))}
+            value={bg.type === 'gradient' && bg.preset ? bg.preset : ''}
+            onChange={(id) => set(gradientBackground(id as (typeof GRADIENT_PRESETS)[number], brightness))}
           />
           {bg.type === 'gradient' && (
             <>
               <Field label="Angle">
-                <Slider
-                  label="Gradient angle"
-                  min={0}
-                  max={360}
-                  step={1}
-                  value={bg.angle}
-                  onChange={(angle) => set({ ...bg, preset: null, angle }, 'gradient-angle')}
-                  onCommit={onCommit}
-                />
+                <Slider label="Gradient angle" min={0} max={360} step={1} value={bg.angle} onChange={(angle) => set({ ...bg, preset: null, angle }, 'gradient-angle')} onCommit={onCommit} />
               </Field>
               <Field label="Colours">
                 <span className="tool-field-colors">
@@ -150,23 +145,27 @@ function BackgroundTool({
               </Field>
             </>
           )}
-          {bg.type === 'solid' && (
-            <Field label="Colour">
-              <ColorField label="Background colour" value={bg.color} onChange={(color) => set({ ...bg, color }, 'solid-color')} onCommit={onCommit} testId="background-color" />
-            </Field>
-          )}
-          {bg.type === 'image' && (
-            <>
-              <GhostButton className="tool-popover-action" disabled={pickDisabledReason !== undefined} onClick={onPickImage}>
-                Choose image…
-              </GhostButton>
-              <Field label="Blur">
-                <Slider label="Background blur" min={0} max={0.1} step={0.001} value={bg.blur} onChange={(blur) => set({ ...bg, blur }, 'background-blur')} onCommit={onCommit} />
-              </Field>
-            </>
-          )}
-          {bg.type === 'transparent' && <p className="tool-popover-note">Exports a transparent PNG.</p>}
-        </div>
+        </>
+      )}
+
+      {view === 'solid' && bg.type === 'solid' && (
+        <Field label="Colour">
+          <ColorField label="Background colour" value={bg.color} onChange={(color) => set({ ...bg, color }, 'solid-color')} onCommit={onCommit} testId="background-color" />
+        </Field>
+      )}
+
+      {view === 'none' && <p className="tool-popover-note">Exports a transparent PNG.</p>}
+
+      {view !== 'none' && (
+        <Slider
+          label="Background brightness"
+          value={brightness}
+          disabled={bg.type === 'transparent'}
+          onChange={(value) => bg.type !== 'transparent' && set({ ...bg, brightness: value }, 'background-brightness')}
+          onCommit={onCommit}
+          endAdornment={<SunIcon size={20} className="tool-popover-adornment" />}
+          testId="background-brightness"
+        />
       )}
     </>
   );
@@ -296,11 +295,9 @@ export interface CropControls {
   onReset(): void;
   onCancel(): void;
   onApply(): void;
-  /** The overlay the crop is dragged on: pointer-downs there keep the popover open. */
   overlay: RefObject<HTMLDivElement | null>;
 }
 
-/** One compact row, so it never covers the crop rect's handles (the overlay keeps clear of it). */
 function CropTool({ crop }: { crop: CropControls }) {
   return (
     <>
@@ -331,7 +328,6 @@ function CropTool({ crop }: { crop: CropControls }) {
   );
 }
 
-/** The settings popover for each toolbar item, anchored above its button. One is open at a time. */
 export function ToolPopovers({
   anchors,
   composition,
@@ -346,7 +342,6 @@ export function ToolPopovers({
   pickDisabledReason?: string;
   crop: CropControls;
 }) {
-  // Measured from the reference: 12 px above the toolbar item, the Background one shifted left.
   const common = { placement: 'top' as const, offset: 12 };
   const tool = { composition, onChange, onCommit };
   const keepCropOpen = useMemo(() => [crop.overlay], [crop.overlay]);

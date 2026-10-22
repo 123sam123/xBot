@@ -901,3 +901,40 @@
   align-items: center;
   gap: 10px;
 }
+
+.x-setup-details {
+  border-top: 1px solid var(--border);
+  padding-top: 10px;
+}
+
+.x-setup-details[open] > .x-setup-summary {
+  margin-bottom: 10px;
+}
+
+.x-setup-summary {
+  font-size: var(--fs-sm);
+  color: var(--text-secondary);
+  cursor: pointer;
+  user-select: none;
+  list-style: none;
+}
+
+.x-setup-summary::before {
+  content: '\25B8  ';
+}
+
+.x-setup-details[open] > .x-setup-summary::before {
+  content: '\25BE  ';
+}
+
+.x-setup-summary::-webkit-details-marker {
+  display: none;
+}
+
+.x-setup-details > .x-setup-steps {
+  margin-top: 8px;
+}
+
+.x-setup-details > .x-setup-port {
+  margin-top: 12px;
+}

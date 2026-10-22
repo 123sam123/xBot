@@ -44,7 +44,7 @@ const shadowSchema = z.strictObject({
 const backgroundSchema = z.discriminatedUnion('type', [
   z.strictObject({
     type: z.literal('gradient'),
-    preset: z.enum(['blue', 'violet', 'lilac', 'cream', 'black']).nullable(),
+    preset: z.enum(['blue', 'violet', 'lilac', 'cream', 'black', 'sequoia', 'sonoma', 'ventura', 'monterey', 'aurora', 'desert']).nullable(),
     from: hex,
     to: hex,
     angle: z.number().min(0).max(360),

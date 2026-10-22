@@ -7,12 +7,6 @@ import { connectX, useXState } from './useXState';
 
 type Outcome = { tone: 'neutral' | 'warning'; text: string } | null;
 
-/**
- * Setting up X posting with the user's own developer app (docs/X.md): the
- * steps, the exact callback URL to register, the Client ID, and Connect.
- * Settings → X shows it in full (port and accounts too); onboarding step 5
- * shows the short version.
- */
 export function XSetup({ variant }: { variant: 'settings' | 'onboarding' }) {
   const { values } = useSettings();
   const { state } = useXState(true);
@@ -26,7 +20,7 @@ export function XSetup({ variant }: { variant: 'settings' | 'onboarding' }) {
     const value = raw.trim();
     if (value === savedClientId) return setClientIdError(null);
     if (value !== '' && !CLIENT_ID_PATTERN.test(value)) {
-      setClientIdError('That doesn’t look like an OAuth 2.0 Client ID. Copy it from the app’s Keys and tokens page.');
+      setClientIdError("That doesn't look like an OAuth 2.0 Client ID. Copy it from the app's Keys and tokens page.");
       return;
     }
     setClientIdError(null);
@@ -47,12 +41,107 @@ export function XSetup({ variant }: { variant: 'settings' | 'onboarding' }) {
   const active = activeAccount(state);
   const connecting = state?.connecting ?? false;
   const canConnect = savedClientId !== '' && !connecting;
+  const hasAccounts = state && state.accounts.length > 0;
+
+  if (variant === 'settings') {
+    return (
+      <div className="x-setup" data-testid="x-setup-settings">
+        {hasAccounts && (
+          <ul className="x-setup-accounts" aria-label="Connected X accounts">
+            {state.accounts.map((a) => (
+              <li key={a.id} className="x-setup-account">
+                <span className="x-setup-handle">
+                  @{a.handle}
+                  {a.active && <span className="badge">Posting</span>}
+                  {a.reconnectRequired && <span className="badge badge-warning">Reconnect</span>}
+                </span>
+                {a.reconnectRequired && <GhostButton onClick={() => void connect(a.id)}>Reconnect</GhostButton>}
+                <GhostButton onClick={() => void disconnect(a.id)}>Disconnect</GhostButton>
+              </li>
+            ))}
+          </ul>
+        )}
+
+        <div className="x-setup-actions">
+          {connecting ? (
+            <>
+              <StatusChip>Waiting for X in your browser...</StatusChip>
+              <GhostButton onClick={() => void window.xbot.x.cancelConnect()}>Cancel</GhostButton>
+            </>
+          ) : (
+            <FrostedButton disabled={!canConnect} onClick={() => void connect()} data-testid="x-connect">
+              {active ? 'Connect another account' : 'Connect X account'}
+            </FrostedButton>
+          )}
+        </div>
+
+        {outcome && (
+          <StatusChip tone={outcome.tone} className="publish-outcome">
+            {outcome.text}
+          </StatusChip>
+        )}
+
+        <details className="x-setup-details">
+          <summary className="x-setup-summary">Developer app setup</summary>
+          <p className="x-setup-text">
+            Post straight to X with your own X developer app. X API usage may be billed to your own X developer account, separately from
+            xBot{"'"}s free local AI. You can always copy the text and post it yourself instead.
+          </p>
+          <ol className="x-setup-steps">
+            <li>
+              Create an app in the{' '}
+              <a href="https://console.x.com" target="_blank" rel="noreferrer">
+                X Developer Console
+                <ArrowUpRightIcon size={13} />
+              </a>
+              .
+            </li>
+            <li>In its User authentication settings, choose OAuth 2.0, type &quot;Native App&quot;, permissions &quot;Read and write&quot;.</li>
+            <li>
+              <TextField
+                label="Register this callback URL"
+                value={state?.callbackUrl ?? ''}
+                onChange={() => {}}
+                stacked
+                readOnly
+                selectOnFocus
+                code
+                description="Exactly as shown. Select it and press ⌘C."
+                testId="x-callback-url"
+              />
+            </li>
+            <li>
+              <TextField
+                label="Paste the app's OAuth 2.0 Client ID"
+                stacked
+                value={clientId ?? savedClientId}
+                onChange={setClientId}
+                onCommit={commitClientId}
+                placeholder="e.g. M1M5R3BMVy13QmpScXkzTUt5OE46MTpjaQ"
+                error={clientIdError}
+                description="Not a secret: Native Apps have no Client Secret, and xBot never asks for one."
+                code
+                testId="x-client-id"
+              />
+            </li>
+          </ol>
+
+          {savedPort !== undefined && (
+            <div className="x-setup-port">
+              <NumberField label="Callback port" value={savedPort} min={1024} max={65535} onChange={(port) => setSetting('x.callbackPort', port)} testId="x-callback-port" />
+              <p className="x-setup-note">Change it only if another app uses this port, and register the new callback URL too.</p>
+            </div>
+          )}
+        </details>
+      </div>
+    );
+  }
 
   return (
-    <div className="x-setup" data-testid={`x-setup-${variant}`}>
+    <div className="x-setup" data-testid="x-setup-onboarding">
       <p className="x-setup-text">
         Post straight to X with your own X developer app. X API usage may be billed to your own X developer account, separately from
-        xBot’s free local AI. You can always copy the text and post it yourself instead.
+        xBot{"'"}s free local AI. You can always copy the text and post it yourself instead.
       </p>
       <ol className="x-setup-steps">
         <li>
@@ -63,7 +152,7 @@ export function XSetup({ variant }: { variant: 'settings' | 'onboarding' }) {
           </a>
           .
         </li>
-        <li>In its User authentication settings, choose OAuth 2.0, type “Native App”, permissions “Read and write”.</li>
+        <li>In its User authentication settings, choose OAuth 2.0, type &quot;Native App&quot;, permissions &quot;Read and write&quot;.</li>
         <li>
           <TextField
             label="Register this callback URL"
@@ -79,7 +168,7 @@ export function XSetup({ variant }: { variant: 'settings' | 'onboarding' }) {
         </li>
         <li>
           <TextField
-            label="Paste the app’s OAuth 2.0 Client ID"
+            label="Paste the app's OAuth 2.0 Client ID"
             stacked
             value={clientId ?? savedClientId}
             onChange={setClientId}
@@ -92,34 +181,10 @@ export function XSetup({ variant }: { variant: 'settings' | 'onboarding' }) {
           />
         </li>
       </ol>
-
-      {variant === 'settings' && savedPort !== undefined && (
-        <div className="x-setup-port">
-          <NumberField label="Callback port" value={savedPort} min={1024} max={65535} onChange={(port) => setSetting('x.callbackPort', port)} testId="x-callback-port" />
-          <p className="x-setup-note">Change it only if another app uses this port, and register the new callback URL too.</p>
-        </div>
-      )}
-
-      {variant === 'settings' && state && state.accounts.length > 0 && (
-        <ul className="x-setup-accounts" aria-label="Connected X accounts">
-          {state.accounts.map((a) => (
-            <li key={a.id} className="x-setup-account">
-              <span className="x-setup-handle">
-                @{a.handle}
-                {a.active && <span className="badge">Posting</span>}
-                {a.reconnectRequired && <span className="badge badge-warning">Reconnect</span>}
-              </span>
-              {a.reconnectRequired && <GhostButton onClick={() => void connect(a.id)}>Reconnect</GhostButton>}
-              <GhostButton onClick={() => void disconnect(a.id)}>Disconnect</GhostButton>
-            </li>
-          ))}
-        </ul>
-      )}
-
       <div className="x-setup-actions">
         {connecting ? (
           <>
-            <StatusChip>Waiting for X in your browser…</StatusChip>
+            <StatusChip>Waiting for X in your browser...</StatusChip>
             <GhostButton onClick={() => void window.xbot.x.cancelConnect()}>Cancel</GhostButton>
           </>
         ) : (
@@ -127,7 +192,7 @@ export function XSetup({ variant }: { variant: 'settings' | 'onboarding' }) {
             {active ? 'Connect another account' : 'Connect X account'}
           </FrostedButton>
         )}
-        {variant === 'onboarding' && active && !connecting && <StatusChip>Connected as @{active.handle}</StatusChip>}
+        {active && !connecting && <StatusChip>Connected as @{active.handle}</StatusChip>}
       </div>
       {outcome && (
         <StatusChip tone={outcome.tone} className="publish-outcome">

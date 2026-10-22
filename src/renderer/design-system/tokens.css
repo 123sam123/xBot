@@ -5,9 +5,6 @@
  * Modes, set on <html> (see ARCHITECTURE.md → "Design system"):
  * - data-material="vibrancy" | "css": native macOS material behind the page,
  *   or the CSS-only glass over its own neutral base;
- * - data-glass="native" | "square": the native glass addon rounds (or could not
- *   round) the material, and --glass-clarity (0–1, Settings → Glass clarity)
- *   fades it; data-fullscreen squares the corners;
  * - data-reduce-transparency="on" or prefers-reduced-transparency: opaque graphite;
  * - data-contrast="more" or prefers-contrast: more: strong scrim.
  */
@@ -25,32 +22,14 @@
   --fw-semibold: 600;
   --fw-bold: 700;
 
-  /*
-   * Glass clarity, 0–1: how far the native frost has faded (set on <html> by
-   * useAppearance, only under data-glass="native"). As it rises the open glass
-   * gets clearer and the legibility layers move onto the text: card scrims,
-   * text and icon halos and the secondary text alphas grow. Every value below
-   * equals its old fixed value at 0.
-   */
-  --glass-clarity: 0;
-
   /* Text: white on glass, dark navy on frosted pills. */
   --text-primary: #fff;
-  --text-secondary: rgb(255 255 255 / calc(0.8 + 0.15 * var(--glass-clarity)));
-  --text-tertiary: rgb(255 255 255 / calc(0.62 + 0.25 * var(--glass-clarity)));
+  --text-secondary: rgb(255 255 255 / 0.8);
+  --text-tertiary: rgb(255 255 255 / 0.62);
   --text-on-frost: #0d1b3a;
-  --text-shadow:
-    0 1px 2px rgb(0 0 0 / 0.22),
-    0 0 1px rgb(0 0 0 / calc(0.8 * var(--glass-clarity))),
-    0 0 3px rgb(0 0 0 / calc(0.7 * var(--glass-clarity))),
-    0 0 8px rgb(0 0 0 / calc(0.45 * var(--glass-clarity)));
-  /* The halo for line icons (text-shadow does not reach SVG strokes). */
-  --icon-halo:
-    drop-shadow(0 0 1px rgb(0 0 0 / calc(0.8 * var(--glass-clarity))))
-    drop-shadow(0 0 3px rgb(0 0 0 / calc(0.6 * var(--glass-clarity))))
-    drop-shadow(0 0 7px rgb(0 0 0 / calc(0.4 * var(--glass-clarity))));
+  --text-shadow: 0 1px 2px rgb(0 0 0 / 0.22);
 
-  /* Radii. Under native vibrancy without the glass addon, the window silhouette is the system radius. */
+  /* Radii. Under native vibrancy the window silhouette is the system radius. */
   --radius-window-css: 40px;
   --radius-window-native: 10px;
   --radius-window: var(--radius-window-css);
@@ -61,9 +40,8 @@
   --radius-pill: 999px;
 
   /* Glass fills. Neutral (no hue): the colour comes from what is behind the window. */
-  /* The tint fades with clarity but never to 0, so the open glass still takes clicks. */
-  --glass-tint: rgb(255 255 255 / calc(0.04 * (1 - var(--glass-clarity)) + 0.01));
-  --glass-card-fill: rgb(255 255 255 / 0.09);
+  --glass-tint: rgb(255 255 255 / 0.005);
+  --glass-card-fill: rgb(255 255 255 / 0.009);
   --glass-card-border: rgb(255 255 255 / 0.26);
   --glass-control-fill: rgb(255 255 255 / 0.16);
   --glass-control-hover: rgb(255 255 255 / 0.24);
@@ -80,13 +58,9 @@
   --rim-weak: rgb(255 255 255 / 0.15);
   --hairline: rgb(0 0 0 / 0.22);
 
-  /* Scrims: the whole panel's fades with clarity; text-bearing cards' grows. */
-  --scrim-panel: rgb(10 12 18 / calc(0.12 * (1 - var(--glass-clarity))));
-  --scrim-card: rgb(10 12 18 / calc(0.14 + 0.36 * var(--glass-clarity)));
-  /* Behind the header and footer rows' text on the glass (.glass-panel's bands): none at clarity 0. */
-  --scrim-band: rgb(10 12 18 / calc(0.42 * var(--glass-clarity)));
-  /* Sheets (Settings, …) sit on their own graphite: fixed, so they don't darken while the slider moves. */
-  --scrim-sheet: rgb(10 12 18 / 0.14);
+  /* Scrim behind text-bearing areas: just enough for 3:1 over a light wallpaper. */
+  --scrim-panel: rgb(10 12 18 / 0.012);
+  --scrim-card: rgb(10 12 18 / 0.014);
 
   /* Shadows. */
   --shadow-pill: 0 6px 18px rgb(0 0 0 / 0.18);
@@ -100,32 +74,17 @@
   --radius-window: var(--radius-window-native);
 }
 
-/* The native glass addon masks the material to the panel's own radius (square in full screen). */
-:root[data-material='vibrancy'][data-glass='native'] {
-  --radius-window: var(--radius-window-css);
-}
-
-:root[data-material='vibrancy'][data-glass='square'],
-:root[data-material='vibrancy'][data-glass='native'][data-fullscreen] {
-  --radius-window: 0px;
-}
-
 /* CSS-only glass (no native material): a neutral graphite base, never navy. */
 :root[data-material='css'] {
-  --panel-base: linear-gradient(160deg, rgb(70 73 80 / 0.94), rgb(38 40 45 / 0.96));
+  --panel-base: linear-gradient(160deg, rgb(70 73 80 / 0.094), rgb(38 40 45 / 0.096));
 }
 
-/*
- * Increase contrast: the app setting or the OS preference. Never lighter than
- * the clarity-scaled defaults (max()), so turning it on never lowers contrast;
- * the halos keep their defaults.
- */
+/* Increase contrast: the app setting or the OS preference. */
 :root[data-contrast='more'] {
   --scrim-panel: rgb(10 12 18 / 0.45);
-  --scrim-card: rgb(10 12 18 / max(0.35, calc(0.14 + 0.36 * var(--glass-clarity))));
-  --scrim-sheet: rgb(10 12 18 / 0.35);
-  --text-secondary: rgb(255 255 255 / max(0.92, calc(0.8 + 0.15 * var(--glass-clarity))));
-  --text-tertiary: rgb(255 255 255 / max(0.82, calc(0.62 + 0.25 * var(--glass-clarity))));
+  --scrim-card: rgb(10 12 18 / 0.35);
+  --text-secondary: rgb(255 255 255 / 0.92);
+  --text-tertiary: rgb(255 255 255 / 0.82);
   --glass-card-border: rgb(255 255 255 / 0.42);
   --divider: rgb(255 255 255 / 0.3);
 }
@@ -133,10 +92,9 @@
 @media (prefers-contrast: more) {
   :root {
     --scrim-panel: rgb(10 12 18 / 0.45);
-    --scrim-card: rgb(10 12 18 / max(0.35, calc(0.14 + 0.36 * var(--glass-clarity))));
-    --scrim-sheet: rgb(10 12 18 / 0.35);
-    --text-secondary: rgb(255 255 255 / max(0.92, calc(0.8 + 0.15 * var(--glass-clarity))));
-    --text-tertiary: rgb(255 255 255 / max(0.82, calc(0.62 + 0.25 * var(--glass-clarity))));
+    --scrim-card: rgb(10 12 18 / 0.35);
+    --text-secondary: rgb(255 255 255 / 0.92);
+    --text-tertiary: rgb(255 255 255 / 0.82);
     --glass-card-border: rgb(255 255 255 / 0.42);
     --divider: rgb(255 255 255 / 0.3);
   }
@@ -153,7 +111,6 @@
   --glass-active-fill: #4a4c52;
   --scrim-panel: transparent;
   --scrim-card: transparent;
-  --scrim-sheet: transparent;
 }
 
 @media (prefers-reduced-transparency: reduce) {
@@ -167,6 +124,5 @@
     --glass-active-fill: #4a4c52;
     --scrim-panel: transparent;
     --scrim-card: transparent;
-    --scrim-sheet: transparent;
   }
 }

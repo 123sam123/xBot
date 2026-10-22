@@ -281,10 +281,7 @@
   flex-direction: column;
   padding: 34px 36px;
   border-radius: inherit;
-  background:
-    linear-gradient(var(--scrim-sheet), var(--scrim-sheet)),
-    linear-gradient(rgb(22 24 30 / 0.55), rgb(22 24 30 / 0.55));
-  backdrop-filter: blur(24px) saturate(1.3);
+  background: rgb(22 24 30);
   outline: none;
 }
 

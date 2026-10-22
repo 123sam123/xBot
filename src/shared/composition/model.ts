@@ -13,7 +13,7 @@ export type FrameTheme = 'dark' | 'light';
 export type CanvasRatio = 'original' | '16:9' | '1:1' | '4:5' | 'custom';
 export type CropAspect = 'free' | 'original' | '16:9' | '1:1' | '4:5';
 export type ShadowStyle = 'none' | 'soft' | 'elevated';
-export type GradientPreset = 'blue' | 'violet' | 'lilac' | 'cream' | 'black';
+export type GradientPreset = 'blue' | 'violet' | 'lilac' | 'cream' | 'black' | 'sequoia' | 'sonoma' | 'ventura' | 'monterey' | 'aurora' | 'desert';
 export type ExportFormat = 'png' | 'jpeg';
 
 export interface Rect {
@@ -203,6 +203,78 @@ export const GRADIENTS: Record<GradientPreset, GradientDef> = {
     ],
     glow: { color: [90, 92, 100], alpha: 0.7, cx: 0.85, cy: 0.15, rx: 0.7, ry: 0.9 },
     swatch: 'radial-gradient(circle at 35% 30%, #5a5c63, #26272c 60%, #121316)',
+  },
+  sequoia: {
+    label: 'Sequoia',
+    angle: 135,
+    stops: [
+      [0, '#e84430'],
+      [0.3, '#f06838'],
+      [0.6, '#d94080'],
+      [1, '#3028a0'],
+    ],
+    glow: { color: [255, 120, 60], alpha: 0.9, cx: 0.3, cy: 0.2, rx: 0.8, ry: 0.7 },
+    swatch: 'radial-gradient(circle at 35% 30%, #ff7844, #e04030 50%, #6020a0)',
+  },
+  sonoma: {
+    label: 'Sonoma',
+    angle: 160,
+    stops: [
+      [0, '#48b060'],
+      [0.35, '#3898d0'],
+      [0.65, '#d04080'],
+      [1, '#f08030'],
+    ],
+    glow: { color: [80, 200, 120], alpha: 0.85, cx: 0.2, cy: 0.3, rx: 0.6, ry: 0.8 },
+    swatch: 'radial-gradient(circle at 30% 35%, #60d880, #3090d0 50%, #d04888)',
+  },
+  ventura: {
+    label: 'Ventura',
+    angle: 180,
+    stops: [
+      [0, '#f09838'],
+      [0.4, '#e86040'],
+      [0.7, '#d03870'],
+      [1, '#3840c8'],
+    ],
+    glow: { color: [255, 160, 60], alpha: 0.9, cx: 0.5, cy: 0.15, rx: 0.7, ry: 0.5 },
+    swatch: 'radial-gradient(circle at 35% 30%, #ffa844, #e06040 50%, #5038c0)',
+  },
+  monterey: {
+    label: 'Monterey',
+    angle: 140,
+    stops: [
+      [0, '#1a0a38'],
+      [0.3, '#2818a0'],
+      [0.6, '#6048d0'],
+      [1, '#c060e0'],
+    ],
+    glow: { color: [160, 100, 255], alpha: 0.85, cx: 0.7, cy: 0.25, rx: 0.6, ry: 0.8 },
+    swatch: 'radial-gradient(circle at 35% 30%, #b080ff, #5030d0 55%, #180840)',
+  },
+  aurora: {
+    label: 'Aurora',
+    angle: 170,
+    stops: [
+      [0, '#0a2848'],
+      [0.3, '#106878'],
+      [0.6, '#30b880'],
+      [1, '#80f0a0'],
+    ],
+    glow: { color: [60, 220, 140], alpha: 0.85, cx: 0.6, cy: 0.2, rx: 0.7, ry: 0.8 },
+    swatch: 'radial-gradient(circle at 35% 30%, #60e8a0, #2090a0 55%, #0a2040)',
+  },
+  desert: {
+    label: 'Desert',
+    angle: 150,
+    stops: [
+      [0, '#e8c070'],
+      [0.35, '#d09048'],
+      [0.65, '#b86030'],
+      [1, '#783820'],
+    ],
+    glow: { color: [240, 200, 120], alpha: 0.9, cx: 0.3, cy: 0.2, rx: 0.7, ry: 0.7 },
+    swatch: 'radial-gradient(circle at 35% 30%, #f0d080, #c88040 55%, #683018)',
   },
 };
 
