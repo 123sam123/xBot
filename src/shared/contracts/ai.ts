@@ -88,7 +88,8 @@ export interface AiState {
   totalMemBytes: number;
   lowResource: boolean;
   pull: { model: string; percent: number; status: string; error: string | null; active: boolean } | null;
-  running: { requestId: string; action: AiAction | 'brief'; priority: 'interactive' | 'background' } | null;
+  /** `ideas` is T7's project-ideas generation. */
+  running: { requestId: string; action: AiAction | 'brief' | 'ideas'; priority: 'interactive' | 'background' } | null;
   /** What to tell the user in this phase (src/shared/aiCopy.ts). */
   guidance: string;
 }

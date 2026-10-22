@@ -1,3 +1,4 @@
+import type { z } from 'zod';
 import { aiCopy } from '../../../shared/aiCopy';
 import {
   AI_ANGLES,
@@ -17,12 +18,25 @@ import { IpcError } from '../../ipc/core';
 import type { Logger } from '../../log';
 import { findModel, isCatalogModel, pickDefault, recommend } from './catalog';
 import { toIpcError } from './errors';
-import { runStructured } from './generate';
+import { runStructured, type StructuredProgress } from './generate';
 import { assessModel } from './locality';
 import { createOllamaClient, OllamaError, type FetchLike, type OllamaClient, type OllamaShow, type OllamaTag } from './ollamaClient';
-import { buildMessages, flagPhrases, flagUnsupportedNumbers, outputSpecFor, stripAddedHashtags, type PromptAction } from './prompts';
+import {
+  buildMessages,
+  buildTaskMessages,
+  flagPhrases,
+  flagUnsupportedNumbers,
+  outputSpecFor,
+  stripAddedHashtags,
+  type BuiltPrompt,
+  type BuiltTaskPrompt,
+  type PromptAction,
+  type PromptTask,
+  type TaskSource,
+} from './prompts';
 import { createAiQueue, isCancellation, type Priority } from './queue';
 import { chooseRuntime, wouldEvict } from './runtime';
+import type { OutputSpec } from './schemas';
 import { statusFor } from './status';
 import { createVoiceStore } from './voice';
 
@@ -43,6 +57,24 @@ export interface GenerateRequest {
   sources: AiSource[];
   priority: Priority;
 }
+
+/** A caller-defined generation (T7's ideas): its instructions, output schema and source budget. */
+export interface TaskSpec<S extends z.ZodType> extends Omit<PromptTask, 'spec'> {
+  label: 'ideas';
+  /** The output spec for the prompt context actually used (a smaller window wants a smaller answer). */
+  specFor(promptCtx: number): OutputSpec<S>;
+}
+
+export interface TaskRequest<S extends z.ZodType> {
+  requestId: string;
+  priority: Priority;
+  task: TaskSpec<S>;
+  sources: TaskSource[];
+}
+
+export type TaskResult<S extends z.ZodType> =
+  | { status: 'done'; value: z.output<S>; included: BuiltTaskPrompt['included']; trimmed: boolean }
+  | { status: 'cancelled' };
 
 export interface AiServiceDeps {
   db: Db;
@@ -264,14 +296,17 @@ export function createAiService(deps: AiServiceDeps) {
     return fields.text === undefined ? [] : [{ angle: null, ...postCheck(fields.text, sourceTexts, banned) }];
   }
 
-  /** The common path for every generation: model check, memory rules, prompt, structured run. */
-  async function run(
-    action: PromptAction,
-    sources: readonly AiSource[],
-    voiceProfile: VoiceProfile,
+  /**
+   * The common path for every generation: model check, memory rules, prompt,
+   * structured run. `build` receives the context window the prompt must fit
+   * (known only after `/api/ps`) and returns the prompt and output spec, or
+   * null when nothing useful fits.
+   */
+  async function runPrompt<S extends z.ZodType>(
+    build: (promptCtx: number) => { built: BuiltPrompt; spec: OutputSpec<S> } | null,
     signal: AbortSignal,
-    onFields?: (attempt: number, fields: Record<string, string>, chars: number) => void,
-  ): Promise<{ fields: Record<string, string>; trimmed: boolean }> {
+    onProgress?: (progress: StructuredProgress) => void,
+  ): Promise<{ value: z.output<S>; trimmed: boolean }> {
     const settings = deps.getSettings();
     const { c, model, tag, thinking } = await readyModel(signal);
     try {
@@ -283,26 +318,45 @@ export function createAiService(deps: AiServiceDeps) {
         throw new IpcError('ai_would_evict', aiCopy.errors.ai_would_evict(model));
       }
       const runtime = chooseRuntime({ loaded, lowResource: settings.lowResource, now: now() });
-      const built = buildMessages(action, voiceProfile, sources, runtime.promptCtx);
-      if (!built) throw new IpcError('ai_input_too_long', aiCopy.errors.ai_input_too_long);
-      const spec = outputSpecFor(action);
+      const prompt = build(runtime.promptCtx);
+      if (!prompt) throw new IpcError('ai_input_too_long', aiCopy.errors.ai_input_too_long);
       const { value } = await runStructured({
         client: c,
         model,
         disableThinking: thinking,
-        messages: built.messages,
-        spec,
+        messages: prompt.built.messages,
+        spec: prompt.spec,
         signal,
         attemptTimeoutMs: settings.timeoutSec * 1000,
         numCtx: runtime.numCtx,
         keepAlive: runtime.keepAlive,
-        onProgress: onFields ? ({ attempt, fields, chars }) => onFields(attempt, fields, chars) : undefined,
+        onProgress,
       });
-      return { fields: value, trimmed: built.trimmed };
+      return { value, trimmed: prompt.built.trimmed };
     } catch (err) {
       if (isCancellation(err) || err instanceof IpcError) throw err;
       throw toIpcError(err, { phase: 'generate', model }, settings.endpoint);
     }
+  }
+
+  /** One of the built-in actions. */
+  async function run(
+    action: PromptAction,
+    sources: readonly AiSource[],
+    voiceProfile: VoiceProfile,
+    signal: AbortSignal,
+    onFields?: (attempt: number, fields: Record<string, string>, chars: number) => void,
+  ): Promise<{ fields: Record<string, string>; trimmed: boolean }> {
+    const spec = outputSpecFor(action);
+    const { value, trimmed } = await runPrompt(
+      (promptCtx) => {
+        const built = buildMessages(action, voiceProfile, sources, promptCtx);
+        return built ? { built, spec } : null;
+      },
+      signal,
+      onFields ? ({ attempt, fields, chars }) => onFields(attempt, fields, chars) : undefined,
+    );
+    return { fields: value, trimmed };
   }
 
   return {
@@ -346,6 +400,41 @@ export function createAiService(deps: AiServiceDeps) {
               deps.emit('ai:progress', { requestId: req.requestId, attempt, options, chars });
             });
             return { status: 'done', options: toOptions(req.action, fields, sourceTexts, profile.bannedPhrases), trimmed };
+          } finally {
+            setRunning(null);
+          }
+        });
+      } catch (err) {
+        if (isCancellation(err)) return { status: 'cancelled' };
+        throw err;
+      }
+    },
+
+    /**
+     * T7: a generation with the caller's own instructions and output schema
+     * (project ideas). Same queue, model checks, memory rules, voice and DATA
+     * fencing as `generate`. `specFor` gets the context window actually used,
+     * so the answer's size can shrink with it. Resolves `cancelled` when
+     * cancelled or pre-empted; throws IpcError otherwise (`ai_input_too_long`
+     * when `mustInclude` rejects what fit).
+     */
+    async generateTask<S extends z.ZodType>(req: TaskRequest<S>): Promise<TaskResult<S>> {
+      if (deps.isPreview) throw new IpcError('ai_preview', aiCopy.errors.ai_preview);
+      if (req.sources.every((s) => s.text.trim() === '')) throw new IpcError('ai_nothing_to_use', aiCopy.errors.ai_nothing_to_use);
+      try {
+        return await queue.enqueue(req.requestId, req.priority, async (signal): Promise<TaskResult<S>> => {
+          setRunning({ requestId: req.requestId, action: req.task.label, priority: req.priority });
+          try {
+            const profile = voice.get();
+            let included: BuiltTaskPrompt['included'] = [];
+            const { value, trimmed } = await runPrompt((promptCtx) => {
+              const spec = req.task.specFor(promptCtx);
+              const built = buildTaskMessages({ ...req.task, spec }, profile, req.sources, promptCtx);
+              if (!built) return null;
+              included = built.included;
+              return { built, spec };
+            }, signal);
+            return { status: 'done', value, included, trimmed };
           } finally {
             setRunning(null);
           }

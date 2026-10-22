@@ -164,6 +164,86 @@ function rank(kind: AiSource['kind']): number {
   return kind === 'draft' ? 0 : kind === 'selection' ? 1 : kind === 'note' ? 2 : 3;
 }
 
+// ---------- Caller-defined tasks (T7's project ideas) ----------
+
+/** Which share of the data budget a source draws from. Activity is filled first. */
+export type SourceGroup = 'activity' | 'brief' | 'facts' | 'digest';
+
+export interface TaskSource extends AiSource {
+  /** Defaults to `activity`. */
+  group?: SourceGroup;
+}
+
+export interface PromptTask {
+  instructions: string;
+  spec: Pick<AnyOutputSpec, 'numPredict' | 'shape'>;
+  /** The most of the data budget each group may take (fractions); a group without one takes what is left. */
+  shares?: Partial<Record<SourceGroup, number>>;
+  /** Approved voice examples in the system prompt (default true). */
+  includeExamples?: boolean;
+  /** Refuses a prompt whose included sources (by name) leave nothing worth generating from. */
+  mustInclude?(names: readonly string[]): boolean;
+}
+
+export interface BuiltTaskPrompt extends BuiltPrompt {
+  /** The sources that fit, in the caller's order, with the exact (possibly trimmed) text sent. */
+  included: { name: string; text: string }[];
+}
+
+const FILL_ORDER: readonly SourceGroup[] = ['activity', 'brief', 'facts', 'digest'];
+/** A block smaller than this is skipped rather than sent as a stub. */
+const MIN_BLOCK_BYTES = 48;
+
+/**
+ * Like `buildMessages`, for a caller's own instructions and output shape. The
+ * caller's source order is kept (no ranking by kind). Each group fills up to
+ * its share, activity first, then any room left goes back to activity; a
+ * block that doesn't fit is skipped, never ending the fill, so one long block
+ * can't starve the rest. Returns null when the window is too small or
+ * `mustInclude` rejects what fit.
+ */
+export function buildTaskMessages(task: PromptTask, voice: VoiceProfile, sources: readonly TaskSource[], ctxTokens: number): BuiltTaskPrompt | null {
+  const promptTokens = ctxTokens - task.spec.numPredict - RESERVED_TOKENS;
+  if (promptTokens < MIN_PROMPT_TOKENS) return null;
+  const promptBytes = promptTokens * BYTES_PER_TOKEN;
+
+  const taskText = `${task.instructions}\nShape: ${task.spec.shape}`;
+  const rest = Math.max(0, promptBytes - byteLength(BASE_SYSTEM) - byteLength(taskText) - 64);
+  const voiceText = voiceBlock(voice, Math.floor(rest * 0.35), task.includeExamples ?? true);
+  const dataBudget = rest - byteLength(voiceText);
+  let dataLeft = dataBudget;
+
+  const chosen = new Map<number, string>();
+  let trimmed = false;
+  const fill = (group: SourceGroup, cap: number) => {
+    let groupLeft = cap;
+    sources.forEach((source, index) => {
+      if ((source.group ?? 'activity') !== group || chosen.has(index) || source.text.trim() === '') return;
+      const overhead = byteLength(dataBlock(source.name.toUpperCase(), '')) + 1;
+      const room = Math.min(groupLeft, dataLeft) - overhead;
+      if (room < MIN_BLOCK_BYTES) return;
+      const cut = cutToBytes(source.text, room);
+      if (cut.text === '') return;
+      if (cut.trimmed) trimmed = true;
+      const size = byteLength(dataBlock(source.name.toUpperCase(), cut.text)) + 1;
+      chosen.set(index, cut.text);
+      groupLeft -= size;
+      dataLeft -= size;
+    });
+  };
+  for (const group of FILL_ORDER) fill(group, Math.floor(dataBudget * (task.shares?.[group] ?? 1)));
+  fill('activity', dataLeft);
+  if (chosen.size < sources.filter((s) => s.text.trim() !== '').length) trimmed = true;
+
+  const included = [...chosen.entries()].sort((a, b) => a[0] - b[0]).map(([index, text]) => ({ name: sources[index]!.name, text }));
+  if (task.mustInclude && !task.mustInclude(included.map((s) => s.name))) return null;
+
+  const blocks = included.map((s) => dataBlock(s.name.toUpperCase(), s.text));
+  const system = voiceText === '' ? BASE_SYSTEM : `${BASE_SYSTEM}\n\n${voiceText}`;
+  const user = [taskText, ...blocks].join('\n\n');
+  return { messages: [{ role: 'system', content: system }, { role: 'user', content: user }], trimmed, included };
+}
+
 /** The repair turn after an invalid answer: the bad reply (cut to 1 KB) and what to fix. */
 export function repairMessages(badReply: string, problem: 'length' | string): ChatMessage[] {
   const content =
