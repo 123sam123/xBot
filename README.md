@@ -316,3 +316,7 @@ xBot without touching its data.
   - it never runs repository code.
 - **Never recorded:** the screen, keystrokes or browser history. xBot writes
   to the clipboard only when you click **Copy text**, and never reads it.
+
+## License
+
+xBot is open source under the [MIT License](LICENSE). FFmpeg is not part of it: xBot runs the copy you install (see "FFmpeg for video").
