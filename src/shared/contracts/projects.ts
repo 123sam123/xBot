@@ -54,6 +54,8 @@ export interface ProjectSummary {
   brief: ProjectBrief;
   options: ProjectOptions;
   scan: { state: ProjectScanState; at: string | null; note: string | null; scanning: boolean };
+  /** When xBot last recorded useful activity (a new commit, doc or note) for it. */
+  lastActivityAt: string | null;
 }
 
 export type IdeaSourceKind = 'commit' | 'doc' | 'files' | 'note' | 'brief' | 'fact';

@@ -17,6 +17,8 @@ import { cutBytes, scanFolder, type DocCache, type ScannerDeps } from './scanner
 export const STALE_MS = 15 * 60 * 1000;
 const START_DELAY_MS = 5000;
 
+const LAST_ACTIVITY = '(SELECT MAX(e.created_at) FROM project_events e WHERE e.project_id = p.id AND e.low_signal = 0) AS last_activity_at';
+
 export const DEFAULT_OPTIONS: ProjectOptions = { readDocs: true, diffExcerpts: false };
 
 export function defaultBrief(name: string): ProjectBrief {
@@ -40,6 +42,7 @@ export interface ProjectRow {
   doc_cache_json: string;
   created_at: string;
   updated_at: string;
+  last_activity_at: string | null;
 }
 
 export interface ProjectsDeps {
@@ -74,8 +77,8 @@ export function createProjectsService(deps: ProjectsDeps) {
   let timers: { start?: NodeJS.Timeout; interval?: NodeJS.Timeout } = {};
 
   const q = {
-    all: db.prepare<[], ProjectRow>('SELECT * FROM projects ORDER BY created_at, rowid'),
-    byId: db.prepare<[string], ProjectRow>('SELECT * FROM projects WHERE id = ?'),
+    all: db.prepare<[], ProjectRow>(`SELECT p.*, ${LAST_ACTIVITY} FROM projects p ORDER BY p.created_at, p.rowid`),
+    byId: db.prepare<[string], ProjectRow>(`SELECT p.*, ${LAST_ACTIVITY} FROM projects p WHERE p.id = ?`),
     byReal: db.prepare<[string], { id: string }>('SELECT id FROM projects WHERE root_realpath = ?'),
     insert: db.prepare(
       `INSERT INTO projects (id, root_path, root_realpath, name, brief_json, options_json, created_at, updated_at)
@@ -109,6 +112,7 @@ export function createProjectsService(deps: ProjectsDeps) {
       brief: JSON.parse(row.brief_json) as ProjectBrief,
       options: { ...DEFAULT_OPTIONS, ...(JSON.parse(row.options_json) as Partial<ProjectOptions>) },
       scan: { state: row.scan_state, at: row.last_scan_at, note: row.scan_note, scanning: scanning.has(row.id) },
+      lastActivityAt: row.last_activity_at,
     };
   }
 

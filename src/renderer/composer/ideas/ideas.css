@@ -1,0 +1,281 @@
+/* Project ideas (T7): the header's bulb, the Ideas popover, the projects
+   sheet and the brief editor. Cards, fields and status lines reuse T6's
+   ai-* classes (composer/ai/ai.css); nothing here restyles a shared
+   component. */
+
+/* ---------- Header trigger ---------- */
+/* The bulb takes T6's place as the first right-aligned control; ✦ then follows it. */
+.ideas-trigger {
+  position: relative;
+  margin-left: auto;
+  color: var(--text-secondary);
+}
+
+.ideas-trigger + .ai-menu-trigger {
+  margin-left: 2px;
+}
+
+.ideas-trigger:not([aria-disabled='true']):hover,
+.ideas-trigger[aria-expanded='true'] {
+  color: var(--text-primary);
+  background: rgb(255 255 255 / 0.08);
+}
+
+.ideas-dot {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--text-primary);
+  box-shadow: 0 0 0 1.5px rgb(0 0 0 / 0.35);
+}
+
+/* ---------- Popover ---------- */
+.ideas-popover {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: min(356px, calc(100vw - 16px));
+  max-height: calc(100vh - 72px);
+  padding: 16px 18px;
+  overflow: auto;
+}
+
+/* Containing blocks for visually-hidden label and tooltip text (the popover
+   itself already is one: it is position: fixed). */
+.ideas-head,
+.idea-card,
+.ideas-note-actions,
+.ideas-foot {
+  position: relative;
+}
+
+.ideas-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.ideas-title {
+  margin: 0;
+  font-size: 17px;
+  font-weight: var(--fw-semibold);
+}
+
+.ideas-refresh,
+.ideas-projects {
+  height: 28px;
+  padding: 0 10px;
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-medium);
+}
+
+.ideas-empty {
+  margin: 0;
+  font-size: var(--fs-sm);
+  line-height: 1.45;
+  color: var(--text-secondary);
+}
+
+.idea-project {
+  text-transform: none;
+  letter-spacing: 0;
+  font-weight: var(--fw-medium);
+}
+
+.idea-confirm {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+.idea-claims,
+.idea-sources {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: var(--fs-xs);
+  line-height: 1.4;
+}
+
+.idea-claim-text {
+  color: var(--text-primary);
+  user-select: text;
+}
+
+.idea-claim-reason {
+  color: var(--text-tertiary);
+}
+
+.idea-why {
+  font-size: var(--fs-xs);
+  color: var(--text-secondary);
+}
+
+.idea-why summary {
+  cursor: default;
+  width: fit-content;
+  border-radius: 4px;
+}
+
+.idea-why summary:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.idea-why[open] summary {
+  margin-bottom: 6px;
+}
+
+.idea-sources li {
+  display: flex;
+  gap: 8px;
+}
+
+.idea-source-kind {
+  flex: none;
+  min-width: 64px;
+  color: var(--text-tertiary);
+}
+
+.idea-source-label {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: var(--text-primary);
+  user-select: text;
+}
+
+.idea-actions {
+  gap: 6px;
+}
+
+.ideas-note-actions {
+  align-items: center;
+  gap: 8px;
+}
+
+.ideas-select {
+  min-width: 0;
+  max-width: 180px;
+  height: 32px;
+  padding: 0 8px;
+  border: 1px solid var(--glass-card-border);
+  border-radius: var(--radius-control);
+  background: var(--glass-card-fill);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: var(--fs-sm);
+}
+
+.ideas-select:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.ideas-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.ideas-local {
+  font-size: var(--fs-xs);
+  color: var(--text-tertiary);
+}
+
+/* ---------- Projects sheet ---------- */
+.projects-add {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.projects-message {
+  align-self: flex-start;
+  white-space: normal;
+}
+
+.project-card {
+  position: relative;
+}
+
+.project-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.project-name {
+  margin: 0;
+  font-size: 15px;
+  font-weight: var(--fw-semibold);
+  overflow-wrap: anywhere;
+}
+
+.project-path,
+.project-status,
+.project-note,
+.project-confirm {
+  margin: 0;
+  font-size: var(--fs-xs);
+  line-height: 1.4;
+  color: var(--text-secondary);
+  overflow-wrap: anywhere;
+}
+
+.project-path {
+  color: var(--text-tertiary);
+  user-select: text;
+}
+
+.project-status-warning {
+  color: var(--warning);
+}
+
+.project-actions {
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.project-confirm {
+  flex: 1 1 100%;
+}
+
+.brief-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-top: 8px;
+  border-top: 1px solid var(--glass-card-border);
+}
+
+/* ---------- Onboarding step ---------- */
+.ideas-step {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.ideas-step-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: var(--fs-sm);
+}
+
+.ideas-step-list span {
+  color: var(--text-tertiary);
+}
