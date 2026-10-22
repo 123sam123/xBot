@@ -1,4 +1,4 @@
-import { useRef } from 'react';
+import { useRef, type ReactNode } from 'react';
 import { AppMark, Menu, popovers, usePopoverOpen, type MenuItem } from '../design-system';
 import { AccountMenu, type AccountState } from './AccountMenu';
 
@@ -7,15 +7,18 @@ const APP_MENU_ID = 'app-menu';
 /**
  * The header. The xBot mark and name are the app menu's trigger (New draft,
  * Draft history…, Settings…), so the default view stays as in the reference.
+ * `aiMenu` (T6's ✦ button) sits just left of the account control.
  */
 export function ComposerHeader({
   account,
   onConnect,
   menuItems = [],
+  aiMenu,
 }: {
   account: AccountState;
   onConnect?: () => void;
   menuItems?: readonly MenuItem[];
+  aiMenu?: ReactNode;
 }) {
   const anchor = useRef<HTMLButtonElement>(null);
   const open = usePopoverOpen(APP_MENU_ID);
@@ -35,6 +38,7 @@ export function ComposerHeader({
         <span className="composer-name">xBot</span>
       </button>
       <Menu id={APP_MENU_ID} anchor={anchor} label="xBot" items={menuItems} placement="bottom-start" testId="app-menu" />
+      {aiMenu}
       <AccountMenu account={account} onConnect={onConnect} />
     </header>
   );

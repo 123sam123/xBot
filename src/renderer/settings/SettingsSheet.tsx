@@ -1,4 +1,4 @@
-import { useId } from 'react';
+import { useEffect, useId } from 'react';
 import { Sheet } from '../design-system';
 import { settingsSections, type SettingsSection } from './registry';
 
@@ -17,8 +17,24 @@ function Section({ section }: { section: SettingsSection }) {
   );
 }
 
-/** The composer's settings sheet (header menu or tray → "Settings…"), built from the section registry. */
-export function SettingsSheet({ open, onClose }: { open: boolean; onClose(): void }) {
+/**
+ * The composer's settings sheet (header menu or tray → "Settings…"), built
+ * from the section registry. `focusSection` scrolls that section into view
+ * when the sheet opens (e.g. "Local AI settings…").
+ */
+export function SettingsSheet({ open, onClose, focusSection }: { open: boolean; onClose(): void; focusSection?: string }) {
+  useEffect(() => {
+    if (!open || !focusSection) return;
+    const scroll = () =>
+      document.querySelector(`.settings-section[data-section="${CSS.escape(focusSection)}"]`)?.scrollIntoView({ block: 'start' });
+    // Sections read their own state, so the target may only fill in after a moment: try again then.
+    const frame = requestAnimationFrame(scroll);
+    const later = window.setTimeout(scroll, 250);
+    return () => {
+      cancelAnimationFrame(frame);
+      window.clearTimeout(later);
+    };
+  }, [open, focusSection]);
   return (
     <Sheet open={open} title="Settings" onClose={onClose} testId="settings-sheet">
       {settingsSections.map((section) => (
