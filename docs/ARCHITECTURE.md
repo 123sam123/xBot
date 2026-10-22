@@ -39,9 +39,11 @@ src/
   preload/                   index.ts (window.xbot), invoke.ts, api/<domain>.ts
   shared/contracts/          <domain>.ts, <domain>.channels.ts, ipc.ts, define.ts,
                              bridge.ts, events.ts, settings.ts (aggregators)
+  shared/composition/        model.ts, layout.ts (zod-free), schema.ts (zod, main only); see "Studio"
   renderer/
     design-system/           tokens, glass material, shared components (see "Design system")
-    common/                  base.css, CompositionPreview, hooks shared by both pages
+    common/                  base.css, CompositionPreview, hooks shared by both pages,
+                             composition/ (the Studio's draw routine, see "Studio")
     preview/                 preview mode's fixed sample content
     composer/, studio/       one Vite page each
     onboarding/, settings/,  the sheet registries and the status chips (see "Registries")
@@ -51,7 +53,7 @@ resources/                   tray.svg → trayTemplate.png / @2x (pnpm icons)
 scripts/                     capture-ui.ts (pnpm capture), render-fixtures.ts, capture-stage.cjs,
                              fixtures/*.html (the fixtures' sources), render-icons.mjs
 tests/unit/  tests/e2e/
-docs/                        SPEC.md, ARCHITECTURE.md, reference/ (+ captures/)
+docs/                        SPEC.md, ARCHITECTURE.md, OLLAMA.md, reference/ (+ captures/)
 ```
 
 ## Process boundaries
@@ -64,12 +66,15 @@ docs/                        SPEC.md, ARCHITECTURE.md, reference/ (+ captures/)
   contracts, because a sandboxed preload cannot `require()` packages.
 - **Renderer** (`src/renderer`): UI and interactive preview. It reaches main only
   through `window.xbot`.
-- **Shared** (`src/shared`): schemas, typed contracts and (later) composition
-  geometry. It uses no `electron` and no Node built-ins, so it runs on either side.
+- **Shared** (`src/shared`): schemas, typed contracts and the composition model
+  and geometry. It uses no `electron` and no Node built-ins, so it runs on either side.
 
 ESLint enforces all of this. `electron` and Node built-ins are banned in the
 renderer and shared code. In the preload, `zod` and value imports from contract
-files are banned.
+files are banned. In the renderer, `zod`, contract files and
+`shared/composition/schema` may only be imported as types, and
+`shared/composition/{model,layout}.ts` may not import zod at all, so zod never
+reaches a renderer bundle.
 
 ## One domain, one set of files
 
@@ -90,8 +95,8 @@ imported by every aggregator, so **a sibling ticket edits only its own files**:
 | `app`, `windows`, `settings`, `events` | T1 (XBOT-O61LM8), the scaffold |
 | renderer design system, both surfaces | T2 (XBOT-6AU4BQ) |
 | `drafts`, `media` | T3 (XBOT-6F4GAC). T3 also added, additively and for the reasons in "Drafts and media": `emojiPanel` and the status calls to `app`, `showEmojiPanel` and `ui.onboardingSeen` to `windows`, the quit flush to `app.ts`, the menu-bar drop to `tray.ts`, the refocus to `hold.ts`, and the Studio hand-off view to `studio/` |
-| `studio` | T4 (XBOT-1N58PP) images; T5 (XBOT-G66JJK) video |
-| `ai` | T6 (XBOT-4BCGOR) |
+| `studio` | T4 (XBOT-1N58PP) images; T5 (XBOT-G66JJK) video. T4 also added, additively and for the reasons in "Studio": `importLoose` and an exported `MediaRejected` to the media service, the Studio's quit flush to `app.ts`, full screen to `windows/studio.ts`, moved `useFileDrop` to `renderer/common/`, and the design-system pieces listed under "Components" |
+| `ai` | T6 (XBOT-4BCGOR). T6 also added, additively: the `aiMenu` slot to `ComposerHeader`, `focusSection` to `SettingsSheet`, the ✦ menu, AI status row and suggestions sheet to `composer/App.tsx`, `src/shared/aiEndpoint.ts` and `src/shared/aiCopy.ts`, and the tighter dev CSP in `electron.vite.config.ts` (see "Local AI") |
 | `projects` | T7 (XBOT-5UVE6R) |
 | `reminders` (+ launch at login, global shortcut) | T8 (XBOT-8V5WV5) |
 | `x` | T9 (XBOT-OE2XV9). T9 also added, additively and for the reasons in "X publishing": the X wait in `app.ts`'s first `before-quit`, `openExternalIfAllowed` exported from `security.ts`, `db/durable.ts`, the design system's `TextField`, and props on `AccountMenu`, `ComposerHeader`, `ActionRow` and `PublishSheet` |
@@ -152,9 +157,10 @@ if (!result.ok) showError(result.error);
 `appEvents` (`src/main/events.ts`) is a typed `EventEmitter` from `node:events`.
 Its event map is merged from every domain's `<Domain>Events` interface:
 `draft:changed`, `draft:studio-target`, `drafts:flush-requested`,
-`media:imported`, `status:changed`, `post:published`, `x:accounts-changed`,
-`x:job-changed`, `export:progress`, `settings:changed` and `ui:open-settings`
-exist today. An event listed in a
+`media:imported`, `studio:opened`, `studio:flush-requested`, `studio:fullscreen`,
+`status:changed`, `post:published`, `x:accounts-changed`, `x:job-changed`,
+`export:progress`, `settings:changed`, `ui:open-settings`, `ai:state`,
+`ai:progress` and `ai:pull-progress` exist today. An event listed in a
 domain's `<domain>ForwardedEvents` is forwarded to every window automatically.
 
 ## Settings
@@ -171,6 +177,8 @@ domain's `<domain>ForwardedEvents` is forwarded to every window automatically.
   warning is logged.
 - `ui.onboardingSeen` (in `windows.ts`) lists the onboarding steps the user has
   moved past or skipped; see "Registries".
+- `studio.currentDocumentId` (in `studio.ts`) is the document the Studio
+  reopens after a restart.
 
 ## Database
 
@@ -245,11 +253,12 @@ Defined by `src/main/index.ts` and `src/main/app.ts`:
 
 `second-instance` (another launch) and macOS `activate` (reopened from Finder)
 both toggle the composer. The first `before-quit` is prevented: main asks the
-composer to save text still inside its autosave debounce and waits for its ack
-(at most 1 s, skipped in preview or when the composer is not loaded) and, only
-while a create-post request is in flight, for X to answer it (at most 10 s,
-`settleXForQuit`; past that the request is aborted and launch reconciles the
-job), then quits again. That second `before-quit` marks the app as quitting, and only then
+composer to save text, and the Studio to save edits, still inside their
+autosave debounce and waits for both acks (each at most 1 s, skipped in preview
+or when that page is not loaded) and, only while a create-post request is in
+flight, for X to answer it (at most 10 s, `settleXForQuit`; past that the
+request is aborted and launch reconciles the job), then
+quits again. That second `before-quit` marks the app as quitting, and only then
 do windows really close. `will-quit` disposes services, then closes the DB.
 `window-all-closed` is ignored, since a menu-bar app runs without windows.
 
@@ -299,6 +308,10 @@ do windows really close. `will-quit` disposes services, then closes the DB.
   - Its top bar has `-webkit-app-region: drag`, and the buttons in it have
     `no-drag`.
   - "Back to post" hides the Studio and shows the composer.
+  - The footer's full-screen button toggles `setSimpleFullScreen` on macOS (no
+    new Space for a menu-bar app) and `setFullScreen` elsewhere, and broadcasts
+    `studio:fullscreen`. Hiding the window, by any route, leaves full screen;
+    while it is on, Escape leaves it instead of hiding the window.
 - **Both windows** are created hidden at startup and never destroyed:
   - `close` hides the window unless the app is quitting;
   - a crashed renderer reloads, at most 3 times a minute.
@@ -431,30 +444,40 @@ Prop changes are additive only; siblings build against these.
   `disabled` renders `aria-disabled` and stays focusable, so a `Tooltip` can say
   why. Wrap a disabled control in `Tooltip({ label })`; the label is also its
   accessible description.
-- `Popover({ id, anchor, placement?, offset?, crossOffset?, label, role?, testId? })`
+- `Popover({ id, anchor, placement?, offset?, crossOffset?, label, role?, testId?, keepOpenWithin? })`
   and `Menu({ id, anchor, label, items: { id, label, detail?, disabled?, checked?, onSelect? }[] })`:
   - they render into `document.body` with `position: fixed`, so opening one
     never moves the page (the Studio canvas keeps its rect);
   - one per window is open at a time (`popovers`, a React-free store; open
     with `popovers.open(id)`, `.toggle(id)`, `.closeAll()`);
   - placement is clamped 8 px inside the window and redone on resize;
-  - Escape and an outside click close them, and focus returns to the anchor.
+  - Escape and an outside click close them, and focus returns to the anchor;
+    a pointer-down inside a `keepOpenWithin` element does not (the crop
+    overlay the Crop popover controls).
 - `Sheet({ open, title, onClose })` covers its positioned parent (the panel)
   without changing the window size.
 - Escape goes through `useEscapeLayer(active, onEscape)`: the top-most layer
   closes first and the event is marked handled, so `useEscapeToHide` only
   hides the window when nothing is open.
-- `Slider` (`<input type="range">`), `SwatchGroup`, `Segmented` (radiogroups),
-  `Toggle` (`role="switch"`), `TextField({ label, value, onChange, onCommit?, error?, readOnly?, selectOnFocus?, code? })`
-  (T9), and the inline SVG icons in `icons.tsx`.
+- `Slider({ …, onCommit?, testId? })` (`<input type="range">`; `onCommit` fires
+  on pointer-up and key-up, so a drag is one undo step), `SwatchGroup`,
+  `Segmented` (radiogroups; an option may be `disabled` with a `reason`
+  tooltip), `Toggle` (`role="switch"`), `TextField({ label, value, onChange,
+  onCommit?, stacked?, description?, error?, readOnly?, selectOnFocus?, code? })`
+  (commits on blur and Enter; T9 added `stacked` (label above a full-width
+  input) through `code`), `NumberField({ label, value, min,
+  max, onChange })` (whole numbers, clamped on blur and Enter), `ColorField`
+  (the system colour picker in a swatch), and the inline SVG icons in
+  `icons.tsx`.
 - The composer holds its window (`windows.hold()`) while any popover is open,
   and closes every popover when it hides (main resets the hold then).
 
 ### Surfaces and their props
 
 - **Composer** (`composer/`):
-  - `ComposerHeader({ account, onConnect?, menuItems?, accountEntries?, onAccountAction? })`: the xBot mark and
+  - `ComposerHeader({ account, onConnect?, menuItems?, aiMenu?, accountEntries?, onAccountAction? })`: the xBot mark and
     name are the app menu's trigger (New draft, Draft history…, Settings…);
+    `aiMenu` (a node, T6's ✦ button) sits just left of the account control;
     `AccountMenu({ account: { kind: 'disconnected' | 'connecting' } | { kind: 'connected', handle, reconnect? } | { kind: 'preview', handle }, entries?, onAction? })`.
     `entries` (T9, `composer/account/accountMenu.ts`) lists the real accounts with
     switch / add / reconnect / disconnect actions;
@@ -470,22 +493,25 @@ Prop changes are additive only; siblings build against these.
   - `publish/PublishStatus({ job, now, draftLabel?, onAction })` (T9): the job row
     above the action row;
   - `ReminderRow({ label, muted?, onClick? })`;
-  - sheets, one open at a time: `OnboardingSheet`, `SettingsSheet`
-    (`settings/`), `HistorySheet`, `PublishSheet({ lede?, onConnect?, … })`
-    (post it yourself) and `publish/ReconcileSheet` (T9: "Did it post?").
+  - sheets, one open at a time: `OnboardingSheet`, `SettingsSheet({ open, onClose, focusSection? })`
+    (`settings/`; `focusSection` scrolls that section into view), `HistorySheet`,
+    `PublishSheet({ lede?, onConnect?, … })` (post it yourself), `SuggestionsSheet`
+    (`composer/ai/`, see "Local AI") and `publish/ReconcileSheet` (T9: "Did it post?").
 
   In normal mode the draft is persisted (`composer/useDraft.ts`, see "Drafts
   and media"); preview mode keeps its fixed sample in local state.
 - **Studio** (`studio/`):
-  - `StudioTopBar`;
+  - `StudioTopBar({ onBack, onAdd, addDisabledReason?, badge?, notice?, actions?, addLabel? })`
+    (`actions`: undo, redo and the More menu);
   - `StudioToolbar({ items, active, onSelect })`;
-  - `ToolPopovers` (Background, Frame, Padding, Shadow, Crop);
+  - `ToolPopovers` (Background, Frame, Padding, Shadow, Crop), `OutputPopover`,
+    `PresetsPopover`, `CropOverlay`;
   - `Timeline({ duration, current, trim, frames, playing, onTogglePlay })`;
-  - `StudioFooter({ dimensions, fit, zoom, onFit?, onZoom? })`.
-- `common/CompositionPreview({ composition, source, zoom? })` draws a
-  composition as DOM (only the media is an image) at any size, using container
-  query units. `common/previewComposition.ts` is a placeholder model; T4
-  replaces it with the shared composition model.
+  - `StudioFooter({ dimensions, fit, zoom, onFit?, onZoom?, dimsAnchor?, onDimensions?, fullscreen?, onFullscreen? })`;
+    `fit` is null while a zoom level is chosen.
+- `common/CompositionPreview({ composition, source, fit?, className?, testId? })`
+  draws a shared `Composition` with the Studio's canvas renderer, contained in
+  or covering its box (the composer's preview-mode thumbnail).
 - **Honest states.** In normal mode the header reads "Connect X" until an
   account is connected, then its real handle. Without an account, Post opens
   the publish-options sheet (Copy text / Export media / Open X, plus Connect X);
@@ -494,13 +520,14 @@ Prop changes are additive only; siblings build against these.
   empty ("Write something or add media first"), over the limit ("Over the
   280-character limit"), when X would refuse the media (`src/shared/xRules.ts`),
   while media is being added, and while the draft's post is on its way or
-  waiting to be checked. The Studio tools are inert with a tooltip,
+  waiting to be checked. The Studio's tools and "Add to post" are
+  disabled with a reason until an image is open (and for a video, until T5),
   and the reminder row says reminders aren't set up. The sample handle and media
   exist only in preview mode, labelled "Preview", where Post says "Posting is
   off in preview" and adding media is off.
 - **Studio hand-off.** "Edit in Studio ↗" calls `drafts.openInStudio({ draftId, attachmentId })`;
-  `studio/StudioTarget.tsx` (`useStudioTarget`, `StudioTargetView`) shows that
-  media read-only, with its size in the footer. T4 replaces it with editing.
+  the studio module answers T3's `draft:studio-target` by opening that
+  attachment's document (see "Studio").
 
 ### Visual verification
 
@@ -520,8 +547,9 @@ T3 (XBOT-6F4GAC). Migration `202610212200_drafts_media.sql`.
   edits; the rest are history), `media` (one row per imported file, unique by
   sha256; `path` / `thumb_path` relative to `userData/media`) and
   `draft_attachments` (a draft's media in `position` order; `UNIQUE(draft_id,
-  position)`, renumbered through negative values). T4 adds
-  `studio_document_id TEXT REFERENCES studio_documents(id)` with `ALTER TABLE`.
+  position)`, renumbered through negative values). T4 added
+  `studio_document_id TEXT REFERENCES studio_documents(id) ON DELETE SET NULL`
+  with `ALTER TABLE` (see "Studio").
 - **Service.** `services/drafts/service.ts` and `services/media/service.ts` are
   electron-free (`createDraftsService`, `createMediaService({ db, paths, log,
   tools, drafts, now })`); Electron decoding lives in `services/media/tools.ts`.
@@ -542,6 +570,9 @@ T3 (XBOT-6F4GAC). Migration `202610212200_drafts_media.sql`.
   sha256 or the file is renamed into `media/<uuid>.<ext>` (thumbnail
   `media/thumbs/<uuid>.png`) inside the transaction that attaches it. A
   rejected file leaves nothing behind and is named in an inline error.
+  `importLoose({ name, path })` (T4) runs the same path without attaching, for
+  the Studio's sources, background images and exports; it throws
+  `MediaRejected` with the sentence the user sees.
 - **Thumbnails.** QuickLook (`nativeImage.createThumbnailFromPath`, 10 s
   timeout) on macOS; otherwise `nativeImage` for PNG / JPEG, ffmpeg for video
   if one is installed, a video tile, or the image itself. T5 refines video.
@@ -555,6 +586,128 @@ T3 (XBOT-6F4GAC). Migration `202610212200_drafts_media.sql`.
   `01-<name>.<ext>` into a folder the user picks, never overwriting (a
   `.partial` file, then a link to the first free name), and reports "Export
   running" through the status registry while it copies.
+
+## Studio
+
+T4 (XBOT-1N58PP): non-destructive screenshot editing. Migration
+`202610220100_studio_documents.sql`. T5 (XBOT-G66JJK) adds video on top.
+
+- **One composition** (`src/shared/composition/`). `model.ts` holds the
+  `Composition` type: source (media id and size), crop (fractions of the
+  source) and its aspect lock, frame, canvas ratio, padding, shadow,
+  background, output format and scale, and an optional `video` block reserved
+  for T5. It also holds the defaults, the curated gradients (T2's CSS ported
+  stop for stop), the shadow presets, the chrome constants and the style
+  helpers. `schema.ts` is its zod schema (main only; compile-time checks keep
+  the two identical). Units are resolution-independent: with W the cropped
+  source width and S the longer side of the framed picture, padding is a
+  fraction of S, and radius, shadow blur and distance are fractions of W.
+- **One geometry.** `layout.ts`'s pure `computeLayout(comp, { scale, maxSide })`
+  returns every rect in output px: canvas (integers), frame, chrome and its
+  parts, content and the source crop. It fits the padded frame uniformly into
+  the canvas, so the content always keeps the crop's aspect. Sizes over 8192 px
+  a side are scaled down uniformly and flagged `capped`. Output size at 1×:
+  `original` is the padded frame at source resolution; 16:9, 1:1 and 4:5 are
+  the smallest canvas of that ratio around it; `custom` is the chosen W×H.
+- **One draw routine** (`renderer/common/composition/draw.ts`):
+  `drawComposition(ctx, comp, layout, assets)` draws the background, the
+  shadow (shape off-canvas, so only the shadow lands), then the frame clipped
+  to its rounded rect (chrome as vectors, the source from its crop rect), and
+  only that. The preview (`CompositionCanvas`) calls it at display size ×
+  `devicePixelRatio` (backing capped at 4096 px); the export
+  (`render.ts`) calls it on an `OffscreenCanvas` at the output size and
+  encodes PNG or JPEG. Images are decoded once per media id
+  (`assets.ts`: `xbot-media:` URLs are fetched, the bundled preview sample goes
+  through an `<img>`). Transparent backgrounds show CSS checks behind the
+  preview canvas, never in it, and export as PNG; GIF sources export their first
+  frame, as PNG. Colour: Chromium converts Display P3 sources to the sRGB
+  canvas on decode, so exports are sRGB.
+- **Tables.** `studio_documents` (one source image and its composition JSON;
+  `revision` refuses stale saves; `composition_backup` keeps unreadable JSON
+  that the defaults replaced; `background_media_id` mirrors an image
+  background), `studio_exports` (a rendered export of a document) and
+  `studio_presets` (a saved style: frame, canvas, padding, shadow,
+  background). Every media reference is a foreign key, so the media cleanup
+  keeps it. Documents no attachment refers to (directly, or by holding one of
+  their exports), not current, and untouched for 30 days are deleted at
+  startup; their media is collected by a later launch's media cleanup.
+- **Opening.** The studio module answers `draft:studio-target`: the
+  attachment's linked document, else the document of the export it holds,
+  else a new document linked at once. Picking or dropping an image in the
+  Studio reopens the newest document for that image (or for the export it
+  is), else creates one. A video opens read-only (`{ view }`) until T5.
+  `studio.currentDocumentId` brings the document back after a restart.
+- **Saving.** The renderer keeps undoable snapshots (100) and saves through
+  one serial queue, 500 ms after the last change and at once on hide, before
+  switching documents and on `studio:flush-requested`; each save names its base
+  revision. A slider drag or a typing run is one undo step.
+- **Add to post** (`studio:add-to-post`, on the drafts queue): main saves the
+  composition, checks the bytes' real format and size against
+  `computeLayout`, imports them (`importLoose`, at most 20 MB), records the
+  export, and on the current draft swaps it into the attachment that opened
+  the document (else the one linked to it), keeping its position, or appends a
+  linked attachment; export rows no draft uses any more are deleted. The
+  Studio then hides and the composer shows; `draft:changed` reloads its
+  attachments and never touches its text. X takes images up to about 5 MB, so
+  T9 checks the size when posting.
+
+## Local AI
+
+T6 (XBOT-4BCGOR). Native Ollama on this Mac, called only from main. The
+verified Ollama API, setup, troubleshooting and known limits are in
+[`OLLAMA.md`](OLLAMA.md).
+
+- **Endpoint.** `ai.endpoint` accepts only `http://127.0.0.1:<port>`,
+  `http://localhost:<port>` or `http://[::1]:<port>` (`src/shared/aiEndpoint.ts`,
+  shared by the setting's schema, main and the settings UI). Requests to
+  `localhost` go to `127.0.0.1`. Every request is re-checked, sent with
+  `redirect:'manual'` (any 3xx is refused) and bounded by a typed timeout; a
+  proxy configured for the process makes xBot refuse instead of sending.
+- **Files.** `services/ai/`: `ollamaClient.ts` (the only transport; Node's
+  `fetch`, never `net.fetch`), `locality.ts`, `catalog.ts`, `schemas.ts`,
+  `partial.ts`, `prompts.ts`, `generate.ts`, `runtime.ts`, `queue.ts`,
+  `voice.ts`, `errors.ts`, `status.ts`, `service.ts` (electron-free) and
+  `index.ts`. Migration `202610220000_ai_voice.sql` adds `voice_profile` (one
+  seeded row) and `voice_examples`.
+- **Locality.** Only models whose verdict is `local` generate: no
+  `remote_host`/`remote_model` on `/api/tags` or `/api/show`, not a
+  cloud-sourced name (Ollama's own `:cloud` / `-cloud` rule), `capabilities`
+  present and including `completion`, and at least 50 MB of weights. Anything
+  else is `remote`, `unverifiable` or `unsuitable`, and is refused before
+  `/api/chat`. A stream chunk carrying remote fields aborts the request.
+- **Generation.** `/api/chat` streams with a JSON-schema `format` derived from
+  zod, `truncate:false`, `think:false` only for thinking models, a per-action
+  `num_predict`, and a byte-budgeted prompt (the user's text sits in
+  delimited DATA blocks that are never instructions). Complete fields are
+  forwarded as `ai:progress` while streaming; the result is validated with
+  zod and repaired at most twice. Only invalid output is retried.
+- **Memory.** `/api/ps` is read once per action. A model xBot loads gets
+  `keep_alive:"5m"` and `num_ctx` 4096 (low-resource mode: `0` and 2048). A
+  model other work had loaded keeps its remaining keep-alive and its
+  `context_length`, and `shift` is never sent, so xBot doesn't unload, shorten
+  or reload it; a load that could evict other models is refused.
+- **Queue.** One generation at a time (`queue.ts`). Interactive requests go
+  ahead of background ones and pre-empt a running background job; every
+  request can be cancelled by `requestId`, queued or running. Cancel aborts
+  the fetch, which stops generation in Ollama.
+- **For T7.** Call `ai().generate({ requestId, action: 'story', sources:
+  [{ name, kind: 'project', text }, …], priority: 'background' })` from main.
+  It resolves `{ status: 'done', options }` or `{ status: 'cancelled' }`
+  (pre-empted by the user), and throws an `IpcError` whose code and text come
+  from `src/shared/aiCopy.ts`: `ollama_unavailable`, `model_needed`,
+  `model_unverifiable`, `remote_refused`, `endpoint_*`, `ai_timeout`,
+  `ai_stopped`, `ai_input_too_long`, `ai_would_evict`, `ai_malformed`,
+  `ai_failed`, `ai_busy`. Every option carries `flags` (numbers absent from
+  the sources, generic or banned phrases, stripped hashtags).
+- **Renderer.** `composer/ai/`: the ✦ `AiMenu` in the header, the
+  `AiStatusRow` above the action row ("Running locally · Cancel", "Suggestions
+  ready · View", "Undo AI change", errors), and `SuggestionsSheet`. An applied
+  suggestion goes through the editor (`execCommand('insertText')`), so it
+  autosaves and Cmd+Z reverts it; "Undo AI change" shows until the user edits.
+  Onboarding steps `ollama` (10) and `model` (20); settings sections `ai`
+  (10, "Local AI") and `voice` (20). The `ai` status chip reads "Local AI
+  ready", "Ollama not running" or "Model needed". Preview mode never probes
+  and has no AI.
 
 ## X publishing
 
@@ -592,9 +745,11 @@ behaviour, setup and troubleshooting are in [`X.md`](X.md).
   turns `publishing` into `needs_reconciliation` and earlier interrupted states
   into `failed` (`x_interrupted`); nothing is resumed on its own.
 - **Seams for siblings.**
-  - T4: `createPublisher({ resolvePostMedia })` decides which file is uploaded
-    for a frozen attachment; today it is the T3 media file. An attachment with
-    a Studio edit must resolve to its rendered output.
+  - T4/T5: `createPublisher({ resolvePostMedia })` decides which file is
+    uploaded for a frozen attachment: the attachment's own media file. T4's
+    "Add to post" swaps the rendered export into the attachment, so an edit is
+    what gets posted; an edited attachment that has not been added to the post
+    posts its current media.
   - T10: `x_accounts.token_blob` only decrypts on the Mac that wrote it. A backup
     should leave it out; a restored account reads as "Reconnect".
 - **Settings.** `x.clientId` (the user's OAuth 2.0 Client ID; '' until set) and
@@ -642,8 +797,10 @@ adding their own files; nobody edits a shared list.
   base-uri 'none'; form-action 'none'
   ```
 
-  Dev adds only what Vite needs: inline scripts and styles, and the localhost
-  websocket. No `eval`, and no remote origins. If you need a new source, change
+  Dev adds only what Vite needs: inline scripts and styles, and the dev
+  server's own HMR websocket (`ws://localhost:<its port>`, read from the
+  running server). No other localhost port is reachable, so the renderer can
+  never call Ollama directly, and no `eval` or remote origins. If you need a new source, change
   the plugin and say why in the PR.
 - **Navigation:**
   - `will-navigate` is always blocked;
@@ -703,6 +860,8 @@ adding their own files; nobody edits a shared list.
   `core-js@2` dependency's postinstall only prints a banner, so it is listed
   as `core-js: false` under `allowBuilds`. Renderer code never imports values
   from contract files (they pull in zod); types only.
+- `pixelmatch` and `pngjs` are devDependencies for the Studio's export
+  agreement e2e test only.
 - **Native modules** must ship N-API prebuilds, or be rebuilt for Electron. Add a
   `files` filter in `electron-builder.yml` so only the target platform's binary
   ships.
@@ -729,6 +888,11 @@ adding their own files; nobody edits a shared list.
   `XBOT_USER_DATA_DIR`. In unpackaged runs only, `XBOT_E2E=1` exposes
   `globalThis.__xbotTest` (`toggleComposer`, `openStudio`), so tests can drive
   the real code paths.
+- The Studio specs (`tests/e2e/studio-*.spec.ts`, helpers in
+  `studio-harness.ts`) also pass `--force-device-scale-factor=1`, so a 100 %
+  preview canvas has the export's pixel size, wait for the preview canvas's
+  `data-drawn-key` to equal its `data-want-key`, and read `xbot.db` read-only
+  from the test process.
 - **On Linux CI:**
   - run e2e under `xvfb-run -a`;
   - Ubuntu's AppArmor blocks Chromium's sandbox for an unpackaged Electron, so

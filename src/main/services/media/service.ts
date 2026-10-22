@@ -4,13 +4,13 @@ import { copyFile, link, open, rename, stat, unlink } from 'node:fs/promises';
 import { basename, extname, isAbsolute, join } from 'node:path';
 import { Transform } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
-import { MAX_IMPORT_FILES, type ImportRejection, type ImportResult } from '../../../shared/contracts/media';
+import { MAX_IMPORT_FILES, type ImportRejection, type ImportResult, type MediaItem } from '../../../shared/contracts/media';
 import type { Db } from '../../db';
 import type { Logger } from '../../log';
 import type { AppPaths } from '../../paths';
 import { statusChanged } from '../../status';
 import type { DraftsService } from '../drafts/service';
-import type { MediaRow } from './rows';
+import { toMediaItem, type MediaRow } from './rows';
 import { probe, ProbeError, sniff, SNIFF_BYTES, type Probe } from './sniff';
 
 // Media import, export and cleanup. No `electron` import: decoding and
@@ -49,6 +49,13 @@ export interface MediaService {
   /** Creates media/thumbs/ and collects orphaned media. Runs at startup. */
   init(): Promise<void>;
   importFiles(draftId: string, files: readonly { name: string; path: string }[]): Promise<ImportResult>;
+  /**
+   * Imports one file without attaching it to a draft (the Studio's sources,
+   * background images and exports). Throws MediaRejected with the sentence
+   * the user sees. The caller must reference the row with a foreign key soon:
+   * unreferenced media is collected after GC_MIN_AGE_MS.
+   */
+  importLoose(file: { name: string; path: string }): Promise<MediaItem>;
   /** Copies the draft's media, in order, into `folder`. */
   exportDraft(draftId: string, folder: string): Promise<{ count: number; folder: string }>;
   /** True while an export copies files (the "Export running" status). */
@@ -58,7 +65,7 @@ export interface MediaService {
 }
 
 /** A file that will not be imported, with the sentence the user sees. */
-class Rejected extends Error {}
+export class MediaRejected extends Error {}
 
 const FILE_NAME = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.(png|jpg|gif|webp|mp4|mov)$/;
 const THUMB_NAME = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.png$/;
@@ -90,6 +97,7 @@ export function createMediaService({ db, paths, log, tools, drafts, now = Date.n
 
   const q = {
     bySha: db.prepare<[string], MediaRow>('SELECT * FROM media WHERE sha256 = ?'),
+    byId: db.prepare<[string], MediaRow>('SELECT * FROM media WHERE id = ?'),
     insert: db.prepare(
       `INSERT INTO media (id, kind, path, mime, width, height, duration_ms, bytes, sha256, thumb_path, original_name, created_at)
        VALUES (@id, @kind, @path, @mime, @width, @height, @duration_ms, @bytes, @sha256, @thumb_path, @original_name, @created_at)`,
@@ -114,7 +122,7 @@ export function createMediaService({ db, paths, log, tools, drafts, now = Date.n
     const meter = new Transform({
       transform(chunk: Buffer, _encoding, done) {
         bytes += chunk.length;
-        if (bytes > cap) done(new Rejected(`${name} is larger than ${cap === IMAGE_MAX_BYTES ? '20 MB' : '1 GB'}, the limit for ${kind}s.`));
+        if (bytes > cap) done(new MediaRejected(`${name} is larger than ${cap === IMAGE_MAX_BYTES ? '20 MB' : '1 GB'}, the limit for ${kind}s.`));
         else {
           hash.update(chunk);
           done(null, chunk);
@@ -125,30 +133,31 @@ export function createMediaService({ db, paths, log, tools, drafts, now = Date.n
       await pipeline(createReadStream(src), meter, createWriteStream(dest, { flags: 'wx' }), { signal: aborter.signal });
     } catch (err) {
       removeQuietly(dest);
-      if (err instanceof Rejected) throw err;
+      if (err instanceof MediaRejected) throw err;
       const code = (err as NodeJS.ErrnoException).code;
-      if (code === 'ENOSPC') throw new Rejected(`Not enough disk space to add ${name}.`);
-      if (closed) throw new Rejected(`${name} wasn’t added because xBot is quitting.`);
+      if (code === 'ENOSPC') throw new MediaRejected(`Not enough disk space to add ${name}.`);
+      if (closed) throw new MediaRejected(`${name} wasn’t added because xBot is quitting.`);
       log.warn('media: copy failed', name, err);
-      throw new Rejected(`${name} couldn’t be copied.`);
+      throw new MediaRejected(`${name} couldn’t be copied.`);
     }
     return { sha256: hash.digest('hex'), bytes };
   }
 
-  async function importOne(draftId: string, name: string, src: string): Promise<void> {
-    if (!src) throw new Rejected(`Couldn’t read ${name}. Drag it from Finder instead.`);
-    if (!isAbsolute(src)) throw new Rejected(`${name} couldn’t be read.`);
+  /** Imports `src` and returns its media id; attaches it to `attachTo` inside the same transaction. */
+  async function importOne(name: string, src: string, attachTo: string | null): Promise<string> {
+    if (!src) throw new MediaRejected(`Couldn’t read ${name}. Drag it from Finder instead.`);
+    if (!isAbsolute(src)) throw new MediaRejected(`${name} couldn’t be read.`);
 
     let size: number;
     try {
       const info = await stat(src);
-      if (!info.isFile()) throw new Rejected(`${name} isn’t a file.`);
+      if (!info.isFile()) throw new MediaRejected(`${name} isn’t a file.`);
       size = info.size;
     } catch (err) {
-      if (err instanceof Rejected) throw err;
-      throw new Rejected(`${name} couldn’t be found.`);
+      if (err instanceof MediaRejected) throw err;
+      throw new MediaRejected(`${name} couldn’t be found.`);
     }
-    if (size === 0) throw new Rejected(`${name} is empty.`);
+    if (size === 0) throw new MediaRejected(`${name} is empty.`);
 
     const head = Buffer.alloc(SNIFF_BYTES);
     const handle = await open(src, 'r');
@@ -158,16 +167,16 @@ export function createMediaService({ db, paths, log, tools, drafts, now = Date.n
       await handle.close();
     }
     const type = sniff(head);
-    if (!type) throw new Rejected(`${name} isn’t a PNG, JPEG, WebP, GIF, MP4 or MOV file.`);
+    if (!type) throw new MediaRejected(`${name} isn’t a PNG, JPEG, WebP, GIF, MP4 or MOV file.`);
     const cap = type.kind === 'image' ? IMAGE_MAX_BYTES : VIDEO_MAX_BYTES;
-    if (size > cap) throw new Rejected(`${name} is larger than ${type.kind === 'image' ? '20 MB' : '1 GB'}, the limit for ${type.kind}s.`);
+    if (size > cap) throw new MediaRejected(`${name} is larger than ${type.kind === 'image' ? '20 MB' : '1 GB'}, the limit for ${type.kind}s.`);
 
     let info: Probe;
     try {
       info = await probe(src, type, size);
     } catch (err) {
-      if (err instanceof ProbeError) throw new Rejected(probeMessage(name, err, type.kind));
-      throw new Rejected(`${name} couldn’t be read.`);
+      if (err instanceof ProbeError) throw new MediaRejected(probeMessage(name, err, type.kind));
+      throw new MediaRejected(`${name} couldn’t be read.`);
     }
 
     const id = randomUUID();
@@ -179,16 +188,16 @@ export function createMediaService({ db, paths, log, tools, drafts, now = Date.n
       try {
         hasThumb = await tools.makeThumbnail(tmpFile, info, tmpThumb);
       } catch (err) {
-        if (err instanceof ProbeError) throw new Rejected(probeMessage(name, err, type.kind));
+        if (err instanceof ProbeError) throw new MediaRejected(probeMessage(name, err, type.kind));
         log.warn('media: thumbnail failed', name, err);
         hasThumb = false;
       }
-      if (closed) throw new Rejected(`${name} wasn’t added because xBot is quitting.`);
+      if (closed) throw new MediaRejected(`${name} wasn’t added because xBot is quitting.`);
 
       const moved: string[] = [];
       try {
-        db.transaction(() => {
-          drafts.get(draftId);
+        return db.transaction(() => {
+          if (attachTo) drafts.get(attachTo);
           const existing = q.bySha.get(sha256);
           let mediaId: string;
           if (existing) {
@@ -224,7 +233,8 @@ export function createMediaService({ db, paths, log, tools, drafts, now = Date.n
             });
             mediaId = id;
           }
-          drafts.attach(draftId, [mediaId]);
+          if (attachTo) drafts.attach(attachTo, [mediaId]);
+          return mediaId;
         })();
       } catch (err) {
         for (const file of moved) removeQuietly(file);
@@ -327,13 +337,19 @@ export function createMediaService({ db, paths, log, tools, drafts, now = Date.n
           continue;
         }
         try {
-          await importOne(draftId, file.name, file.path);
+          await importOne(file.name, file.path, draftId);
         } catch (err) {
-          if (err instanceof Rejected) rejected.push({ name: file.name, message: err.message });
+          if (err instanceof MediaRejected) rejected.push({ name: file.name, message: err.message });
           else throw err;
         }
       }
       return { draft: drafts.get(draftId), rejected };
+    },
+
+    async importLoose(file) {
+      if (closed) throw new MediaRejected(`${file.name} wasn’t added because xBot is quitting.`);
+      const mediaId = await importOne(file.name, file.path, null);
+      return toMediaItem(q.byId.get(mediaId)!);
     },
 
     async exportDraft(draftId, folder) {

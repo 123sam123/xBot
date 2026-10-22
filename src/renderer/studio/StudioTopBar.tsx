@@ -8,6 +8,8 @@ export function StudioTopBar({
   addDisabledReason,
   badge,
   notice,
+  actions,
+  addLabel = 'Add to post',
 }: {
   onBack(): void;
   onAdd(): void;
@@ -16,10 +18,14 @@ export function StudioTopBar({
   /** A label beside the title, e.g. "Preview". */
   badge?: string;
   notice?: ReactNode;
+  /** Controls before "Add to post" (undo, redo, more). */
+  actions?: ReactNode;
+  /** E.g. "Rendering…" while the export runs. */
+  addLabel?: string;
 }) {
   const add = (
     <FrostedButton className="studio-add" data-testid="studio-add" disabled={addDisabledReason !== undefined} onClick={onAdd}>
-      Add to post
+      {addLabel}
     </FrostedButton>
   );
   return (
@@ -33,6 +39,7 @@ export function StudioTopBar({
       </h1>
       <span className="studio-bar-end">
         {notice}
+        {actions}
         {addDisabledReason ? <Tooltip label={addDisabledReason}>{add}</Tooltip> : add}
       </span>
     </header>

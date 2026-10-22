@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { CLIENT_ID_PATTERN } from '../../../shared/xRules';
 import { setSetting, useSettings } from '../../common/useSettings';
-import { ArrowUpRightIcon, FrostedButton, GhostButton, StatusChip, TextField } from '../../design-system';
+import { ArrowUpRightIcon, FrostedButton, GhostButton, NumberField, StatusChip, TextField } from '../../design-system';
 import { activeAccount } from './accountMenu';
 import { connectX, useXState } from './useXState';
 
@@ -19,9 +19,7 @@ export function XSetup({ variant }: { variant: 'settings' | 'onboarding' }) {
   const savedClientId = values?.['x.clientId'] ?? '';
   const savedPort = values?.['x.callbackPort'];
   const [clientId, setClientId] = useState<string | null>(null);
-  const [port, setPort] = useState<string | null>(null);
   const [clientIdError, setClientIdError] = useState<string | null>(null);
-  const [portError, setPortError] = useState<string | null>(null);
   const [outcome, setOutcome] = useState<Outcome>(null);
 
   const commitClientId = (raw: string) => {
@@ -34,18 +32,6 @@ export function XSetup({ variant }: { variant: 'settings' | 'onboarding' }) {
     setClientIdError(null);
     setClientId(null);
     setSetting('x.clientId', value);
-  };
-
-  const commitPort = (raw: string) => {
-    const value = Number(raw.trim());
-    if (value === savedPort) return setPortError(null);
-    if (!Number.isInteger(value) || value < 1024 || value > 65535) {
-      setPortError('Use a port from 1024 to 65535.');
-      return;
-    }
-    setPortError(null);
-    setPort(null);
-    setSetting('x.callbackPort', value);
   };
 
   const connect = async (reconnectAccountId?: string) => {
@@ -83,6 +69,7 @@ export function XSetup({ variant }: { variant: 'settings' | 'onboarding' }) {
             label="Register this callback URL"
             value={state?.callbackUrl ?? ''}
             onChange={() => {}}
+            stacked
             readOnly
             selectOnFocus
             code
@@ -93,6 +80,7 @@ export function XSetup({ variant }: { variant: 'settings' | 'onboarding' }) {
         <li>
           <TextField
             label="Paste the app’s OAuth 2.0 Client ID"
+            stacked
             value={clientId ?? savedClientId}
             onChange={setClientId}
             onCommit={commitClientId}
@@ -105,17 +93,11 @@ export function XSetup({ variant }: { variant: 'settings' | 'onboarding' }) {
         </li>
       </ol>
 
-      {variant === 'settings' && (
-        <TextField
-          label="Callback port"
-          value={port ?? String(savedPort ?? '')}
-          onChange={setPort}
-          onCommit={commitPort}
-          inputMode="numeric"
-          error={portError}
-          description="Change it only if another app uses this port, and register the new URL too."
-          testId="x-callback-port"
-        />
+      {variant === 'settings' && savedPort !== undefined && (
+        <div className="x-setup-port">
+          <NumberField label="Callback port" value={savedPort} min={1024} max={65535} onChange={(port) => setSetting('x.callbackPort', port)} testId="x-callback-port" />
+          <p className="x-setup-note">Change it only if another app uses this port, and register the new callback URL too.</p>
+        </div>
       )}
 
       {variant === 'settings' && state && state.accounts.length > 0 && (

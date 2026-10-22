@@ -34,7 +34,7 @@ export function useXState(enabled: boolean): { state: XState | null; reload(): v
 /** What a connect attempt says to the user; null for a quiet end (canceled, timed out). */
 export async function connectX(reconnectAccountId?: string): Promise<{ tone: 'neutral' | 'warning'; text: string; code?: string } | null> {
   const result = await window.xbot.x.connect(reconnectAccountId);
-  if (result.ok) return { tone: result.data.notice ? 'warning' : 'neutral', text: result.data.notice ?? `@${result.data.account.handle} connected` };
+  if (result.ok) return { tone: result.data.notice ? 'warning' : 'neutral', text: result.data.notice ?? 'Connected' };
   if (result.error.code === 'x_connect_canceled') return null;
   return { tone: 'warning', text: result.error.message, code: result.error.code };
 }

@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
+import { aiCopy } from '../../shared/aiCopy';
+import type { AiAction, AiOption } from '../../shared/contracts/ai';
 import type { Draft } from '../../shared/contracts/drafts';
 import type { IpcResult } from '../../shared/contracts/ipc';
 import type { ImportResult, MediaItem } from '../../shared/contracts/media';
@@ -6,19 +8,32 @@ import type { PublishJob } from '../../shared/contracts/x';
 import { postLength } from '../../shared/postLength';
 import { isActiveStatus, mediaViolation } from '../../shared/xRules';
 import { CompositionPreview } from '../common/CompositionPreview';
-import { DEFAULT_COMPOSITION, type PreviewComposition } from '../common/previewComposition';
 import { useAppInfo, useReadyMarker } from '../common/useAppInfo';
 import { useEscapeToHide } from '../common/useEscapeToHide';
 import { setSetting, useSettings } from '../common/useSettings';
 import { Divider, GlassPanel, popovers, StatusChip, useAnyPopoverOpen, useAppearance, type MenuItem } from '../design-system';
 import { OnboardingSheet } from '../onboarding/OnboardingSheet';
 import { unseenSteps } from '../onboarding/registry';
-import { PREVIEW_DRAFT_TEXT, PREVIEW_HANDLE, PREVIEW_REMINDER_LABEL, PREVIEW_SOURCE } from '../preview/fixtures';
+import { PREVIEW_DRAFT_TEXT, PREVIEW_HANDLE, PREVIEW_REMINDER_LABEL, PREVIEW_SOURCE, PREVIEW_THUMBNAIL_COMPOSITION } from '../preview/fixtures';
 import { SettingsSheet } from '../settings/SettingsSheet';
 import { accountMenuEntries, accountTrigger, activeAccount, type AccountAction } from './account/accountMenu';
 import { connectX, useXState } from './account/useXState';
 import type { AccountState } from './AccountMenu';
 import { ActionRow } from './ActionRow';
+import {
+  AiMenu,
+  AiStatusRow,
+  canUndo,
+  insertThroughEditor,
+  planApply,
+  SuggestionsSheet,
+  useAiRun,
+  useAiState,
+  type AiStatus,
+  type MenuContext,
+  type SelectionRef,
+  type UndoEntry,
+} from './ai';
 import { AttachmentList, type ComposerAttachment } from './AttachmentList';
 import { ComposerHeader } from './ComposerHeader';
 import { HistorySheet } from './HistorySheet';
@@ -34,22 +49,21 @@ import { PublishSheet } from './PublishSheet';
 import { ReminderRow } from './ReminderRow';
 import { UploadZone } from './UploadZone';
 import { useDraft } from './useDraft';
-import { useFileDrop } from './useFileDrop';
+import { useFileDrop } from '../common/useFileDrop';
 
 // The Write Post composer. In normal mode the draft and its media are
 // persisted (useDraft, window.xbot.drafts / .media); preview mode keeps T2's
 // fixed sample in local state. T8 wires the reminder row. T9: the header's X
 // account menu, and Post ↑ — a publish job with a connected account
-// (window.xbot.x), the post-it-yourself sheet without one.
+// (window.xbot.x), the post-it-yourself sheet without one. T6 adds local AI:
+// the ✦ menu, the suggestions sheet and the AI status row; an AI change goes
+// through the editor, so it autosaves and stays undoable.
 
 const NOTICE_MS = 3200;
 /** The drafts contract's DRAFT_TEXT_MAX (not imported here: contract files bundle zod). */
 const TEXT_MAX = 25_000;
 
-type SheetId = 'onboarding' | 'history' | 'settings' | 'publish' | 'reconcile';
-
-/** The attachment thumbnail is the same composition, with more room around the frame. */
-const THUMBNAIL_COMPOSITION: PreviewComposition = { ...DEFAULT_COMPOSITION, padding: 0.13 };
+type SheetId = 'onboarding' | 'history' | 'settings' | 'publish' | 'suggestions' | 'reconcile';
 
 /** Keeps the window exactly as tall as its content, so no empty region shows below it. */
 function useFitWindowToContent(ref: React.RefObject<HTMLElement | null>): void {
@@ -169,7 +183,9 @@ function Composer({ preview, emojiPanel, seenSteps }: { preview: boolean; emojiP
           {
             id: 'preview-sample',
             label: 'sample screenshot',
-            thumbnail: <CompositionPreview composition={THUMBNAIL_COMPOSITION} source={PREVIEW_SOURCE} className="attachment-composition" />,
+            thumbnail: (
+              <CompositionPreview composition={PREVIEW_THUMBNAIL_COMPOSITION} source={PREVIEW_SOURCE} fit="cover" className="attachment-composition" />
+            ),
           },
         ]
       : [],
@@ -177,6 +193,15 @@ function Composer({ preview, emojiPanel, seenSteps }: { preview: boolean; emojiP
   const [notice, setNotice] = useState<string | null>(null);
   const [errors, setErrors] = useState<string[]>([]);
   const [importing, setImporting] = useState(false);
+
+  const { state: aiState, refresh: refreshAi } = useAiState(!preview);
+  const aiRun = useAiRun();
+  const [aiSheetMode, setAiSheetMode] = useState<'story' | 'rewrite'>('story');
+  const [aiSelection, setAiSelection] = useState<SelectionRef | null>(null);
+  const [aiUndo, setAiUndo] = useState<UndoEntry | null>(null);
+  /** The `aiRun.finished` count the user has seen, so "Suggestions ready" shows only for new results. */
+  const [aiSeen, setAiSeen] = useState(0);
+  const [settingsFocus, setSettingsFocus] = useState<string | undefined>(undefined);
 
   // X (T9): accounts, publish jobs, and the sheets they open.
   const { state: xstate } = useXState(!preview);
@@ -300,6 +325,87 @@ function Composer({ preview, emojiPanel, seenSteps }: { preview: boolean; emojiP
     const { count, folder } = result.data;
     return { tone: 'neutral' as const, text: `Exported ${count === 1 ? '1 file' : `${count} files`} to ${folderName(folder)}` };
   };
+  // ---------- Local AI ----------
+  const aiRunning = aiRun.running || aiState?.running?.priority === 'interactive';
+  const aiContext: MenuContext = {
+    preview,
+    draftLoaded: preview || draft !== null,
+    hasText: text.trim() !== '',
+    hasSelection: aiSelection !== null,
+    running: aiRunning,
+  };
+  const captureSelection = () => {
+    const el = editor.current;
+    const start = el?.selectionStart ?? 0;
+    const end = el?.selectionEnd ?? 0;
+    setAiSelection(el && start < end ? { start, end, text: el.value.slice(start, end) } : null);
+    void refreshAi('throttled');
+  };
+  const openAiSettings = () => {
+    setSettingsFocus('ai');
+    setSheet('settings');
+  };
+  const runAi = (action: AiAction) => {
+    if (action === 'story') {
+      setAiSheetMode('story');
+      setAiSeen(aiRun.finished);
+      setSheet('suggestions');
+      return;
+    }
+    // Rewrites run with only the status row showing, so the text stays editable.
+    setAiSheetMode('rewrite');
+    void aiRun.start({ action, text: model.text, selection: action === 'selection' ? aiSelection : null });
+  };
+  const closeSuggestions = () => {
+    setAiSeen(aiRun.finished);
+    setSheet(null);
+    editor.current?.focus();
+  };
+  const applyAi = (option: AiOption, target: 'whole' | 'selection'): string | null => {
+    if (!draft) return aiCopy.menu.loading;
+    const before = model.text;
+    const plan = planApply(before, option.text, target, aiRun.selection);
+    if ('error' in plan) return plan.error;
+    const el = editor.current;
+    let after: string;
+    if (el && insertThroughEditor(el, plan.start, plan.end, plan.insert)) {
+      after = el.value;
+    } else {
+      after = before.slice(0, plan.start) + plan.insert + before.slice(plan.end);
+      model.setText(after);
+    }
+    setAiUndo({ draftId: draft.id, before, after });
+    setAiSeen(aiRun.finished);
+    setSheet(null);
+    return null;
+  };
+  const undoAi = () => {
+    if (!canUndo(aiUndo, draft?.id ?? null, model.text)) return;
+    const el = editor.current;
+    if (!(el && insertThroughEditor(el, 0, aiUndo.after.length, aiUndo.before))) model.setText(aiUndo.before);
+    setAiUndo(null);
+  };
+  const cancelAi = () => {
+    if (aiRun.running) aiRun.cancel();
+    else if (aiState?.running) void window.xbot.ai.cancel(aiState.running.requestId);
+  };
+  const viewAi = () => {
+    setAiSeen(aiRun.finished);
+    setSheet('suggestions');
+  };
+  const suggestionsOpen = sheet === 'suggestions';
+  const aiStatus: AiStatus | null = preview
+    ? null
+    : aiRunning
+      ? { kind: 'running', model: aiState?.selected ?? null, onCancel: cancelAi }
+      : aiRun.finished > aiSeen && aiRun.options.length > 0 && !suggestionsOpen
+        ? { kind: 'ready', label: aiRun.action === 'story' ? 'Suggestions ready' : 'Suggestion ready', onView: viewAi }
+        : canUndo(aiUndo, draft?.id ?? null, model.text)
+          ? { kind: 'undo', onUndo: undoAi }
+          : aiRun.error && !suggestionsOpen
+            ? { kind: 'error', message: aiRun.error.message, onRetry: aiRun.retry, onSetup: openAiSettings }
+            : null;
+
   const markSeen = (ids: readonly string[]) => {
     seen.current = [...new Set([...seen.current, ...ids])].slice(-200);
     setSetting('ui.onboardingSeen', [...seen.current]);
@@ -321,14 +427,18 @@ function Composer({ preview, emojiPanel, seenSteps }: { preview: boolean; emojiP
   const shownJob = pickJob(jobs, draft?.id ?? null, now);
   const draftJob = shownJob && draft && shownJob.draftId === draft.id ? shownJob : null;
 
+  const openXSettings = () => {
+    setSettingsFocus('x');
+    setSheet('settings');
+  };
   const connect = async (reconnectAccountId?: string) => {
     if (xstate && !xstate.clientIdSet) {
-      setSheet('settings');
+      openXSettings();
       return;
     }
     const outcome = await connectX(reconnectAccountId);
     if (!outcome) return;
-    if (outcome.code === 'x_client_id_missing') setSheet('settings');
+    if (outcome.code === 'x_client_id_missing') openXSettings();
     if (outcome.tone === 'warning') setErrors([outcome.text]);
     else setNotice(outcome.text);
   };
@@ -341,7 +451,7 @@ function Composer({ preview, emojiPanel, seenSteps }: { preview: boolean; emojiP
     else if (action.kind === 'cancel-connect') void window.xbot.x.cancelConnect();
     else if (action.kind === 'switch') void window.xbot.x.switchAccount(action.accountId).then(reportError);
     else if (action.kind === 'disconnect') void window.xbot.x.disconnect(action.accountId).then(reportError);
-    else setSheet('settings');
+    else openXSettings();
   };
   const onJobAction = (action: JobAction, job: PublishJob) => {
     if (action === 'cancel') void window.xbot.x.cancelJob(job.id).then(reportError);
@@ -419,7 +529,14 @@ function Composer({ preview, emojiPanel, seenSteps }: { preview: boolean; emojiP
   const menuItems: MenuItem[] = [
     { id: 'new-draft', label: 'New draft', detail: unavailableInPreview, disabled: preview || !draft, onSelect: () => void startNew() },
     { id: 'history', label: 'Draft history…', detail: unavailableInPreview, disabled: preview, onSelect: () => setSheet('history') },
-    { id: 'settings', label: 'Settings…', onSelect: () => setSheet('settings') },
+    {
+      id: 'settings',
+      label: 'Settings…',
+      onSelect: () => {
+        setSettingsFocus(undefined);
+        setSheet('settings');
+      },
+    },
   ];
 
   return (
@@ -427,6 +544,7 @@ function Composer({ preview, emojiPanel, seenSteps }: { preview: boolean; emojiP
       <ComposerHeader
         account={account}
         menuItems={menuItems}
+        aiMenu={<AiMenu state={aiState} context={aiContext} onOpen={captureSelection} onAction={runAi} onSettings={openAiSettings} />}
         accountEntries={preview ? undefined : accountMenuEntries(xstate)}
         onAccountAction={onAccountAction}
       />
@@ -460,6 +578,7 @@ function Composer({ preview, emojiPanel, seenSteps }: { preview: boolean; emojiP
           ))}
         </div>
       )}
+      <AiStatusRow status={aiStatus} />
       <PublishStatus
         job={shownJob}
         now={now}
@@ -487,7 +606,19 @@ function Composer({ preview, emojiPanel, seenSteps }: { preview: boolean; emojiP
           editor.current?.focus();
         }}
       />
-      <SettingsSheet open={sheet === 'settings'} onClose={() => setSheet(null)} />
+      <SettingsSheet open={sheet === 'settings'} onClose={() => setSheet(null)} focusSection={settingsFocus} />
+      <SuggestionsSheet
+        open={suggestionsOpen}
+        onClose={closeSuggestions}
+        mode={aiSheetMode}
+        run={aiRun}
+        state={aiState}
+        context={aiContext}
+        draftText={text}
+        onSuggest={() => void aiRun.start({ action: 'story', text: model.text, note: aiRun.note })}
+        onApply={applyAi}
+        onSetup={openAiSettings}
+      />
       <HistorySheet open={sheet === 'history'} onClose={() => setSheet(null)} onRestore={(id) => void restore(id)} />
       <PublishSheet
         open={sheet === 'publish'}
