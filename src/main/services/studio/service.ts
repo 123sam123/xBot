@@ -86,7 +86,7 @@ export interface StudioService {
   /** The newest document for this media (or for the document it was exported from), else a new one. */
   openForMedia(item: MediaItem): Promise<Opened>;
   /** A new document for a screen recording whose video was imported as `item`. */
-  createForRecording(item: MediaItem, recordingId: string, has: { camera: boolean; cursor: CursorTrack | null }): Promise<StudioDocument>;
+  createForRecording(item: MediaItem, recordingId: string, has: { camera: boolean; cursor: CursorTrack | null; audio: boolean }): Promise<StudioDocument>;
   save(documentId: string, baseRevision: number, composition: Composition): SaveResult;
   listPresets(): StudioPreset[];
   savePreset(name: string, style: Style): StudioPreset;
@@ -135,6 +135,8 @@ interface AttachmentRow {
 interface RecordingMeta {
   camera: { file: string; offsetMs: number } | null;
   cursor: { file: string } | null;
+  /** Each audio track's file (older recordings wrote booleans here). */
+  audio?: { system: unknown; microphone: unknown };
 }
 
 interface PresetRow {
@@ -287,6 +289,10 @@ export function createStudioService({ db, paths, log, media, drafts, events, vid
       id: found.id,
       camera: meta.camera ? { url: base + meta.camera.file, offsetMs: meta.camera.offsetMs } : null,
       cursor: meta.cursor ? { url: base + meta.cursor.file, base } : null,
+      audio: {
+        system: typeof meta.audio?.system === 'string' ? base + meta.audio.system : null,
+        microphone: typeof meta.audio?.microphone === 'string' ? base + meta.audio.microphone : null,
+      },
     };
   }
 
@@ -455,7 +461,7 @@ export function createStudioService({ db, paths, log, media, drafts, events, vid
       const info = await probeSource(source);
       if (!info) throw new IpcError('ffmpeg_missing', FFMPEG_NEEDED);
       const zooms = has.cursor ? autoZooms(has.cursor, info.durationMs, randomUUID) : [];
-      const composition = recordingComposition({ mediaId: source.id, width: info.width, height: info.height }, info.durationMs, { camera: has.camera, cursor: has.cursor !== null }, zooms);
+      const composition = recordingComposition({ mediaId: source.id, width: info.width, height: info.height }, info.durationMs, { camera: has.camera, cursor: has.cursor !== null, audio: has.audio }, zooms);
       return toDocument(create(source, info, info, composition, recordingId));
     },
 

@@ -1,9 +1,10 @@
 import { useState, type ReactNode } from 'react';
-import { CameraIcon, CursorIcon, ImageIcon, SpeakerIcon, Toggle, Tooltip } from '../design-system';
+import { CameraIcon, CursorIcon, ImageIcon, SpeakerIcon, Tooltip } from '../design-system';
+import { AudioTab } from './sidebar/AudioTab';
 import { BackgroundTab } from './sidebar/BackgroundTab';
 import { CameraTab } from './sidebar/CameraTab';
 import { CursorTab } from './sidebar/CursorTab';
-import { Section, TabNote, type TabProps } from './sidebar/parts';
+import { TabNote, type TabProps } from './sidebar/parts';
 
 export type SidebarTab = 'background' | 'camera' | 'audio' | 'cursor';
 
@@ -18,6 +19,7 @@ const TABS: { id: SidebarTab; label: string; icon: ReactNode }[] = [
 export function Sidebar({
   disabledReason,
   hasAudio,
+  tracks,
   onPickImage,
   onDesktop,
   pickDisabledReason,
@@ -28,6 +30,8 @@ export function Sidebar({
   disabledReason?: string;
   /** The video has a sound track. */
   hasAudio: boolean;
+  /** A recording's separate audio tracks. */
+  tracks: { system: boolean; microphone: boolean } | null;
   onPickImage(): void;
   pickDisabledReason?: string;
 }) {
@@ -61,15 +65,7 @@ export function Sidebar({
           <BackgroundTab composition={composition} onChange={onChange} onCommit={onCommit} onPickImage={onPickImage} onDesktop={onDesktop} pickDisabledReason={pickDisabledReason} />
         ) : active === 'audio' ? (
           composition.video ? (
-            <Section title="Audio">
-              <Toggle
-                label="Mute audio"
-                description={hasAudio ? undefined : 'This video has no sound'}
-                checked={composition.video.muted || !hasAudio}
-                disabled={!hasAudio}
-                onChange={(muted) => onChange({ ...composition, video: { ...composition.video!, muted } })}
-              />
-            </Section>
+            <AudioTab composition={composition} onChange={onChange} onCommit={onCommit} hasAudio={hasAudio} tracks={tracks} />
           ) : (
             <TabNote icon={<SpeakerIcon size={28} />} title="No audio">
               Screenshots have no sound. Open a video or a recording to set its audio.

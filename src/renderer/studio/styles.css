@@ -1600,3 +1600,9 @@ body,
   color: var(--text-secondary);
   font-size: 13px;
 }
+
+.sidebar-value {
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}

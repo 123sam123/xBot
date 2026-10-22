@@ -170,9 +170,22 @@ export function zoomAt(zooms: readonly ZoomSegment[], tMs: number): ZoomState {
   return { scale: 1, x: 0.5, y: 0.5 };
 }
 
+/** How long a scene change animates. */
+export const SCENE_RAMP_MS = 350;
+
+export interface SceneState {
+  mode: SceneMode;
+  /** 0 → 1 as the scene eases in at its start and back out at its end. */
+  amount: number;
+}
+
 /** The scene at output time `tMs`, or null for the default (screen with the camera bubble). */
-export function sceneAt(scenes: readonly SceneSegment[], tMs: number): SceneMode | null {
-  for (const scene of scenes) if (tMs >= scene.startMs && tMs < scene.endMs) return scene.mode;
+export function sceneAt(scenes: readonly SceneSegment[], tMs: number): SceneState | null {
+  for (const scene of scenes) {
+    if (tMs < scene.startMs || tMs > scene.endMs) continue;
+    const ramp = Math.min(SCENE_RAMP_MS, (scene.endMs - scene.startMs) / 2);
+    return { mode: scene.mode, amount: easeInOut(Math.min(1, (tMs - scene.startMs) / ramp, (scene.endMs - tMs) / ramp)) };
+  }
   return null;
 }
 

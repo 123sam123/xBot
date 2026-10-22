@@ -3,17 +3,18 @@ import type { VideoSettings } from '../../shared/composition/model';
 import { sourceTimeAt } from '../../shared/composition/timeline';
 import type { Clock } from '../common/composition/clock';
 
-// Keeps a recording's camera <video> on the screen video's time: it plays
-// while the timeline plays, and follows every seek and clip jump. The camera
-// started `offsetMs` into the recording.
+// Keeps one of a recording's other media elements (the camera <video>, an
+// audio track's <audio>) on the screen video's time: it plays while the
+// timeline plays, and follows every seek and clip jump. It started `offsetMs`
+// into the recording.
 
 /** Further apart than this while playing, the camera seeks back into step. */
 const DRIFT_S = 0.15;
 
-export function useCameraSync(video: VideoSettings | undefined, clock: Clock, playing: boolean, offsetMs: number | null): { ref: RefCallback<HTMLVideoElement>; element: HTMLVideoElement | null } {
-  const [element, setElement] = useState<HTMLVideoElement | null>(null);
-  const current = useRef<HTMLVideoElement | null>(null);
-  const ref = useCallback<RefCallback<HTMLVideoElement>>((el) => {
+export function useSyncedMedia<T extends HTMLMediaElement>(video: VideoSettings | undefined, clock: Clock, playing: boolean, offsetMs: number | null): { ref: RefCallback<T>; element: T | null } {
+  const [element, setElement] = useState<T | null>(null);
+  const current = useRef<T | null>(null);
+  const ref = useCallback<RefCallback<T>>((el) => {
     current.current = el;
     setElement(el);
   }, []);

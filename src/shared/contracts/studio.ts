@@ -70,6 +70,8 @@ export interface StudioRecording {
   camera: { url: string; offsetMs: number } | null;
   /** The cursor track (cursor.json), and the folder its images are relative to. */
   cursor: { url: string; base: string } | null;
+  /** Each audio track on its own, for separate volumes (null when not recorded). */
+  audio: { system: string | null; microphone: string | null };
 }
 
 /** An editable Studio document: one source image or video and its composition. */

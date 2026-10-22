@@ -1,6 +1,6 @@
 import { zoomedSourceCrop, type Layout } from '../../../shared/composition/layout';
-import { brightnessWash, CHROME, GRADIENTS, SHADOW_COLOR, type Composition, type GradientDef, type Rect, type SceneMode } from '../../../shared/composition/model';
-import type { ZoomState } from '../../../shared/composition/timeline';
+import { brightnessWash, CHROME, GRADIENTS, SHADOW_COLOR, type Composition, type GradientDef, type Rect } from '../../../shared/composition/model';
+import type { SceneState, ZoomState } from '../../../shared/composition/timeline';
 import { cursorFrame, focusAt } from '../../../shared/recording/motion';
 import type { LoadedCursor } from './cursor';
 
@@ -22,8 +22,8 @@ export interface DrawOptions {
   sourceMs?: number;
   /** The camera's frame at this moment, for a recording with a camera. */
   camera?: CanvasImageSource | null;
-  /** A scene segment at this moment: the camera alone, or no camera. */
-  scene?: SceneMode | null;
+  /** A scene segment at this moment (camera only, or no camera) and how far it has eased in. */
+  scene?: SceneState | null;
 }
 
 export interface CompositionAssets {
@@ -64,37 +64,9 @@ export function drawComposition(ctx: Ctx2D, comp: Composition, layout: Layout, a
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = 'high';
   drawBackground(ctx, comp, layout, assets);
-  if (options.scene === 'cameraFull' && options.camera && comp.camera) {
-    drawCameraFull(ctx, comp, layout, options.camera);
-    ctx.restore();
-    return;
-  }
   drawShadows(ctx, layout);
   drawFrame(ctx, comp, layout, assets, options);
-  if (options.scene !== 'hideCamera') drawCamera(ctx, comp, layout, options.camera ?? null);
-  ctx.restore();
-}
-
-/** A "camera only" scene: the camera fills the framed area, cover-fitted. */
-function drawCameraFull(ctx: Ctx2D, comp: Composition, layout: Layout, frame: CanvasImageSource): void {
-  const box = layout.frame;
-  const source = frame as CanvasImageSource & { videoWidth?: number; videoHeight?: number; width?: number; height?: number };
-  const fw = source.videoWidth || (source.width as number) || 1;
-  const fh = source.videoHeight || (source.height as number) || 1;
-  const scale = Math.max(box.width / fw, box.height / fh);
-  const sw = box.width / scale;
-  const sh = box.height / scale;
-  drawShadows(ctx, layout);
-  ctx.save();
-  roundRect(ctx, box, layout.radius);
-  ctx.clip();
-  if (comp.camera?.mirror) {
-    ctx.translate(box.x + box.width, box.y);
-    ctx.scale(-1, 1);
-    ctx.drawImage(frame, (fw - sw) / 2, (fh - sh) / 2, sw, sh, 0, 0, box.width, box.height);
-  } else {
-    ctx.drawImage(frame, (fw - sw) / 2, (fh - sh) / 2, sw, sh, box.x, box.y, box.width, box.height);
-  }
+  drawCamera(ctx, comp, layout, options.camera ?? null, options.scene ?? null);
   ctx.restore();
 }
 
@@ -305,10 +277,9 @@ function drawCursor(ctx: Ctx2D, comp: Composition, layout: Layout, cursor: Loade
   ctx.restore();
 }
 
-/** The camera bubble: a cover-fitted square of the camera in a corner or edge of the canvas. */
-function drawCamera(ctx: Ctx2D, comp: Composition, layout: Layout, frame: CanvasImageSource | null): void {
-  const camera = comp.camera;
-  if (!camera || camera.hidden || !frame) return;
+/** Where the camera bubble sits, and its corner radius. */
+function bubble(comp: Composition, layout: Layout): { rect: Rect; radius: number } {
+  const camera = comp.camera!;
   const { width, height } = layout.canvas;
   const shortSide = Math.min(width, height);
   const size = camera.size * shortSide;
@@ -317,30 +288,64 @@ function drawCamera(ctx: Ctx2D, comp: Composition, layout: Layout, frame: Canvas
   const x = col === 'left' ? margin : col === 'right' ? width - margin - size : (width - size) / 2;
   const y = row === 'top' ? margin : height - margin - size;
   const radius = camera.shape === 'circle' ? size / 2 : camera.shape === 'rounded' ? size * 0.22 : size * 0.06;
+  return { rect: { x, y, width: size, height: size }, radius };
+}
+
+const lerp = (a: number, b: number, k: number) => a + (b - a) * k;
+
+/**
+ * The camera: the bubble, or for a scene on its way to "camera only" a rect
+ * growing from the bubble to the whole frame, or for "hide camera" a bubble
+ * shrinking away. The camera is cover-fitted into whichever rect it fills.
+ */
+function drawCamera(ctx: Ctx2D, comp: Composition, layout: Layout, frame: CanvasImageSource | null, scene: SceneState | null): void {
+  const camera = comp.camera;
+  if (!camera || !frame) return;
+  const full = scene?.mode === 'cameraFull' ? scene.amount : 0;
+  const hide = scene?.mode === 'hideCamera' ? scene.amount : camera.hidden ? 1 : 0;
+  if (camera.hidden && full === 0) return;
+  if (hide >= 1) return;
+
+  const start = bubble(comp, layout);
+  const target = layout.frame;
+  let rect: Rect = {
+    x: lerp(start.rect.x, target.x, full),
+    y: lerp(start.rect.y, target.y, full),
+    width: lerp(start.rect.width, target.width, full),
+    height: lerp(start.rect.height, target.height, full),
+  };
+  let radius = lerp(start.radius, layout.radius, full);
+  if (hide > 0) {
+    const k = 1 - 0.35 * hide;
+    rect = { x: rect.x + (rect.width * (1 - k)) / 2, y: rect.y + (rect.height * (1 - k)) / 2, width: rect.width * k, height: rect.height * k };
+    radius *= k;
+  }
 
   const source = frame as CanvasImageSource & { videoWidth?: number; videoHeight?: number; width?: number; height?: number };
   const fw = source.videoWidth || (source.width as number) || 1;
   const fh = source.videoHeight || (source.height as number) || 1;
-  const side = Math.min(fw, fh);
+  const scale = Math.max(rect.width / fw, rect.height / fh);
+  const sw = rect.width / scale;
+  const sh = rect.height / scale;
 
+  ctx.save();
+  ctx.globalAlpha = 1 - hide;
   ctx.save();
   ctx.shadowColor = 'rgba(0,0,0,0.35)';
-  ctx.shadowBlur = size * 0.12;
-  ctx.shadowOffsetY = size * 0.03;
+  ctx.shadowBlur = Math.min(rect.width, rect.height) * 0.12;
+  ctx.shadowOffsetY = Math.min(rect.width, rect.height) * 0.03;
   ctx.fillStyle = '#000';
-  roundRect(ctx, { x, y, width: size, height: size }, radius);
+  roundRect(ctx, rect, radius);
   ctx.fill();
   ctx.restore();
-
-  ctx.save();
-  roundRect(ctx, { x, y, width: size, height: size }, radius);
+  roundRect(ctx, rect, radius);
   ctx.clip();
   if (camera.mirror) {
-    ctx.translate(x + size, y);
+    ctx.translate(rect.x + rect.width, rect.y);
     ctx.scale(-1, 1);
-    ctx.drawImage(frame, (fw - side) / 2, (fh - side) / 2, side, side, 0, 0, size, size);
+    ctx.drawImage(frame, (fw - sw) / 2, (fh - sh) / 2, sw, sh, 0, 0, rect.width, rect.height);
   } else {
-    ctx.drawImage(frame, (fw - side) / 2, (fh - side) / 2, side, side, x, y, size, size);
+    ctx.drawImage(frame, (fw - sw) / 2, (fh - sh) / 2, sw, sh, rect.x, rect.y, rect.width, rect.height);
   }
   ctx.restore();
 }

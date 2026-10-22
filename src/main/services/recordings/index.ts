@@ -235,6 +235,23 @@ async function restart(): Promise<void> {
   await start(options);
 }
 
+/**
+ * Each audio track as its own file (system.m4a, mic.m4a), so the editor can
+ * set their volumes apart. The writer adds the system track before the mic's.
+ */
+async function splitAudio(screenFile: string, dir: string, has: { system: boolean; microphone: boolean }): Promise<{ system: string | null; microphone: string | null }> {
+  const files = { system: has.system ? 'system.m4a' : null, microphone: has.microphone ? 'mic.m4a' : null };
+  const tools = await ffmpeg().binaries();
+  if (!tools || (!files.system && !files.microphone)) return { system: null, microphone: null };
+  const outputs = [files.system, files.microphone].filter((file): file is string => file !== null);
+  await runTool(
+    tools.ffmpeg,
+    ['-hide_banner', '-nostdin', '-y', '-i', screenFile, ...outputs.flatMap((file, i) => ['-map', `0:a:${i}`, '-vn', '-c', 'copy', join(dir, file)])],
+    { timeoutMs: 10 * 60_000 },
+  );
+  return files;
+}
+
 /** Mixes the system and microphone tracks into one, first, for playback; keeps both after it. */
 async function mixAudio(screenFile: string, out: string, tracks: number): Promise<string> {
   const tools = await ffmpeg().binaries();
@@ -280,6 +297,8 @@ async function stop(): Promise<void> {
       cameraMeta = { file: current.camera.file.slice(current.dir.length + 1), offsetMs: Math.round(cameraOffsetMs(startHost, stopped.firstHost, stopped.pauses)) };
     }
     const tracks = (current.options.systemAudio ? 1 : 0) + (current.options.microphoneId ? 1 : 0);
+    const screenFile = join(current.dir, 'screen.mp4');
+    const audio = await splitAudio(screenFile, current.dir, { system: current.options.systemAudio, microphone: current.options.microphoneId !== null });
     const meta = {
       version: 1,
       createdAt: new Date().toISOString(),
@@ -287,14 +306,14 @@ async function stop(): Promise<void> {
       frame: { width: current.started.width, height: current.started.height, scale: current.started.scale },
       bounds: current.started.bounds,
       durationMs: Math.round(current.elapsedMs),
-      audio: { system: current.options.systemAudio, microphone: current.options.microphoneId !== null },
+      /** Each audio track's own file, or null. */
+      audio,
       pauses: stopped.pauses,
       camera: cameraMeta,
       cursor: track.samples.length > 0 ? { file: 'cursor.json' } : null,
     };
     await writeFile(join(current.dir, 'meta.json'), JSON.stringify(meta, null, 2));
 
-    const screenFile = join(current.dir, 'screen.mp4');
     const playable = await mixAudio(screenFile, join(current.dir, 'recording.mp4'), tracks);
     const item = await draftsQueue(async () => {
       try {
@@ -310,7 +329,7 @@ async function stop(): Promise<void> {
 
     ctx!.db.prepare('INSERT INTO recordings (id, dir, meta_json, created_at) VALUES (?, ?, ?, ?)').run(current.id, current.id, JSON.stringify(meta), meta.createdAt);
     beginOpen();
-    const document = await studio().createForRecording(item, current.id, { camera: cameraMeta !== null, cursor: meta.cursor ? track : null });
+    const document = await studio().createForRecording(item, current.id, { camera: cameraMeta !== null, cursor: meta.cursor ? track : null, audio: audio.system !== null || audio.microphone !== null });
     const opened = adoptOpened({ document }, null);
     ctx?.events.emit('studio:opened', opened);
     openStudio();

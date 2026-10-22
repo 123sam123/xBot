@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { CAMERA_LIMITS, CANVAS_LIMITS, MIN_CROP_PX, upgradeComposition, ZOOM_LIMITS, type Composition, type Style } from './model';
+import { CAMERA_LIMITS, CANVAS_LIMITS, MIN_CROP_PX, upgradeComposition, VOLUME_MAX, ZOOM_LIMITS, type Composition, type Style } from './model';
 
 // The composition as main validates it: every stored document, every save and
 // every export. Main and the studio contract import this; the renderer never
@@ -131,6 +131,7 @@ const currentCompositionSchema = z
         tilt: fraction,
       })
       .optional(),
+    audio: z.strictObject({ systemVolume: z.number().min(0).max(VOLUME_MAX), micVolume: z.number().min(0).max(VOLUME_MAX) }).optional(),
   })
   .superRefine(({ crop, source }, ctx) => {
     if (crop.x + crop.width > 1 + EPSILON || crop.y + crop.height > 1 + EPSILON) {

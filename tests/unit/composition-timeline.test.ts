@@ -6,6 +6,8 @@ import {
   newSegmentRange,
   placeSegment,
   removeClip,
+  SCENE_RAMP_MS,
+  sceneAt,
   sourceTimeAt,
   splitAt,
   timelineDuration,
@@ -87,6 +89,16 @@ describe('segments', () => {
     expect(zoomedSourceCrop(crop, { scale: 2, x: 0.5, y: 0.5 })).toEqual({ x: 250, y: 125, width: 500, height: 250 });
     expect(zoomedSourceCrop(crop, { scale: 2, x: 1, y: 0 })).toEqual({ x: 500, y: 0, width: 500, height: 250 });
     expect(zoomedSourceCrop(crop, { scale: 1, x: 0.2, y: 0.2 })).toBe(crop);
+  });
+});
+
+describe('scenes', () => {
+  it('ease in and out over the ramp, and are null outside', () => {
+    const scenes = [{ id: 's', startMs: 1000, endMs: 3000, mode: 'cameraFull' as const }];
+    expect(sceneAt(scenes, 500)).toBeNull();
+    expect(sceneAt(scenes, 1000)).toEqual({ mode: 'cameraFull', amount: 0 });
+    expect(sceneAt(scenes, 1000 + SCENE_RAMP_MS / 2)!.amount).toBeCloseTo(0.5, 5);
+    expect(sceneAt(scenes, 2000)).toEqual({ mode: 'cameraFull', amount: 1 });
   });
 });
 

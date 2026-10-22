@@ -28,7 +28,8 @@ import { TopBar } from './TopBar';
 import { useCompositionAssets } from './useCompositionAssets';
 import { useFilmstrip } from './useFilmstrip';
 import { useStudioEditor } from './useStudioEditor';
-import { useCameraSync } from './useCameraSync';
+import { useSyncedMedia } from './useSyncedMedia';
+import { useTrackGain } from './useTrackGain';
 import { useTimelinePlayback } from './useTimelinePlayback';
 
 // Media Studio: Cap's editor in xBot's glass. A top bar, the preview with its
@@ -116,12 +117,20 @@ function Studio({ preview, settingsReady }: { preview: boolean; settingsReady: b
   const isVideo = videoInfo !== null && composition?.video !== undefined;
   const hasAudio = (videoInfo?.audioStream ?? null) !== null;
   const ffmpeg = useFfmpegStatus(true);
-  const { ref: videoRef, element: videoElement, clock, playing, toggle: togglePlay, pause, seek } = useTimelinePlayback(composition?.video, hasAudio);
+  // A recording keeps its system and microphone sound apart: they play from their own files and the video stays silent.
+  const tracks = status === 'document' ? (doc?.recording?.audio ?? null) : null;
+  const separateAudio = tracks !== null && (tracks.system !== null || tracks.microphone !== null) && composition?.audio !== undefined;
+  const { ref: videoRef, element: videoElement, clock, playing, toggle: togglePlay, pause, seek } = useTimelinePlayback(composition?.video, hasAudio && !separateAudio);
   const filmstrip = useFilmstrip(isVideo && doc ? doc.id : null, ffmpeg.state === 'ready');
 
   // A recording's camera (synced to the playhead) and cursor.
   const recording = status === 'document' ? (doc?.recording ?? null) : null;
-  const { ref: cameraRef, element: cameraElement } = useCameraSync(composition?.video, clock, playing, recording?.camera?.offsetMs ?? null);
+  const { ref: cameraRef, element: cameraElement } = useSyncedMedia<HTMLVideoElement>(composition?.video, clock, playing, recording?.camera?.offsetMs ?? null);
+  const { ref: systemRef, element: systemElement } = useSyncedMedia<HTMLAudioElement>(composition?.video, clock, playing, separateAudio && tracks?.system ? 0 : null);
+  const { ref: micRef, element: micElement } = useSyncedMedia<HTMLAudioElement>(composition?.video, clock, playing, separateAudio && tracks?.microphone ? 0 : null);
+  const silent = composition?.video?.muted ?? false;
+  useTrackGain(systemElement, silent ? 0 : (composition?.audio?.systemVolume ?? 1));
+  useTrackGain(micElement, silent ? 0 : (composition?.audio?.micVolume ?? 1));
   const [cursor, setCursor] = useState<{ url: string; loaded: LoadedCursor } | null>(null);
   const cursorUrl = recording?.cursor?.url ?? null;
   const cursorBase = recording?.cursor?.base ?? '';
@@ -359,6 +368,13 @@ function Studio({ preview, settingsReady }: { preview: boolean; settingsReady: b
           assets,
           sourceUrl: sourceItem.url,
           camera: recording?.camera ?? null,
+          tracks:
+            separateAudio && tracks && frozen.audio
+              ? [
+                  ...(tracks.system ? [{ url: tracks.system, volume: frozen.audio.systemVolume }] : []),
+                  ...(tracks.microphone ? [{ url: tracks.microphone, volume: frozen.audio.micVolume }] : []),
+                ]
+              : [],
           resolution: destination === 'post' && exportSettings.resolution === '4k' ? '1080p' : exportSettings.resolution,
           fps: exportSettings.fps,
           write,
@@ -478,6 +494,8 @@ function Studio({ preview, settingsReady }: { preview: boolean; settingsReady: b
           {isVideo && sourceItem && (
             <video ref={videoRef} className="stage-source" src={sourceItem.url} preload="auto" playsInline crossOrigin="anonymous" data-testid="studio-video" />
           )}
+          {isVideo && separateAudio && tracks?.system && <audio ref={systemRef} src={tracks.system} preload="auto" crossOrigin="anonymous" data-testid="studio-system-audio" />}
+          {isVideo && separateAudio && tracks?.microphone && <audio ref={micRef} src={tracks.microphone} preload="auto" crossOrigin="anonymous" data-testid="studio-mic-audio" />}
           {isVideo && recording?.camera && (
             <video ref={cameraRef} className="stage-source" src={recording.camera.url} preload="auto" playsInline muted crossOrigin="anonymous" data-testid="studio-camera" />
           )}
@@ -622,6 +640,7 @@ function Studio({ preview, settingsReady }: { preview: boolean; settingsReady: b
           onCommit={editor.endGesture}
           disabledReason={editable ? undefined : disabledReason}
           hasAudio={hasAudio}
+          tracks={separateAudio && tracks ? { system: tracks.system !== null, microphone: tracks.microphone !== null } : null}
           onPickImage={() => void pickBackground()}
           onDesktop={() => void pickDesktopPicture()}
         />

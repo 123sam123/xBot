@@ -136,6 +136,14 @@ export interface CursorSettings {
   tilt: number;
 }
 
+/** A recording's sound, track by track (each 0–2, 1 as recorded). */
+export interface AudioSettings {
+  systemVolume: number;
+  micVolume: number;
+}
+
+export const VOLUME_MAX = 2;
+
 /** A video source's edit. Present exactly when the source is a video. */
 export interface VideoSettings {
   clips: Clip[];
@@ -162,6 +170,8 @@ export interface Composition {
   camera?: CameraSettings;
   /** Present when the document is a recording with cursor data. */
   cursor?: CursorSettings;
+  /** Present when the document is a recording with its audio tracks kept apart. */
+  audio?: AudioSettings;
 }
 
 /** What a preset carries: no source, crop, output or video. */
@@ -464,7 +474,7 @@ export function defaultCursor(): CursorSettings {
  * corners, no browser chrome (a screen recording is its own window), the
  * camera and cursor when the recording has them.
  */
-export function recordingComposition(source: SourceRef, durationMs: number, has: { camera: boolean; cursor: boolean }, zooms: ZoomSegment[] = []): Composition {
+export function recordingComposition(source: SourceRef, durationMs: number, has: { camera: boolean; cursor: boolean; audio?: boolean }, zooms: ZoomSegment[] = []): Composition {
   const base = defaultComposition(source, { durationMs });
   return {
     ...base,
@@ -476,6 +486,7 @@ export function recordingComposition(source: SourceRef, durationMs: number, has:
     video: { ...base.video!, zooms },
     ...(has.camera ? { camera: defaultCamera() } : {}),
     ...(has.cursor ? { cursor: defaultCursor() } : {}),
+    ...(has.audio ? { audio: { systemVolume: 1, micVolume: 1 } } : {}),
   };
 }
 
