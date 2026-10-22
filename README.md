@@ -2,6 +2,8 @@
 
 **Turn the small tools you build every day into authentic posts on X — from your menu bar.**
 
+Built with [Fredrin](https://fredrin.com).
+
 <p align="center">
   <img src="docs/media/studio.jpg" alt="xBot's Media Studio: a Cap-style editor with a wallpaper background, a browser frame, and a timeline with clip, zoom and scene tracks" width="900">
 </p>
@@ -348,6 +350,10 @@ xBot without touching its data.
   - it never runs repository code.
 - **Never recorded:** the screen, keystrokes or browser history. xBot writes
   to the clipboard only when you click **Copy text**, and never reads it.
+
+## Built with Fredrin
+
+xBot was built with [Fredrin](https://fredrin.com), the desktop kanban for running AI coding tickets in parallel.
 
 ## License
 
